@@ -61,7 +61,7 @@ type LineBreakOptions =
     static member Default (lineWidth : float) =
         {
             LineWidth = lineWidth
-            Tolerance = 1.0
+            Tolerance = 10.0 // Allow significant stretch/shrink
             AdjacentLooseTightDemerits = 10000.0
             DoubleHyphenDemerits = 10000.0
             FinalHyphenDemerits = 5000.0
@@ -69,10 +69,272 @@ type LineBreakOptions =
         }
 
 module LineBreaker =
+    type FitnessClass =
+        | Tight
+        | Normal
+        | Loose
+        | VeryLoose
+
+    type BreakNode =
+        {
+            Position : int
+            Demerits : float
+            Ratio : float
+            PreviousNode : int option
+            Fitness : FitnessClass
+            WasFlagged : bool
+        }
+
+    /// Precomputed cumulative sums for efficient line computation
+    type CumulativeSums =
+        {
+            Width : float[]
+            Stretch : float[]
+            Shrink : float[]
+        }
+
+    let private computeCumulativeSums (items : Item list) : CumulativeSums =
+        let arr = items |> List.toArray
+        let n = arr.Length
+        let width = Array.zeroCreate (n + 1)
+        let stretch = Array.zeroCreate (n + 1)
+        let shrink = Array.zeroCreate (n + 1)
+
+        for i in 0 .. n - 1 do
+            width.[i + 1] <- width.[i]
+            stretch.[i + 1] <- stretch.[i]
+            shrink.[i + 1] <- shrink.[i]
+
+            match arr.[i] with
+            | Box b -> width.[i + 1] <- width.[i + 1] + b.Width
+            | Glue g ->
+                width.[i + 1] <- width.[i + 1] + g.Width
+                stretch.[i + 1] <- stretch.[i + 1] + g.Stretch
+                shrink.[i + 1] <- shrink.[i + 1] + g.Shrink
+            | Penalty p -> width.[i + 1] <- width.[i + 1] + p.Width
+
+        {
+            Width = width
+            Stretch = stretch
+            Shrink = shrink
+        }
+
+    /// Compute adjustment ratio for a line from startIdx to endIdx
+    let private computeAdjustmentRatio
+        (sums : CumulativeSums)
+        (lineWidth : float)
+        (startIdx : int)
+        (endIdx : int)
+        : float option
+        =
+        let actualWidth = sums.Width.[endIdx] - sums.Width.[startIdx]
+        let diff = lineWidth - actualWidth
+
+        if abs diff < 1e-10 then
+            Some 0.0
+        elif diff > 0.0 then
+            // Line is too short, need to stretch
+            let totalStretch = sums.Stretch.[endIdx] - sums.Stretch.[startIdx]
+
+            if totalStretch > 0.0 then
+                Some (diff / totalStretch)
+            else
+                // No glue to stretch, but line is underfull - this is acceptable
+                // Return a very small positive ratio to indicate underfull
+                Some 0.0
+        else
+            // Line is too long, need to compress
+            let totalShrink = sums.Shrink.[endIdx] - sums.Shrink.[startIdx]
+
+            if totalShrink > 0.0 then
+                Some (diff / totalShrink)
+            else
+                // No glue to shrink and line is overfull - cannot fit
+                None
+
+    let private fitnessClass (ratio : float) : FitnessClass =
+        if ratio < -0.5 then Tight
+        elif ratio <= 0.5 then Normal
+        elif ratio <= 1.0 then Loose
+        else VeryLoose
+
+    let private badness (ratio : float) : float =
+        let r = abs ratio
+        100.0 * (r ** 3.0)
+
+    let private computeDemerits
+        (options : LineBreakOptions)
+        (ratio : float)
+        (penaltyCost : float)
+        (prevFitness : FitnessClass)
+        (currFitness : FitnessClass)
+        (prevWasFlagged : bool)
+        (currIsFlagged : bool)
+        (isLastLine : bool)
+        : float
+        =
+        let bad = badness ratio
+        let linePenalty = (1.0 + bad) + abs penaltyCost
+        let mutable demerits = linePenalty * linePenalty
+
+        // Penalty for consecutive flagged breaks (double hyphen)
+        if prevWasFlagged && currIsFlagged then
+            demerits <- demerits + options.DoubleHyphenDemerits
+
+        // Penalty for fitness class mismatch
+        if prevFitness <> currFitness then
+            demerits <- demerits + options.FitnessClassDifferencePenalty
+
+        // Penalty for ending with a flagged break
+        if isLastLine && currIsFlagged then
+            demerits <- demerits + options.FinalHyphenDemerits
+
+        demerits
+
+    /// In Knuth-Plass, we can break at the following positions:
+    /// 1. After any glue
+    /// 2. At any penalty
+    /// 3. At the end of the paragraph
+    let private isValidBreakpoint (itemsArray : Item array) (idx : int) : bool =
+        if idx = 0 then
+            true // Start of paragraph
+        elif idx >= itemsArray.Length then
+            true // End of paragraph - always a valid breakpoint
+        elif idx > 0 && idx <= itemsArray.Length then
+            // Look at the item just before this position
+            match itemsArray.[idx - 1] with
+            | Glue _ -> true // Can break after glue
+            | Penalty _ -> true // Can break at penalty
+            | Box _ -> false // Cannot break after a box
+        else
+            false
+
+    let private getPenaltyAt (itemsArray : Item array) (idx : int) : float * bool =
+        if idx >= itemsArray.Length then
+            (0.0, false) // No penalty at end of paragraph
+        elif idx > 0 then
+            // Check if previous item was a penalty
+            match itemsArray.[idx - 1] with
+            | Penalty p -> (p.Cost, p.Flagged)
+            | _ -> (0.0, false)
+        else
+            (0.0, false)
+
     /// Break a paragraph into lines using the Knuth-Plass algorithm.
     /// Returns a list of lines with their start/end positions and adjustment ratios.
     /// Raises an exception if no valid breaking is possible.
-    let breakLines (options : LineBreakOptions) (items : Item list) : Line list = failwith "Not implemented"
+    let breakLines (options : LineBreakOptions) (items : Item list) : Line list =
+        if items.IsEmpty then
+            []
+        else
+            let itemsArray = items |> List.toArray
+            let n = itemsArray.Length
+            let sums = computeCumulativeSums items
+
+            // Track best node at each position for each fitness class
+            let bestNodes = System.Collections.Generic.Dictionary<int * FitnessClass, int> ()
+
+            // All nodes for backtracking
+            let nodes = ResizeArray<BreakNode> ()
+
+            // Start node at position 0
+            nodes.Add
+                {
+                    Position = 0
+                    Demerits = 0.0
+                    Ratio = 0.0
+                    PreviousNode = None
+                    Fitness = Normal
+                    WasFlagged = false
+                }
+
+            bestNodes.[(0, Normal)] <- 0
+
+            // For each position, find the best predecessor
+            for i in 1..n do
+                if isValidBreakpoint itemsArray i then
+                    let penaltyCost, isFlagged = getPenaltyAt itemsArray i
+                    let isForced = penaltyCost = -infinity
+
+                    // Try all previous nodes as potential predecessors
+                    for prevNodeIdx in 0 .. nodes.Count - 1 do
+                        let prevNode = nodes.[prevNodeIdx]
+                        let startPos = prevNode.Position
+
+                        // Only consider nodes at earlier positions
+                        if startPos < i then
+                            match computeAdjustmentRatio sums options.LineWidth startPos i with
+                            | Some ratio when isForced || abs ratio <= options.Tolerance ->
+                                let fitness = fitnessClass ratio
+                                let isLast = i = n
+
+                                let demerits =
+                                    prevNode.Demerits
+                                    + computeDemerits
+                                        options
+                                        ratio
+                                        penaltyCost
+                                        prevNode.Fitness
+                                        fitness
+                                        prevNode.WasFlagged
+                                        isFlagged
+                                        isLast
+
+                                // Check if this is better than existing node at this position/fitness
+                                let key = (i, fitness)
+
+                                let shouldAdd =
+                                    match bestNodes.TryGetValue key with
+                                    | true, existingIdx -> demerits < nodes.[existingIdx].Demerits
+                                    | false, _ -> true
+
+                                if shouldAdd then
+                                    let newNode =
+                                        {
+                                            Position = i
+                                            Demerits = demerits
+                                            Ratio = ratio
+                                            PreviousNode = Some prevNodeIdx
+                                            Fitness = fitness
+                                            WasFlagged = isFlagged
+                                        }
+
+                                    nodes.Add newNode
+                                    bestNodes.[key] <- nodes.Count - 1
+
+                            | _ -> () // Line doesn't fit
+
+            // Find best ending node
+            let endNodes =
+                nodes
+                |> Seq.indexed
+                |> Seq.filter (fun (_, node) -> node.Position = n)
+                |> Seq.toList
+
+            match endNodes with
+            | [] -> failwith "No valid line breaking found"
+            | _ ->
+                let bestEndIdx, _ = endNodes |> List.minBy (fun (_, node) -> node.Demerits)
+
+                // Backtrack to recover the solution
+                let rec backtrack acc nodeIdx =
+                    let node = nodes.[nodeIdx]
+
+                    match node.PreviousNode with
+                    | None -> acc
+                    | Some prevIdx ->
+                        let prevNode = nodes.[prevIdx]
+
+                        let line =
+                            {
+                                Start = prevNode.Position
+                                End = node.Position
+                                AdjustmentRatio = node.Ratio
+                            }
+
+                        backtrack (line :: acc) prevIdx
+
+                backtrack [] bestEndIdx
 
 module Items =
     /// Creates a box with the given width
