@@ -5,6 +5,7 @@ open System
 /// Provides hyphenation strategies for use with Items.fromString
 [<RequireQualifiedAccess>]
 module Hyphenation =
+    /// Cost penalty to apply to the addition of a single hyphen.
     [<Literal>]
     let DEFAULT_PENALTY = 50.0
 

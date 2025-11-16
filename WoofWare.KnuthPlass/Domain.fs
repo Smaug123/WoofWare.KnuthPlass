@@ -13,6 +13,7 @@ type Box =
         Width : float
     }
 
+    /// Terse but human-readable non-round-trip string representation.
     override this.ToString () : string = $"box[%0.02f{this.Width}]"
 
 /// Represents stretchable/shrinkable whitespace.
@@ -26,6 +27,7 @@ type Glue =
         Shrink : float
     }
 
+    /// Terse but human-readable non-round-trip string representation.
     override this.ToString () =
         $"glue[%0.02f{this.Width} / %0.02f{this.Stretch} / %0.02f{this.Shrink}]"
 
@@ -41,6 +43,7 @@ type Penalty =
         Flagged : bool
     }
 
+    /// Terse but human-readable non-round-trip string representation.
     override this.ToString () =
         let flagged = if this.Flagged then 'F' else '_'
         $"pen%c{flagged}[%0.02f{this.Width} cost %0.02f{this.Cost}]"

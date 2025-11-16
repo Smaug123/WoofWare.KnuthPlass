@@ -11,6 +11,7 @@ module Paragraph =
     let defaultWordWidth (s : string) : float =
         float (StringInfo(s).LengthInTextElements)
 
+    /// Width of a single space character.
     [<Literal>]
     let SPACE_WIDTH = 1.0
 
