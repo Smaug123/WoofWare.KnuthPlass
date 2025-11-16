@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is an F# implementation of the Knuth-Plass line breaking algorithm, a sophisticated text layout algorithm used in TeX. The algorithm finds optimal line breaks in paragraphs by minimizing a global "badness" function using dynamic programming.
 
-### Core Types (WoofWare.KnuthPlass/Library.fs)
+### Core Types (WoofWare.KnuthPlass/Domain.fs)
 
 - `Box`: Fixed-width items (words, characters)
 - `Glue`: Stretchable/shrinkable whitespace with width, stretch, and shrink properties
@@ -61,7 +61,7 @@ NUnit's filtering is pretty borked.
 You can't apply filters that contain special characters in the test name (like a space character).
 You have to do e.g. `FullyQualifiedName~singleword` rather than `FullyQualifiedName~single word test`, but this only works on tests whose names are single words to begin with.
 
-Instead of running `dotnet test`, you can perform a build (`dotnet build`) and then run `dotnet woofware.nunittestrunner WoofWare.Zoomies.Test/bin/Debug/net9.0/WoofWare.Zoomies.Test.dll`.
+Instead of running `dotnet test`, you can perform a build (`dotnet build`) and then run `dotnet woofware.nunittestrunner WoofWare.KnuthPlass.Test/bin/Debug/net9.0/WoofWare.KnuthPlass.Test.dll`.
 This is an NUnit test runner which accepts a `--filter` arg that takes the same filter syntax as `dotnet test`, but actually parses it correctly: test names can contain spaces.
 (The most foolproof way to provide test names to WoofWare.NUnitTestRunner is by XML-encoding: e.g. `FullyQualifiedName="MyNamespace.MyTestsClass&lt;ParameterType1%2CParameterType2&gt;.MyTestMethod"`. The `~` query operator is also supported.)
 
