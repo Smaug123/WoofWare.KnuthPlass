@@ -77,9 +77,10 @@ module LineBreaker =
             if totalStretch > 0.0 then
                 ValueSome (diff / totalStretch)
             else
-                // No glue to stretch, but line is underfull - this is acceptable
-                // Return a very small positive ratio to indicate underfull
-                ValueSome 0.0
+                // No glue to stretch, but line is underfull
+                // Return a very large ratio to indicate extreme looseness
+                // This ensures the line gets categorized as VeryLoose with high badness
+                ValueSome 1000.0
         else
             // Line is too long, need to compress
             let totalShrink = sums.Shrink.[endIdx] - sums.Shrink.[startIdx]
