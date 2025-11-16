@@ -138,7 +138,11 @@ module LineBreaker =
         else if totalShrink > 0.0 then
             diff / totalShrink
         else
-            failwith "line should have been rejected earlier"
+            failwithf
+                "Internal error: line %d..%d is overfull (needs %.2f shrink but has 0.0 available) and should have been rejected during feasibility check"
+                startIdx
+                endIdx
+                (-diff)
 
     let inline private fitnessClass (ratio : float) : FitnessClass =
         if ratio < -0.5 then FitnessClass.Tight
@@ -344,7 +348,11 @@ module LineBreaker =
                 |> Option.map fst
 
             match bestEndIdx with
-            | None -> failwith "No valid line breaking found"
+            | None ->
+                failwithf
+                    "No valid line breaking found for paragraph with %d items and line width %.2f. Try: (1) increasing line width, (2) increasing tolerance, or (3) allowing hyphenation"
+                    items.Length
+                    options.LineWidth
             | Some bestEndIdx ->
                 // Backtrack to recover the solution
                 let result = ResizeArray ()

@@ -3,6 +3,7 @@ namespace WoofWare.KnuthPlass
 open System
 open System.Collections.Generic
 open System.Globalization
+open System.Text
 
 /// A module providing helper functions for producing text specified as .NET strings rather than as detailed layout
 /// information.
@@ -19,6 +20,9 @@ module Text =
     /// Formats text into paragraphs with line breaks using the Knuth-Plass algorithm.
     /// Returns the text with line breaks inserted at 'optimal' positions.
     /// Newlines in the input are preserved as paragraph breaks (hard breaks).
+    ///
+    /// This method can throw! If your constraints are impossible to satisfy (e.g. a word admits no hyphenation,
+    /// and is longer than the available width), we throw.
     let format
         (lineWidth : float)
         (wordWidth : string -> float)
@@ -94,56 +98,62 @@ module Text =
             let itemIndexToBoxNumber = itemIndexToBoxNumber :> IReadOnlyDictionary<int, int>
 
             // Reconstruct text for each line
-            let lineTexts =
-                lines
-                |> Array.map (fun line ->
-                    // Precompute whether there's a box at or after each position (O(n) instead of O(n²))
-                    let hasBoxAtOrAfter = Dictionary<int, bool> ()
-                    let mutable foundBox = false
+            let result = StringBuilder ()
+            let hasBoxAtOrAfter = Dictionary<int, bool> ()
 
-                    for i in line.End - 1 .. -1 .. line.Start do
-                        match items.[i] with
-                        | Box _ -> foundBox <- true
-                        | _ -> ()
+            for line in lines do
+                // Precompute whether there's a box at or after each position (O(n) instead of O(n²))
+                hasBoxAtOrAfter.Clear ()
+                let mutable foundBox = false
 
-                        hasBoxAtOrAfter.[i] <- foundBox
+                for i in line.End - 1 .. -1 .. line.Start do
+                    match items.[i] with
+                    | Box _ -> foundBox <- true
+                    | _ -> ()
 
-                    let hasBoxAtOrAfter = hasBoxAtOrAfter :> IReadOnlyDictionary<int, bool>
+                    hasBoxAtOrAfter.[i] <- foundBox
 
-                    // Join parts and add spaces between words
-                    // Need to track where glue was to add spaces
-                    let mutable finalResult = []
-                    let mutable lastWasBox = false
+                let hasBoxAtOrAfter = hasBoxAtOrAfter :> IReadOnlyDictionary<int, bool>
 
-                    for i in line.Start .. line.End - 1 do
-                        match items.[i] with
-                        | Box _ ->
-                            match itemIndexToBoxNumber.TryGetValue i with
-                            | true, boxNum ->
-                                match boxToText.TryGetValue boxNum with
-                                | true, textpart -> finalResult <- textpart :: finalResult
-                                | false, _ -> ()
+                // Join parts and add spaces between words
+                // Need to track where glue was to add spaces
+                let mutable lastWasBox = false
+
+                for i in line.Start .. line.End - 1 do
+                    match items.[i] with
+                    | Box _ ->
+                        match itemIndexToBoxNumber.TryGetValue i with
+                        | true, boxNum ->
+                            match boxToText.TryGetValue boxNum with
+                            | true, textpart -> result.Append textpart |> ignore<StringBuilder>
                             | false, _ -> ()
+                        | false, _ -> ()
 
-                            lastWasBox <- true
+                        lastWasBox <- true
 
-                        | Glue _ when lastWasBox && i < line.End - 1 ->
-                            // Add space if there's content after this glue in the line
-                            match hasBoxAtOrAfter.TryGetValue (i + 1) with
-                            | true, hasBox when hasBox -> finalResult <- " " :: finalResult
-                            | _ -> ()
-
-                        | Penalty pen when i = line.End - 1 && pen.Width > 0.0 -> finalResult <- "-" :: finalResult
-
+                    | Glue _ when lastWasBox && i < line.End - 1 ->
+                        // Add space if there's content after this glue in the line
+                        match hasBoxAtOrAfter.TryGetValue (i + 1) with
+                        | true, hasBox when hasBox -> result.Append ' ' |> ignore<StringBuilder>
                         | _ -> ()
 
-                    finalResult |> List.rev |> String.concat ""
-                )
+                    | Penalty pen when i = line.End - 1 && pen.Width > 0.0 -> result.Append '-' |> ignore<StringBuilder>
 
-            String.concat Environment.NewLine lineTexts
+                    | _ -> ()
+
+                result.Append Environment.NewLine |> ignore<StringBuilder>
+
+            // we now have a rogue final newline from the last loop!
+            result.Remove (result.Length - Environment.NewLine.Length, Environment.NewLine.Length)
+            |> ignore<StringBuilder>
+
+            (result : StringBuilder).ToString ()
 
     /// Formats text into paragraphs with line breaks using the Knuth-Plass algorithm.
     /// Returns the text with line breaks inserted at 'optimal' positions.
     /// Newlines in the input are preserved as paragraph breaks (hard breaks).
+    ///
+    /// This method can throw! If your constraints are impossible to satisfy (e.g. a word admits no hyphenation,
+    /// and is longer than the available width), we throw.
     let formatEnglish (lineWidth : float) (text : string) : string =
         format lineWidth defaultWordWidth SPACE_WIDTH Hyphenation.DEFAULT_PENALTY Hyphenation.simpleEnglish text

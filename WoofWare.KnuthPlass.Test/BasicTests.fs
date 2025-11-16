@@ -41,7 +41,8 @@ module BasicTests =
         let options = LineBreakOptions.Default 100.0
 
         expect {
-            snapshotThrows "System.Exception: No valid line breaking found"
+            snapshotThrows
+                "System.Exception: No valid line breaking found for paragraph with 1 items and line width 100.00. Try: (1) increasing line width, (2) increasing tolerance, or (3) allowing hyphenation"
 
             return!
                 fun () ->
