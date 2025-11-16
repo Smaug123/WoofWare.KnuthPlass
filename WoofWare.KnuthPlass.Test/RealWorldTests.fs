@@ -32,3 +32,18 @@ module RealWorldTests =
         let wideLines = LineBreaker.breakLines (LineBreakOptions.Default 500.0) items
 
         narrowLines.Length |> shouldBeGreaterThan wideLines.Length
+
+    [<Test>]
+    let ``formatParagraph produces formatted text`` () =
+        let text = "The quick brown fox jumps over the lazy dog."
+        let wordWidth (s : string) = float s.Length * 8.0
+        let spaceWidth = 4.0
+        let lineWidth = 80.0
+
+        let result = Format.formatParagraph lineWidth wordWidth spaceWidth text
+
+        // Should produce non-empty result
+        result.Length |> shouldBeGreaterThan 0
+        // Should preserve all words when newlines are removed
+        let normalized = result.Replace ("\n", " ")
+        normalized |> shouldEqual text

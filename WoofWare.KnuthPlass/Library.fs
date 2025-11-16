@@ -386,3 +386,37 @@ module Items =
                 if i < words.Length - 1 then
                     yield glue spaceWidth (spaceWidth * 0.5) (spaceWidth * 0.333)
         ]
+
+module Format =
+    /// Formats text into a paragraph with line breaks using the Knuth-Plass algorithm.
+    /// Returns the text with line breaks inserted at optimal positions.
+    let formatParagraph
+        (lineWidth : float)
+        (wordWidth : string -> float)
+        (spaceWidth : float)
+        (text : string)
+        : string
+        =
+        let words = text.Split ([| ' ' |], System.StringSplitOptions.RemoveEmptyEntries)
+
+        if words.Length = 0 then
+            ""
+        else
+            let items = Items.fromString text wordWidth spaceWidth
+            let options = LineBreakOptions.Default lineWidth
+            let lines = LineBreaker.breakLines options items
+
+            // Extract words for each line
+            // Items alternate: box (even indices) and glue (odd indices)
+            // Word i is at item index i*2
+            let lineTexts =
+                lines
+                |> List.map (fun line ->
+                    // Get all box indices in this line
+                    [ line.Start .. line.End - 1 ]
+                    |> List.filter (fun i -> i % 2 = 0) // Boxes are at even indices
+                    |> List.map (fun i -> words.[i / 2])
+                    |> String.concat " "
+                )
+
+            String.concat "\n" lineTexts
