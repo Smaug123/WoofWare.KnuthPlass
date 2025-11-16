@@ -17,7 +17,7 @@ module ForcedBreakTests =
                 Items.box 40.0
             ]
 
-        let options = LineBreakOptions.Default (100.0)
+        let options = LineBreakOptions.Default 100.0
         let lines = LineBreaker.breakLines options items
 
         lines.Length |> shouldEqual 2
@@ -37,7 +37,7 @@ module ForcedBreakTests =
                 Items.box 40.0
             ]
 
-        let options = LineBreakOptions.Default (100.0)
+        let options = LineBreakOptions.Default 100.0
         let lines = LineBreaker.breakLines options items
 
         lines.Length |> shouldEqual 3

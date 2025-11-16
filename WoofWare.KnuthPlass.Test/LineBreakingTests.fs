@@ -21,7 +21,7 @@ module LineBreakingTests =
                 Items.box 20.0
             ]
 
-        let options = LineBreakOptions.Default (80.0)
+        let options = LineBreakOptions.Default 80.0
         let lines = LineBreaker.breakLines options items
 
         lines.Length |> shouldBeGreaterThan 1
@@ -44,7 +44,7 @@ module LineBreakingTests =
                 Items.box 50.0
             ]
 
-        let options = LineBreakOptions.Default (70.0)
+        let options = LineBreakOptions.Default 70.0
         let lines = LineBreaker.breakLines options items
 
         lines.Length |> shouldEqual 2

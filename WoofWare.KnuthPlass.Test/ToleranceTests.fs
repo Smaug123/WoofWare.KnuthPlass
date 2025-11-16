@@ -18,12 +18,12 @@ module ToleranceTests =
             ]
 
         let strictOptions =
-            { LineBreakOptions.Default (100.0) with
+            { LineBreakOptions.Default 100.0 with
                 Tolerance = 0.5
             }
 
         let looseOptions =
-            { LineBreakOptions.Default (100.0) with
+            { LineBreakOptions.Default 100.0 with
                 Tolerance = 3.0
             }
 

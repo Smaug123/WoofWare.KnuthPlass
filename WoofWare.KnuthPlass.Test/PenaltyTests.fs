@@ -18,7 +18,7 @@ module PenaltyTests =
                 Items.box 30.0
             ]
 
-        let options = LineBreakOptions.Default (60.0)
+        let options = LineBreakOptions.Default 60.0
         let lines = LineBreaker.breakLines options items
 
         lines.Length |> shouldBeGreaterThan 0
@@ -37,7 +37,7 @@ module PenaltyTests =
             ]
 
         let options =
-            { LineBreakOptions.Default (60.0) with
+            { LineBreakOptions.Default 60.0 with
                 DoubleHyphenDemerits = 10000.0
             }
 

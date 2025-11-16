@@ -1,13 +1,59 @@
-# Project-specific instructions for Claude
+# CLAUDE.md
 
-## Before committing
-Always run `dotnet fantomas .` to format the code before creating commits.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+This is an F# implementation of the Knuth-Plass line breaking algorithm, a sophisticated text layout algorithm used in TeX. The algorithm finds optimal line breaks in paragraphs by minimizing a global "badness" function using dynamic programming.
+
+### Core Types (WoofWare.KnuthPlass/Library.fs)
+
+- `Box`: Fixed-width items (words, characters)
+- `Glue`: Stretchable/shrinkable whitespace with width, stretch, and shrink properties
+- `Penalty`: Break points with associated cost and flagged status
+- `Line`: Output representing line breaks with start/end positions and adjustment ratios
+
+### Algorithm (LineBreaker module)
+
+The `breakLines` function implements the Knuth-Plass algorithm using dynamic programming:
+- Precomputes cumulative sums for efficient line computation
+- Tracks best break nodes at each position for each fitness class (Tight/Normal/Loose/VeryLoose)
+- Computes demerits based on badness, penalties, and fitness class mismatches
+- Backtracks to recover the optimal solution
+
+## Development Commands
+
+### Building
+```bash
+dotnet build
+```
+
+### Running Tests
+```bash
+# Run all tests
+dotnet test
+
+# Run specific test (correct NUnit filtering)
+dotnet build
+dotnet woofware.nunittestrunner WoofWare.KnuthPlass.Test/bin/Debug/net9.0/WoofWare.KnuthPlass.Test.dll --filter "FullyQualifiedName~TestName"
+```
+
+### Formatting
+```bash
+dotnet fantomas .
+```
+
+### Analyzers
+```bash
+./analyzers/run.sh
+```
+
+Always run `dotnet fantomas .` and `./analyzers/run.sh` before committing.
 
 ## Algorithm Status
 
-The Knuth-Plass algorithm is implemented with 19/23 tests passing. Remaining issues:
-- Forced break handling needs debugging (tests expect specific line break positions)
-- Edge cases with high tolerance values and multiple breakpoints
+The Knuth-Plass algorithm is implemented with 22/23 tests passing. Remaining issue:
+- One line breaking test failing related to balanced vs greedy breaks
 
 # NUnit bugs
 
