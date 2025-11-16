@@ -7,8 +7,12 @@ open System.Globalization
 /// information.
 [<RequireQualifiedAccess>]
 module Paragraph =
-    let private defaultWordWidth (s : string) =
+    /// Compute the display width of a string.
+    let defaultWordWidth (s : string) : float =
         float (StringInfo(s).LengthInTextElements)
+
+    [<Literal>]
+    let SPACE_WIDTH = 1.0
 
     /// Formats text into a paragraph with line breaks using the Knuth-Plass algorithm.
     /// Returns the text with line breaks inserted at 'optimal' positions.
@@ -146,4 +150,4 @@ module Paragraph =
     /// Formats text into a paragraph with line breaks using the Knuth-Plass algorithm.
     /// Returns the text with line breaks inserted at 'optimal' positions.
     let formatEnglish (lineWidth : float) (text : string) : string =
-        format lineWidth defaultWordWidth 1.0 Hyphenation.DEFAULT_PENALTY Hyphenation.simpleEnglish text
+        format lineWidth defaultWordWidth SPACE_WIDTH Hyphenation.DEFAULT_PENALTY Hyphenation.simpleEnglish text
