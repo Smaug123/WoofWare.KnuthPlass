@@ -33,25 +33,50 @@ module LineBreakingTests =
     [<Test>]
     let ``Breaking prefers balanced lines over greedy breaks`` () =
         // This tests the key feature of Knuth-Plass: it finds globally optimal breaks
+        //
+        // We have 6 boxes of width 8, separated by glue of width 2
+        // With line width 30:
+        // - Greedy break: fills first line to ~36 (needs shrinking), leaves second line at ~18 (needs huge stretching)
+        // - Balanced break: splits evenly at 28 each (moderate stretching on both)
+        //
+        // Greedy: Line 1 width 36 → ratio (30-36)/4 = -1.5
+        //         Line 2 width 18 → ratio (30-18)/1 = 12.0
+        //         Total badness: 1.5² + 12² = 146.25
+        //
+        // Balanced: Line 1 width 28 → ratio (30-28)/2 = 1.0
+        //           Line 2 width 28 → ratio (30-28)/2 = 1.0
+        //           Total badness: 1² + 1² = 2.0
+
         let items =
             [
-                Items.box 20.0
-                Items.glue 10.0 5.0 3.0
-                Items.box 20.0
-                Items.glue 10.0 5.0 3.0
-                Items.box 20.0
-                Items.glue 10.0 5.0 3.0
-                Items.box 50.0
+                Items.box 8.0
+                Items.glue 2.0 1.0 1.0 // width/stretch/shrink
+                Items.box 8.0
+                Items.glue 2.0 1.0 1.0
+                Items.box 8.0
+                Items.glue 2.0 1.0 1.0
+                Items.box 8.0
+                Items.glue 2.0 1.0 1.0
+                Items.box 8.0
+                Items.glue 2.0 1.0 1.0
+                Items.box 8.0
             ]
 
-        let options = LineBreakOptions.Default 70.0
+        let options = LineBreakOptions.Default 30.0
         let lines = LineBreaker.breakLines options items
 
         lines.Length |> shouldEqual 2
 
-        // The algorithm should prefer more balanced lines
+        // The algorithm should prefer balanced lines (both around ratio 1.0)
+        // over greedy breaking (ratios around -1.5 and 12.0)
         for line in lines do
             (abs line.AdjustmentRatio < 2.0) |> shouldEqual true
+
+        // More specifically, both lines should have similar adjustment ratios
+        let ratios = lines |> List.map (fun l -> l.AdjustmentRatio)
+        let maxRatio = ratios |> List.max
+        let minRatio = ratios |> List.min
+        (maxRatio - minRatio < 1.0) |> shouldEqual true // Lines should be similarly adjusted
 
     [<Test>]
     let ``Underfull line without glue is heavily penalized`` () =
