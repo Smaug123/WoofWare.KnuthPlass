@@ -60,9 +60,18 @@ type Line =
 /// visually jarring, so the algorithm penalises it.
 /// </remarks>
 type FitnessClass =
+    /// A line which has cramped spacing (adjustment ratio less than -1/2). An overfull line would
+    /// be an extreme example of this class, where the adjustment ratio was less than -1: that would indicate
+    /// every glue was being squashed as much as possible and we still had too much content in the line.
     | Tight = 0
+    /// A line which has normal spacing, adjustment ratio between -1/2 and 1/2. (This line is possibly more cramped,
+    /// possibly more loose than "ideal", but the glue is being squashed or stretched within normal bounds).
     | Normal = 1
+    /// A line which has loose spacing, adjustment ratio between 1/2 and 1. (This line is more loose than it wants
+    /// to be, but the glue is still being stretched within its allowed bounds.)
     | Loose = 2
+    /// A line which is underfull: even after stretching every glue as much as possible, we're still not taking enough
+    /// room.
     | VeryLoose = 3
 
 /// Options for line breaking

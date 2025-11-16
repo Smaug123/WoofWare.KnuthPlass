@@ -20,6 +20,7 @@ type private CumulativeSums =
         Shrink : float[]
     }
 
+/// The module holding the heart of the Knuth-Plass algorithm.
 [<RequireQualifiedAccess>]
 module LineBreaker =
     let private computeCumulativeSums (items : Item list) : CumulativeSums =

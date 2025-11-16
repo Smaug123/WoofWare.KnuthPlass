@@ -2,6 +2,8 @@ namespace WoofWare.KnuthPlass
 
 open System
 
+/// A module providing helper functions for producing text specified as .NET strings rather than as detailed layout
+/// information.
 [<RequireQualifiedAccess>]
 module Paragraph =
     let private defaultWordWidth (s : string) = float s.Length
