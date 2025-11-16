@@ -225,18 +225,18 @@ module LineBreaker =
 
                     // Try nodes at each previous position (only the best per fitness class)
                     for prevPos in max 0 lastForcedBreak .. i - 1 do
-                        // Check the best node for each fitness class at this position
-                        for fitnessIdx in 0..3 do
-                            let prevNodeIdx = getBestNode (enum<FitnessClass> fitnessIdx) prevPos
+                        match computeAdjustmentRatio itemsArray sums options.LineWidth prevPos i with
+                        | ValueSome ratio when isForced || ratio >= -1.0 || badness ratio <= options.Tolerance ->
+                            // Accept if: forced break, achievable (ratio >= -1), or badness within tolerance
+                            let fitness = fitnessClass ratio
+                            let isLast = i = n
 
-                            if prevNodeIdx <> Int32.MinValue then
-                                let prevNode = nodes.[prevNodeIdx]
+                            // Check the best node for each fitness class at this position
+                            for fitnessIdx in 0..3 do
+                                let prevNodeIdx = getBestNode (enum<FitnessClass> fitnessIdx) prevPos
 
-                                match computeAdjustmentRatio itemsArray sums options.LineWidth prevPos i with
-                                | ValueSome ratio when isForced || ratio >= -1.0 || badness ratio <= options.Tolerance ->
-                                    // Accept if: forced break, achievable (ratio >= -1), or badness within tolerance
-                                    let fitness = fitnessClass ratio
-                                    let isLast = i = n
+                                if prevNodeIdx <> Int32.MinValue then
+                                    let prevNode = nodes.[prevNodeIdx]
 
                                     let demerits =
                                         prevNode.Demerits
@@ -272,8 +272,7 @@ module LineBreaker =
 
                                         nodes.Add newNode
                                         setBestNode fitness i (nodes.Count - 1)
-
-                                | _ -> () // Line doesn't fit
+                        | _ -> () // Line doesn't fit
 
                     // If this is a forced break, update the last forced break position
                     if isForced then
