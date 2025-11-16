@@ -112,10 +112,21 @@ module LineBreaker =
         : float
         =
         let bad = badness ratio
-        // Forced breaks (penalty -infinity) should not contribute to demerits
-        let effectivePenalty = if penaltyCost = -infinity then 0.0 else abs penaltyCost
-        let linePenalty = (1.0 + bad) + effectivePenalty
-        let mutable demerits = linePenalty * linePenalty
+        let linePenalty = 1.0 + bad
+
+        // Compute base demerits according to Knuth-Plass formula:
+        // - Forced breaks (penalty -infinity): use L² only
+        // - Positive penalties P ≥ 0: use (L + P)²
+        // - Negative penalties P < 0: use L² - P² (encourages breaking)
+        let mutable demerits =
+            if penaltyCost = -infinity then
+                linePenalty * linePenalty
+            elif penaltyCost >= 0.0 then
+                let totalPenalty = linePenalty + penaltyCost
+                totalPenalty * totalPenalty
+            else
+                // Negative penalty reduces demerits
+                (linePenalty * linePenalty) - (penaltyCost * penaltyCost)
 
         // Penalty for consecutive flagged breaks (double hyphen)
         if prevWasFlagged && currIsFlagged then
