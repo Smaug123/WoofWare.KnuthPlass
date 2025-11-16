@@ -7,7 +7,8 @@ open System.Globalization
 /// information.
 [<RequireQualifiedAccess>]
 module Paragraph =
-    let private defaultWordWidth (s : string) = float (StringInfo(s).LengthInTextElements)
+    let private defaultWordWidth (s : string) =
+        float (StringInfo(s).LengthInTextElements)
 
     /// Formats text into a paragraph with line breaks using the Knuth-Plass algorithm.
     /// Returns the text with line breaks inserted at 'optimal' positions.

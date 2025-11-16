@@ -77,8 +77,9 @@ module LineBreaker =
             if totalStretch > 0.0 then
                 ValueSome (diff / totalStretch)
             else
-                // No glue to stretch and line is underfull - cannot fit
-                ValueNone
+                // No glue to stretch, but line is underfull - this is acceptable
+                // Return a very small positive ratio to indicate underfull
+                ValueSome 0.0
         else
             // Line is too long, need to compress
             let totalShrink = sums.Shrink.[endIdx] - sums.Shrink.[startIdx]
@@ -220,8 +221,8 @@ module LineBreaker =
                                 let prevNode = nodes.[prevNodeIdx]
 
                                 match computeAdjustmentRatio itemsArray sums options.LineWidth prevPos i with
-                                | ValueSome ratio when isForced || badness ratio <= options.Tolerance ->
-                                    // Accept if: forced break, or badness within tolerance
+                                | ValueSome ratio when isForced || ratio >= 0.0 || abs ratio <= options.Tolerance ->
+                                    // Accept if: forced break, underfull (ratio >= 0), or within tolerance
                                     let fitness = fitnessClass ratio
                                     let isLast = i = n
 

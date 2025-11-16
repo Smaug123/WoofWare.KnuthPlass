@@ -34,12 +34,12 @@ module Items =
 
     /// Converts a simple string into a list of items (boxes for words, glue for spaces, forced breaks for newlines)
     let fromString (text : string) (wordWidth : string -> float) (spaceWidth : float) : Item list =
-        let normalized = text.Replace("\r", "")
-        let paragraphs = normalized.Split([| '\n' |])
+        let normalized = text.Replace ("\r", "")
+        let paragraphs = normalized.Split ([| '\n' |])
 
         [
             for paragraph in paragraphs do
-                let words = paragraph.Split([| ' ' |], StringSplitOptions.RemoveEmptyEntries)
+                let words = paragraph.Split ([| ' ' |], StringSplitOptions.RemoveEmptyEntries)
 
                 for j, word in Array.indexed words do
                     yield box (wordWidth word)

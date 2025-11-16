@@ -13,6 +13,8 @@ type Box =
         Width : float
     }
 
+    override this.ToString () : string = $"box[%0.02f{this.Width}]"
+
 /// Represents stretchable/shrinkable whitespace.
 type Glue =
     {
@@ -23,6 +25,9 @@ type Glue =
         /// <summary>Maximum amount this glue can be compressed below its natural width.</summary>
         Shrink : float
     }
+
+    override this.ToString () =
+        $"glue[%0.02f{this.Width} / %0.02f{this.Stretch} / %0.02f{this.Shrink}]"
 
 /// Represents a potential break point in the text.
 type Penalty =
@@ -36,11 +41,21 @@ type Penalty =
         Flagged : bool
     }
 
+    override this.ToString () =
+        let flagged = if this.Flagged then 'F' else '_'
+        $"pen%c{flagged}[%0.02f{this.Width} cost %0.02f{this.Cost}]"
+
 /// An item in the paragraph to be broken into lines
 type Item =
     | Box of Box
     | Glue of Glue
     | Penalty of Penalty
+
+    override this.ToString () =
+        match this with
+        | Item.Box box -> box.ToString ()
+        | Item.Glue glue -> glue.ToString ()
+        | Item.Penalty penalty -> penalty.ToString ()
 
 /// Represents a line in the output
 type Line =

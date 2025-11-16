@@ -1,6 +1,7 @@
 namespace WoofWare.KnuthPlass.Test
 
 open NUnit.Framework
+open WoofWare.Expect
 open WoofWare.KnuthPlass
 open FsUnitTyped
 
@@ -13,19 +14,18 @@ module HelperTests =
         let spaceWidth = 5.0
         let items = Items.fromString text wordWidth spaceWidth
 
-        items.Length |> shouldEqual 3
+        expect {
+            snapshotList
+                [
+                    "box[50.00]"
+                    "glue[5.00 / 2.50 / 1.67]"
+                    "box[50.00]"
+                    "glue[0.00 / Infinity / 0.00]"
+                    "pen_[0.00 cost -Infinity]"
+                ]
 
-        match items.[0] with
-        | Box b -> b.Width |> shouldEqual 50.0
-        | _ -> failwith "First item should be a box"
-
-        match items.[1] with
-        | Glue g -> g.Width |> shouldEqual 5.0
-        | _ -> failwith "Second item should be glue"
-
-        match items.[2] with
-        | Box b -> b.Width |> shouldEqual 50.0
-        | _ -> failwith "Third item should be a box"
+            return items
+        }
 
     [<Test>]
     let ``fromString handles single word`` () =
@@ -34,20 +34,30 @@ module HelperTests =
         let spaceWidth = 5.0
         let items = Items.fromString text wordWidth spaceWidth
 
-        items.Length |> shouldEqual 1
-
-        match items.[0] with
-        | Box _ -> ()
-        | _ -> failwith "Should be a single box"
+        expect {
+            snapshotList [ "box[50.00]" ; "glue[0.00 / Infinity / 0.00]" ; "pen_[0.00 cost -Infinity]" ]
+            return items
+        }
 
     [<Test>]
-    let ``fromString handles multiple spaces`` () =
+    let ``fromString concatenates multiple spaces`` () =
         let text = "hello    world"
         let wordWidth (s : string) = float s.Length * 10.0
         let spaceWidth = 5.0
         let items = Items.fromString text wordWidth spaceWidth
 
-        items.Length |> shouldEqual 3
+        expect {
+            snapshotList
+                [
+                    "box[50.00]"
+                    "glue[5.00 / 2.50 / 1.67]"
+                    "box[50.00]"
+                    "glue[0.00 / Infinity / 0.00]"
+                    "pen_[0.00 cost -Infinity]"
+                ]
+
+            return items
+        }
 
     [<Test>]
     let ``box helper creates correct item`` () =
@@ -109,12 +119,33 @@ module HelperTests =
     let ``fromString counts grapheme clusters not chars`` () =
         // 👍🏽 is 1 grapheme cluster but 4 UTF-16 chars
         let text = "👍🏽"
-        let items = Items.fromString text (fun s -> float (System.Globalization.StringInfo(s).LengthInTextElements)) 5.0
 
-        items.Length |> shouldEqual 1
+        let items =
+            Items.fromString text (fun s -> float (System.Globalization.StringInfo(s).LengthInTextElements)) 5.0
 
-        match items.[0] with
-        | Box b ->
-            // Should be 1.0 (one grapheme cluster), not 4.0 (four chars)
-            b.Width |> shouldEqual 1.0
-        | _ -> failwith "Should be a box"
+        // The main content of the test is that we see 1.0 rather than 4.0 in the box width.
+        expect {
+            snapshotList [ "box[1.00]" ; "glue[0.00 / Infinity / 0.00]" ; "pen_[0.00 cost -Infinity]" ]
+            return items
+        }
+
+    [<Test>]
+    let ``fromString treats newlines as hard breaks`` () =
+        let text = "hello\nworld"
+        let wordWidth (s : string) = float s.Length * 10.0
+        let spaceWidth = 5.0
+        let items = Items.fromString text wordWidth spaceWidth
+
+        expect {
+            snapshotList
+                [
+                    "box[50.00]"
+                    "glue[0.00 / Infinity / 0.00]"
+                    "pen_[0.00 cost -Infinity]"
+                    "box[50.00]"
+                    "glue[0.00 / Infinity / 0.00]"
+                    "pen_[0.00 cost -Infinity]"
+                ]
+
+            return items
+        }
