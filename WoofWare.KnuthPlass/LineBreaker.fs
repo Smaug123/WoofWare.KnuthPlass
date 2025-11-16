@@ -58,8 +58,9 @@ module LineBreaker =
         : float voption
         =
         let mutable actualWidth = sums.Width.[endIdx] - sums.Width.[startIdx]
+        let mutable totalStretch = sums.Stretch.[endIdx] - sums.Stretch.[startIdx]
+        let mutable totalShrink = sums.Shrink.[endIdx] - sums.Shrink.[startIdx]
 
-        // Add penalty width if line ends at a penalty
         if endIdx > 0 && endIdx <= itemsArray.Length then
             match itemsArray.[endIdx - 1] with
             | Penalty p -> actualWidth <- actualWidth + p.Width
@@ -71,8 +72,6 @@ module LineBreaker =
             ValueSome 0.0
         elif diff > 0.0 then
             // Line is too short, need to stretch
-            let totalStretch = sums.Stretch.[endIdx] - sums.Stretch.[startIdx]
-
             if totalStretch > 0.0 then
                 ValueSome (diff / totalStretch)
             else
@@ -80,15 +79,48 @@ module LineBreaker =
                 // Return a very large ratio to indicate extreme looseness
                 // This ensures the line gets categorized as VeryLoose with high badness
                 ValueSome 1000.0
-        else
+        else if
             // Line is too long, need to compress
-            let totalShrink = sums.Shrink.[endIdx] - sums.Shrink.[startIdx]
+            totalShrink > 0.0
+        then
+            ValueSome (diff / totalShrink)
+        else
+            // No glue to shrink and line is overfull - cannot fit
+            ValueNone
 
-            if totalShrink > 0.0 then
-                ValueSome (diff / totalShrink)
-            else
-                // No glue to shrink and line is overfull - cannot fit
-                ValueNone
+    /// Once a layout has been chosen we display the per-line ratio as TeX would perceive it,
+    /// which means discarding any trailing glue at the breakpoint.
+    let private computeDisplayedAdjustmentRatio
+        (itemsArray : Item array)
+        (sums : CumulativeSums)
+        (lineWidth : float)
+        (startIdx : int)
+        (endIdx : int)
+        : float
+        =
+        let mutable actualWidth = sums.Width.[endIdx] - sums.Width.[startIdx]
+        let mutable totalStretch = sums.Stretch.[endIdx] - sums.Stretch.[startIdx]
+        let mutable totalShrink = sums.Shrink.[endIdx] - sums.Shrink.[startIdx]
+
+        if endIdx > 0 && endIdx <= itemsArray.Length then
+            match itemsArray.[endIdx - 1] with
+            | Glue g ->
+                actualWidth <- actualWidth - g.Width
+                totalStretch <- totalStretch - g.Stretch
+                totalShrink <- totalShrink - g.Shrink
+            | Penalty p -> actualWidth <- actualWidth + p.Width
+            | _ -> ()
+
+        let diff = lineWidth - actualWidth
+
+        if abs diff < 1e-10 then
+            0.0
+        elif diff > 0.0 then
+            if totalStretch > 0.0 then diff / totalStretch else 1000.0
+        else if totalShrink > 0.0 then
+            diff / totalShrink
+        else
+            failwith "line should have been rejected earlier"
 
     let inline private fitnessClass (ratio : float) : FitnessClass =
         if ratio < -0.5 then FitnessClass.Tight
@@ -309,11 +341,14 @@ module LineBreaker =
                     | Some prevIdx ->
                         let prevNode = nodes.[prevIdx]
 
+                        let displayRatio =
+                            computeDisplayedAdjustmentRatio items sums options.LineWidth prevNode.Position node.Position
+
                         let line =
                             {
                                 Start = prevNode.Position
                                 End = node.Position
-                                AdjustmentRatio = node.Ratio
+                                AdjustmentRatio = displayRatio
                             }
 
                         result.Add line
