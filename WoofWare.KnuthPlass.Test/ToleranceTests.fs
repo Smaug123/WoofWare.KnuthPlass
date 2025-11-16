@@ -140,3 +140,43 @@ module ToleranceTests =
         lines.Length |> shouldEqual 2
         lines.[0].End |> shouldEqual 3
         lines.[0].AdjustmentRatio |> shouldEqual -0.8
+
+    [<Test>]
+    let ``Tolerance filtering prunes a globally optimal but tight line`` () =
+        // This test demonstrates the regression where tolerance is incorrectly used to discard an otherwise
+        // feasible line. The first line in the optimal solution has ratio -3.33 which greatly exceeds the
+        // default tolerance, but the Knuth-Plass algorithm should still consider it so the paragraph can be
+        // optimised globally.
+
+        let items =
+            [|
+                Items.box 25.0
+                Items.glue 8.0 0.0 2.4
+                Items.box 25.0
+                Items.penalty 0.0 0.0 false
+                Items.glue 8.0 10.0 1.0
+                Items.box 8.0
+            |]
+
+        // With an artificially high tolerance we can observe the globally optimal solution: break after the
+        // penalty so the first line contains Box-Glue-Box (ratio ≈ -3.33) and the second line takes the remaining
+        // glue and box (ratio ≈ 3.4). This works because tolerance no longer filters the first line out.
+        let tolerantOptions =
+            { LineBreakOptions.Default 50.0 with
+                Tolerance = 5000.0
+            }
+
+        let optimalLines = LineBreaker.breakLines tolerantOptions items
+        optimalLines.Length |> shouldEqual 2
+        optimalLines.[0].End |> shouldEqual 4
+
+        (abs (optimalLines.[0].AdjustmentRatio + 3.333333333333333)) < 1e-6
+        |> shouldEqual true
+
+        // The default tolerance incorrectly prunes this tight line, forcing the algorithm to pick a much worse
+        // break earlier in the paragraph. Once the bug is fixed, the default options should yield the same result
+        // as the tolerant ones above.
+        let defaultOptions = LineBreakOptions.Default 50.0
+        let actualLines = LineBreaker.breakLines defaultOptions items
+
+        actualLines |> shouldEqual optimalLines

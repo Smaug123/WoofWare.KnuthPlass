@@ -75,6 +75,10 @@ type Line =
         AdjustmentRatio : float
     }
 
+    /// Terse but human-readable non-round-trip string representation.
+    override this.ToString () =
+        $"%i{this.Start}..=%i{this.End - 1} (%0.02f{this.AdjustmentRatio})"
+
 /// <summary>Categorises how tight or loose a line is, based on how much the spaces need to be stretched or shrunk to
 /// justify the line.</summary>
 /// <remarks>
