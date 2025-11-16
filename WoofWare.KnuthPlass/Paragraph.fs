@@ -12,43 +12,138 @@ module Paragraph =
 
     /// Formats text into a paragraph with line breaks using the Knuth-Plass algorithm.
     /// Returns the text with line breaks inserted at 'optimal' positions.
-    let format' (lineWidth : float) (wordWidth : string -> float) (spaceWidth : float) (text : string) : string =
+    let format
+        (lineWidth : float)
+        (wordWidth : string -> float)
+        (spaceWidth : float)
+        (hyphenPenalty : float)
+        (getHyphenationPoints : string -> int list)
+        (text : string)
+        : string
+        =
         let words = text.Split ([| ' ' |], StringSplitOptions.RemoveEmptyEntries)
 
         if words.Length = 0 then
             ""
         else
-            let items = Items.fromString text wordWidth spaceWidth
+            let items =
+                Items.fromString wordWidth spaceWidth getHyphenationPoints hyphenPenalty text
+
             let options = LineBreakOptions.Default lineWidth
             let lines = LineBreaker.breakLines options items
+            let itemsArray = items |> List.toArray
 
-            // Extract words for each line
-            // Create a mapping from item index to word index (only for Box items)
-            let boxToWord =
-                items
-                |> List.indexed
-                |> List.choose (fun (i, item) ->
-                    match item with
-                    | Box _ -> Some i
-                    | _ -> None
+            // Pre-compute word parts based on hyphenation points
+            let wordParts =
+                words
+                |> Array.map (fun word ->
+                    let points =
+                        getHyphenationPoints word
+                        |> List.filter (fun i -> i > 0 && i < word.Length)
+                        |> List.sort
+                        |> List.distinct
+
+                    if List.isEmpty points then
+                        [| word |]
+                    else
+                        let parts = ResizeArray ()
+                        let mutable lastIdx = 0
+
+                        for point in points do
+                            parts.Add (word.Substring (lastIdx, point - lastIdx))
+                            lastIdx <- point
+
+                        parts.Add (word.Substring (lastIdx))
+                        parts.ToArray ()
                 )
-                |> List.indexed
-                |> List.map (fun (wordIdx, itemIdx) -> (itemIdx, wordIdx))
-                |> Map.ofList
 
+            // Create mapping from box index to word part text
+            let mutable boxToText = Map.empty
+            let mutable boxIdx = 0
+
+            for wordIdx in 0 .. words.Length - 1 do
+                for part in wordParts.[wordIdx] do
+                    boxToText <- Map.add boxIdx part boxToText
+                    boxIdx <- boxIdx + 1
+
+            // Reconstruct text for each line
             let lineTexts =
                 lines
                 |> List.map (fun line ->
-                    // Get all box indices in this line and map to words
-                    [ line.Start .. line.End - 1 ]
-                    |> List.choose (fun i -> Map.tryFind i boxToWord)
-                    |> List.map (fun wordIdx -> words.[wordIdx])
-                    |> String.concat " "
+                    let result = ResizeArray ()
+
+                    for i in line.Start .. line.End - 1 do
+                        match itemsArray.[i] with
+                        | Box _ ->
+                            // Find which box number this is (counting only boxes)
+                            let boxNum =
+                                [ 0 .. i - 1 ]
+                                |> List.filter (fun j ->
+                                    match itemsArray.[j] with
+                                    | Box _ -> true
+                                    | _ -> false
+                                )
+                                |> List.length
+
+                            match Map.tryFind boxNum boxToText with
+                            | Some text -> result.Add (text)
+                            | None -> ()
+
+                        | Glue _ ->
+                            // Add space (but not at start/end of line, handled by checking next item)
+                            ()
+
+                        | Penalty pen ->
+                            // If this is the last item in the line and it has width (hyphen), add it
+                            if i = line.End - 1 && pen.Width > 0.0 then
+                                result.Add ("-")
+
+                    // Join parts and add spaces between words
+                    // Need to track where glue was to add spaces
+                    let mutable finalResult = []
+                    let mutable lastWasBox = false
+
+                    for i in line.Start .. line.End - 1 do
+                        match itemsArray.[i] with
+                        | Box _ ->
+                            let boxNum =
+                                [ 0 .. i - 1 ]
+                                |> List.filter (fun j ->
+                                    match itemsArray.[j] with
+                                    | Box _ -> true
+                                    | _ -> false
+                                )
+                                |> List.length
+
+                            match Map.tryFind boxNum boxToText with
+                            | Some textpart -> finalResult <- textpart :: finalResult
+                            | None -> ()
+
+                            lastWasBox <- true
+
+                        | Glue _ when lastWasBox && i < line.End - 1 ->
+                            // Add space if there's content after this glue in the line
+                            let hasBoxAfter =
+                                [ i + 1 .. line.End - 1 ]
+                                |> List.exists (fun j ->
+                                    match itemsArray.[j] with
+                                    | Box _ -> true
+                                    | _ -> false
+                                )
+
+                            if hasBoxAfter then
+                                finalResult <- " " :: finalResult
+
+                        | Penalty pen when i = line.End - 1 && pen.Width > 0.0 -> finalResult <- "-" :: finalResult
+
+                        | _ -> ()
+
+                    finalResult |> List.rev |> String.concat ""
                 )
 
             String.concat Environment.NewLine lineTexts
 
     /// Formats text into a paragraph with line breaks using the Knuth-Plass algorithm.
     /// Returns the text with line breaks inserted at 'optimal' positions.
-    let format (lineWidth : float) (text : string) : string =
-        format' lineWidth defaultWordWidth 1.0 text
+    let formatEnglish (lineWidth : float) (text : string) : string =
+        format lineWidth defaultWordWidth 1.0 Hyphenation.DEFAULT_PENALTY Hyphenation.simpleEnglish text

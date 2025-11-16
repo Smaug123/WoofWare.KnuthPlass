@@ -37,7 +37,7 @@ type Penalty =
         /// Cost of breaking at this point. Negative values encourage breaks, positive values discourage them.
         Cost : float
         /// The algorithm tries to prevent two consecutive breaks at flagged penalties (e.g. to prevent two hyphenations
-        /// in a row).
+        /// in a row in the same word).
         Flagged : bool
     }
 

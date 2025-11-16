@@ -12,7 +12,7 @@ module HelperTests =
         let text = "hello world"
         let wordWidth (s : string) = float s.Length * 10.0
         let spaceWidth = 5.0
-        let items = Items.fromString text wordWidth spaceWidth
+        let items = Items.fromEnglishString wordWidth spaceWidth text
 
         expect {
             snapshotList
@@ -32,7 +32,7 @@ module HelperTests =
         let text = "hello"
         let wordWidth (s : string) = float s.Length * 10.0
         let spaceWidth = 5.0
-        let items = Items.fromString text wordWidth spaceWidth
+        let items = Items.fromEnglishString wordWidth spaceWidth text
 
         expect {
             snapshotList [ "box[50.00]" ; "glue[0.00 / Infinity / 0.00]" ; "pen_[0.00 cost -Infinity]" ]
@@ -44,7 +44,7 @@ module HelperTests =
         let text = "hello    world"
         let wordWidth (s : string) = float s.Length * 10.0
         let spaceWidth = 5.0
-        let items = Items.fromString text wordWidth spaceWidth
+        let items = Items.fromEnglishString wordWidth spaceWidth text
 
         expect {
             snapshotList
@@ -108,7 +108,7 @@ module HelperTests =
         let text = "👨‍👩‍👧‍👦 👍🏽"
 
         // Using default width function which should count grapheme clusters
-        let result = Paragraph.format 10.0 text
+        let result = Paragraph.formatEnglish 10.0 text
 
         // Should successfully format without crashing
         // The text should be split since we have 2 grapheme clusters (plus space)
@@ -121,7 +121,7 @@ module HelperTests =
         let text = "👍🏽"
 
         let items =
-            Items.fromString text (fun s -> float (System.Globalization.StringInfo(s).LengthInTextElements)) 5.0
+            Items.fromEnglishString (fun s -> float (System.Globalization.StringInfo(s).LengthInTextElements)) 5.0 text
 
         // The main content of the test is that we see 1.0 rather than 4.0 in the box width.
         expect {
@@ -134,7 +134,7 @@ module HelperTests =
         let text = "hello\nworld"
         let wordWidth (s : string) = float s.Length * 10.0
         let spaceWidth = 5.0
-        let items = Items.fromString text wordWidth spaceWidth
+        let items = Items.fromEnglishString wordWidth spaceWidth text
 
         expect {
             snapshotList
