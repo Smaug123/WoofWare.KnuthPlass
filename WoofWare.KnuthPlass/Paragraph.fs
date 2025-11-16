@@ -1,6 +1,7 @@
 namespace WoofWare.KnuthPlass
 
 open System
+open System.Collections.Generic
 open System.Globalization
 
 /// A module providing helper functions for producing text specified as .NET strings rather than as detailed layout
@@ -63,13 +64,28 @@ module Paragraph =
                 )
 
             // Create mapping from box index to word part text
-            let mutable boxToText = Map.empty
+            let boxToText = Dictionary<int, string> ()
             let mutable boxIdx = 0
 
             for wordIdx in 0 .. words.Length - 1 do
                 for part in wordParts.[wordIdx] do
-                    boxToText <- Map.add boxIdx part boxToText
+                    boxToText.[boxIdx] <- part
                     boxIdx <- boxIdx + 1
+
+            let boxToText = boxToText :> IReadOnlyDictionary<int, string>
+
+            // Precompute mapping from item index to box number (O(n) instead of O(n²))
+            let itemIndexToBoxNumber = Dictionary<int, int> ()
+            let mutable currentBoxNum = 0
+
+            for i in 0 .. itemsArray.Length - 1 do
+                match itemsArray.[i] with
+                | Box _ ->
+                    itemIndexToBoxNumber.[i] <- currentBoxNum
+                    currentBoxNum <- currentBoxNum + 1
+                | _ -> ()
+
+            let itemIndexToBoxNumber = itemIndexToBoxNumber :> IReadOnlyDictionary<int, int>
 
             // Reconstruct text for each line
             let lineTexts =
@@ -80,19 +96,12 @@ module Paragraph =
                     for i in line.Start .. line.End - 1 do
                         match itemsArray.[i] with
                         | Box _ ->
-                            // Find which box number this is (counting only boxes)
-                            let boxNum =
-                                [ 0 .. i - 1 ]
-                                |> List.filter (fun j ->
-                                    match itemsArray.[j] with
-                                    | Box _ -> true
-                                    | _ -> false
-                                )
-                                |> List.length
-
-                            match Map.tryFind boxNum boxToText with
-                            | Some text -> result.Add text
-                            | None -> ()
+                            match itemIndexToBoxNumber.TryGetValue i with
+                            | true, boxNum ->
+                                match boxToText.TryGetValue boxNum with
+                                | true, text -> result.Add text
+                                | false, _ -> ()
+                            | false, _ -> ()
 
                         | Glue _ ->
                             // Add space (but not at start/end of line, handled by checking next item)
@@ -111,18 +120,12 @@ module Paragraph =
                     for i in line.Start .. line.End - 1 do
                         match itemsArray.[i] with
                         | Box _ ->
-                            let boxNum =
-                                [ 0 .. i - 1 ]
-                                |> List.filter (fun j ->
-                                    match itemsArray.[j] with
-                                    | Box _ -> true
-                                    | _ -> false
-                                )
-                                |> List.length
-
-                            match Map.tryFind boxNum boxToText with
-                            | Some textpart -> finalResult <- textpart :: finalResult
-                            | None -> ()
+                            match itemIndexToBoxNumber.TryGetValue i with
+                            | true, boxNum ->
+                                match boxToText.TryGetValue boxNum with
+                                | true, textpart -> finalResult <- textpart :: finalResult
+                                | false, _ -> ()
+                            | false, _ -> ()
 
                             lastWasBox <- true
 
