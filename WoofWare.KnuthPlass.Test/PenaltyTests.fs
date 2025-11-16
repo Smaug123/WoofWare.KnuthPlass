@@ -125,10 +125,17 @@ module PenaltyTests =
                 Items.box 40.0 // word2
             |]
 
+        // Keep tolerance extremely high so that this test focuses solely on
+        // the FinalHyphenDemerits behaviour rather than tolerance penalties.
+        let baseOptions =
+            { LineBreakOptions.Default 80.0 with
+                Tolerance = 1000.0
+            }
+
         // With low FinalHyphenDemerits, the algorithm chooses the hyphenated version
         // since it gives a better first line (50 + 10 + 12 + 3 = 75, close to 80)
         let optionsLowPenalty =
-            { LineBreakOptions.Default 80.0 with
+            { baseOptions with
                 FinalHyphenDemerits = 0.0
             }
 
@@ -137,7 +144,7 @@ module PenaltyTests =
         // With high FinalHyphenDemerits, the algorithm should avoid the hyphenated version
         // and instead break after the first glue, even though it's a worse fit
         let optionsHighPenalty =
-            { LineBreakOptions.Default 80.0 with
+            { baseOptions with
                 FinalHyphenDemerits = 50000000.0
             }
 

@@ -128,6 +128,16 @@ module LineBreaker =
                 // Negative penalty reduces demerits
                 (linePenalty * linePenalty) - (penaltyCost * penaltyCost)
 
+        // Tolerance violation penalty: when badness exceeds the allowed tolerance,
+        // apply a quadratic penalty (badness - tolerance)^2 to strongly discourage
+        // extreme lines. This penalty grows rapidly with increasing violations,
+        // making grossly over/under-full lines significantly less attractive than
+        // slightly over-tolerance lines, even if other penalties would otherwise
+        // favor them.
+        if bad > options.Tolerance then
+            let excess = bad - options.Tolerance
+            demerits <- demerits + (excess * excess)
+
         // Penalty for consecutive flagged breaks (double hyphen)
         if prevWasFlagged && currIsFlagged then
             demerits <- demerits + options.DoubleHyphenDemerits
