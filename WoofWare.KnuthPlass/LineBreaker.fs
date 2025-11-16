@@ -2,26 +2,26 @@ namespace WoofWare.KnuthPlass
 
 open System
 
+type private BreakNode =
+    {
+        Position : int
+        Demerits : float
+        Ratio : float
+        PreviousNode : int option
+        Fitness : FitnessClass
+        WasFlagged : bool
+    }
+
+/// Precomputed cumulative sums for efficient line computation
+type private CumulativeSums =
+    {
+        Width : float[]
+        Stretch : float[]
+        Shrink : float[]
+    }
+
 [<RequireQualifiedAccess>]
 module LineBreaker =
-    type BreakNode =
-        {
-            Position : int
-            Demerits : float
-            Ratio : float
-            PreviousNode : int option
-            Fitness : FitnessClass
-            WasFlagged : bool
-        }
-
-    /// Precomputed cumulative sums for efficient line computation
-    type CumulativeSums =
-        {
-            Width : float[]
-            Stretch : float[]
-            Shrink : float[]
-        }
-
     let private computeCumulativeSums (items : Item list) : CumulativeSums =
         let arr = items |> List.toArray
         let n = arr.Length
@@ -103,7 +103,9 @@ module LineBreaker =
         : float
         =
         let bad = badness ratio
-        let linePenalty = (1.0 + bad) + abs penaltyCost
+        // Forced breaks (penalty -infinity) should not contribute to demerits
+        let effectivePenalty = if penaltyCost = -infinity then 0.0 else abs penaltyCost
+        let linePenalty = (1.0 + bad) + effectivePenalty
         let mutable demerits = linePenalty * linePenalty
 
         // Penalty for consecutive flagged breaks (double hyphen)
@@ -195,56 +197,57 @@ module LineBreaker =
                     let penaltyCost, isFlagged = getPenaltyAt itemsArray i
                     let isForced = penaltyCost = -infinity
 
-                    // Try all previous nodes as potential predecessors
-                    for prevNodeIdx in 0 .. nodes.Count - 1 do
-                        let prevNode = nodes.[prevNodeIdx]
-                        let startPos = prevNode.Position
+                    // Try nodes at each previous position (only the best per fitness class)
+                    for prevPos in max 0 lastForcedBreak .. i - 1 do
+                        // Check the best node for each fitness class at this position
+                        for fitnessIdx in 0..3 do
+                            let prevNodeIdx = getBestNode (enum<FitnessClass> fitnessIdx) prevPos
 
-                        // Only consider nodes at earlier positions
-                        // and don't skip over forced breaks
-                        if startPos < i && startPos >= lastForcedBreak then
-                            match computeAdjustmentRatio sums options.LineWidth startPos i with
-                            | ValueSome ratio when isForced || ratio >= 0.0 || abs ratio <= options.Tolerance ->
-                                // Accept if: forced break, underfull (ratio >= 0), or within tolerance
-                                let fitness = fitnessClass ratio
-                                let isLast = i = n
+                            if prevNodeIdx <> Int32.MinValue then
+                                let prevNode = nodes.[prevNodeIdx]
 
-                                let demerits =
-                                    prevNode.Demerits
-                                    + computeDemerits
-                                        options
-                                        ratio
-                                        penaltyCost
-                                        prevNode.Fitness
-                                        fitness
-                                        prevNode.WasFlagged
-                                        isFlagged
-                                        isLast
+                                match computeAdjustmentRatio sums options.LineWidth prevPos i with
+                                | ValueSome ratio when isForced || ratio >= 0.0 || abs ratio <= options.Tolerance ->
+                                    // Accept if: forced break, underfull (ratio >= 0), or within tolerance
+                                    let fitness = fitnessClass ratio
+                                    let isLast = i = n
 
-                                // Check if this is better than existing node at this position/fitness
-                                let shouldAdd =
-                                    let result = getBestNode fitness i
+                                    let demerits =
+                                        prevNode.Demerits
+                                        + computeDemerits
+                                            options
+                                            ratio
+                                            penaltyCost
+                                            prevNode.Fitness
+                                            fitness
+                                            prevNode.WasFlagged
+                                            isFlagged
+                                            isLast
 
-                                    if result = Int32.MinValue then
-                                        true
-                                    else
-                                        demerits < nodes.[result].Demerits
+                                    // Check if this is better than existing node at this position/fitness
+                                    let shouldAdd =
+                                        let result = getBestNode fitness i
 
-                                if shouldAdd then
-                                    let newNode =
-                                        {
-                                            Position = i
-                                            Demerits = demerits
-                                            Ratio = ratio
-                                            PreviousNode = Some prevNodeIdx
-                                            Fitness = fitness
-                                            WasFlagged = isFlagged
-                                        }
+                                        if result = Int32.MinValue then
+                                            true
+                                        else
+                                            demerits < nodes.[result].Demerits
 
-                                    nodes.Add newNode
-                                    setBestNode fitness i (nodes.Count - 1)
+                                    if shouldAdd then
+                                        let newNode =
+                                            {
+                                                Position = i
+                                                Demerits = demerits
+                                                Ratio = ratio
+                                                PreviousNode = Some prevNodeIdx
+                                                Fitness = fitness
+                                                WasFlagged = isFlagged
+                                            }
 
-                            | _ -> () // Line doesn't fit
+                                        nodes.Add newNode
+                                        setBestNode fitness i (nodes.Count - 1)
+
+                                | _ -> () // Line doesn't fit
 
                     // If this is a forced break, update the last forced break position
                     if isForced then
@@ -280,88 +283,3 @@ module LineBreaker =
                         backtrack (line :: acc) prevIdx
 
                 backtrack [] bestEndIdx
-
-module Items =
-    /// Creates a box with the given width
-    let box (width : float) : Item =
-        Box
-            {
-                Width = width
-            }
-
-    /// Creates glue with the given width, stretch, and shrink values
-    let glue (width : float) (stretch : float) (shrink : float) : Item =
-        Glue
-            {
-                Width = width
-                Stretch = stretch
-                Shrink = shrink
-            }
-
-    /// Creates a penalty with the given width, cost, and flagged status
-    let penalty (width : float) (cost : float) (flagged : bool) : Item =
-        Penalty
-            {
-                Width = width
-                Cost = cost
-                Flagged = flagged
-            }
-
-    /// Creates a forced break (infinite penalty against not breaking)
-    let forcedBreak () : Item = penalty 0.0 (-infinity) false
-
-    /// Converts a simple string into a list of items (boxes for words, glue for spaces)
-    let fromString (text : string) (wordWidth : string -> float) (spaceWidth : float) : Item list =
-        let words =
-            text.Replace("\r", "").Split ([| ' ' ; '\n' |], StringSplitOptions.RemoveEmptyEntries)
-
-        [
-            for i, word in Array.indexed words do
-                yield box (wordWidth word)
-
-                // Add glue between words (but not after the last word)
-                if i < words.Length - 1 then
-                    yield glue spaceWidth (spaceWidth * 0.5) (spaceWidth * 0.333)
-        ]
-
-[<RequireQualifiedAccess>]
-module Format =
-    let private defaultWordWidth (s : string) = float s.Length
-
-    /// Formats text into a paragraph with line breaks using the Knuth-Plass algorithm.
-    /// Returns the text with line breaks inserted at 'optimal' positions.
-    let formatParagraph'
-        (lineWidth : float)
-        (wordWidth : string -> float)
-        (spaceWidth : float)
-        (text : string)
-        : string
-        =
-        let words = text.Split ([| ' ' |], StringSplitOptions.RemoveEmptyEntries)
-
-        if words.Length = 0 then
-            ""
-        else
-            let items = Items.fromString text wordWidth spaceWidth
-            let options = LineBreakOptions.Default lineWidth
-            let lines = LineBreaker.breakLines options items
-
-            // Extract words for each line
-            // Items alternate: box (even indices) and glue (odd indices)
-            // Word i is at item index i*2
-            let lineTexts =
-                lines
-                |> List.map (fun line ->
-                    // Get all box indices in this line
-                    [ line.Start .. line.End - 1 ]
-                    |> List.filter (fun i -> i % 2 = 0) // Boxes are at even indices
-                    |> List.map (fun i -> words.[i / 2])
-                    |> String.concat " "
-                )
-
-            String.concat Environment.NewLine lineTexts
-
-    /// Formats text into a paragraph with line breaks using the Knuth-Plass algorithm.
-    /// Returns the text with line breaks inserted at 'optimal' positions.
-    let formatParagraph (lineWidth : float) (text : string) : string =
-        formatParagraph' lineWidth defaultWordWidth 1.0 text

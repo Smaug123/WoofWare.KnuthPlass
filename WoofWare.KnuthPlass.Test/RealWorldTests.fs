@@ -49,7 +49,7 @@ jumps over
 the lazy
 dog."
 
-            return Format.formatParagraph' lineWidth wordWidth spaceWidth text
+            return Paragraph.format' lineWidth wordWidth spaceWidth text
         }
 
     [<Test>]
@@ -67,7 +67,7 @@ jumps over
 the lazy
 dog."
 
-            return Format.formatParagraph' lineWidth wordWidth spaceWidth text
+            return Paragraph.format' lineWidth wordWidth spaceWidth text
         }
 
     [<Test>]
@@ -111,5 +111,5 @@ came
 about his chambers, he never marked a shade of change in his demeanour.
 "
 
-            return Format.formatParagraph 80.0 text
+            return Paragraph.format 80.0 text
         }
