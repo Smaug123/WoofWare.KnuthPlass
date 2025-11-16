@@ -6,7 +6,17 @@ open WoofWare.KnuthPlass
 open FsUnitTyped
 
 [<TestFixture>]
+[<Parallelizable(ParallelScope.All)>]
 module HelperTests =
+    [<OneTimeSetUp>]
+    let setUp () =
+        // GlobalBuilderConfig.enterBulkUpdateMode ()
+        ()
+
+    [<OneTimeTearDown>]
+    let tearDown () =
+        GlobalBuilderConfig.updateAllSnapshots ()
+
     [<Test>]
     let ``fromString creates correct items for simple text`` () =
         let text = "hello world"
@@ -17,9 +27,13 @@ module HelperTests =
         expect {
             snapshotList
                 [
-                    "box[50.00]"
+                    "box[20.00]"
+                    "penF[10.00 cost 50.00]"
+                    "box[30.00]"
                     "glue[5.00 / 2.50 / 1.67]"
-                    "box[50.00]"
+                    "box[20.00]"
+                    "penF[10.00 cost 50.00]"
+                    "box[30.00]"
                     "glue[0.00 / Infinity / 0.00]"
                     "pen_[0.00 cost -Infinity]"
                 ]
@@ -35,7 +49,15 @@ module HelperTests =
         let items = Items.fromEnglishString wordWidth spaceWidth text
 
         expect {
-            snapshotList [ "box[50.00]" ; "glue[0.00 / Infinity / 0.00]" ; "pen_[0.00 cost -Infinity]" ]
+            snapshotList
+                [
+                    "box[20.00]"
+                    "penF[10.00 cost 50.00]"
+                    "box[30.00]"
+                    "glue[0.00 / Infinity / 0.00]"
+                    "pen_[0.00 cost -Infinity]"
+                ]
+
             return items
         }
 
@@ -49,9 +71,13 @@ module HelperTests =
         expect {
             snapshotList
                 [
-                    "box[50.00]"
+                    "box[20.00]"
+                    "penF[10.00 cost 50.00]"
+                    "box[30.00]"
                     "glue[5.00 / 2.50 / 1.67]"
-                    "box[50.00]"
+                    "box[20.00]"
+                    "penF[10.00 cost 50.00]"
+                    "box[30.00]"
                     "glue[0.00 / Infinity / 0.00]"
                     "pen_[0.00 cost -Infinity]"
                 ]
@@ -139,10 +165,14 @@ module HelperTests =
         expect {
             snapshotList
                 [
-                    "box[50.00]"
+                    "box[20.00]"
+                    "penF[10.00 cost 50.00]"
+                    "box[30.00]"
                     "glue[0.00 / Infinity / 0.00]"
                     "pen_[0.00 cost -Infinity]"
-                    "box[50.00]"
+                    "box[20.00]"
+                    "penF[10.00 cost 50.00]"
+                    "box[30.00]"
                     "glue[0.00 / Infinity / 0.00]"
                     "pen_[0.00 cost -Infinity]"
                 ]

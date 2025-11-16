@@ -166,24 +166,21 @@ module LineBreaker =
             false
 
     let private getPenaltyAt (itemsArray : Item array) (idx : int) : float * bool =
-        if idx >= itemsArray.Length then
-            (0.0, false) // No penalty at end of paragraph
-        elif idx > 0 then
-            // Check if previous item was a penalty
+        if idx > 0 && idx <= itemsArray.Length then
             match itemsArray.[idx - 1] with
-            | Penalty p -> (p.Cost, p.Flagged)
-            | _ -> (0.0, false)
+            | Penalty p -> p.Cost, p.Flagged
+            | _ -> 0.0, false
         else
-            (0.0, false)
+            0.0, false
 
     /// Break a paragraph into lines using the Knuth-Plass algorithm.
     /// Returns a list of lines with their start/end positions and adjustment ratios.
     /// Raises an exception if no valid breaking is possible.
     ///
     /// This function doesn't mutate `items`.
-    let breakLines (options : LineBreakOptions) (items : Item[]) : Line list =
+    let breakLines (options : LineBreakOptions) (items : Item[]) : Line[] =
         if items.Length = 0 then
-            []
+            [||]
         else
             let n = items.Length
             let sums = computeCumulativeSums items
@@ -226,7 +223,7 @@ module LineBreaker =
                     // Try nodes at each previous position (only the best per fitness class)
                     for prevPos in max 0 lastForcedBreak .. i - 1 do
                         match computeAdjustmentRatio items sums options.LineWidth prevPos i with
-                        | ValueSome ratio when isForced || ratio >= -1.0 || badness ratio <= options.Tolerance ->
+                        | ValueSome ratio when isForced || ratio >= -1.0 ->
                             // Accept if: forced break, achievable (ratio >= -1), or badness within tolerance
                             let fitness = fitnessClass ratio
                             let isLast = i = n
@@ -290,11 +287,15 @@ module LineBreaker =
             | None -> failwith "No valid line breaking found"
             | Some bestEndIdx ->
                 // Backtrack to recover the solution
-                let rec backtrack acc nodeIdx =
+                let result = ResizeArray ()
+
+                let rec backtrack nodeIdx =
                     let node = nodes.[nodeIdx]
 
                     match node.PreviousNode with
-                    | None -> acc
+                    | None ->
+                        result.Reverse ()
+                        result.ToArray ()
                     | Some prevIdx ->
                         let prevNode = nodes.[prevIdx]
 
@@ -305,6 +306,7 @@ module LineBreaker =
                                 AdjustmentRatio = node.Ratio
                             }
 
-                        backtrack (line :: acc) prevIdx
+                        result.Add line
+                        backtrack prevIdx
 
-                backtrack [] bestEndIdx
+                backtrack bestEndIdx

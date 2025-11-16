@@ -3,6 +3,7 @@ namespace WoofWare.KnuthPlass.Test
 open NUnit.Framework
 open WoofWare.KnuthPlass
 open FsUnitTyped
+open WoofWare.Expect
 
 [<TestFixture>]
 module ToleranceTests =
@@ -167,6 +168,12 @@ module ToleranceTests =
             }
 
         let optimalLines = LineBreaker.breakLines tolerantOptions items
+
+        expect' {
+            snapshotList [ "0..=1 (1000.00)" ; "2..=5 (0.90)" ]
+            return optimalLines
+        }
+
         optimalLines.Length |> shouldEqual 2
         optimalLines.[0].End |> shouldEqual 4
 

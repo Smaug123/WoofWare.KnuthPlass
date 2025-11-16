@@ -89,7 +89,7 @@ module Paragraph =
             // Reconstruct text for each line
             let lineTexts =
                 lines
-                |> List.map (fun line ->
+                |> Array.map (fun line ->
                     // Join parts and add spaces between words
                     // Need to track where glue was to add spaces
                     let mutable finalResult = []

@@ -66,7 +66,7 @@ WoofWare.KnuthPlass.Line.get_End [method]: unit -> int
 WoofWare.KnuthPlass.Line.get_Start [method]: unit -> int
 WoofWare.KnuthPlass.Line.Start [property]: [read-only] int
 WoofWare.KnuthPlass.LineBreaker inherit obj
-WoofWare.KnuthPlass.LineBreaker.breakLines [static method]: WoofWare.KnuthPlass.LineBreakOptions -> WoofWare.KnuthPlass.Item [] -> WoofWare.KnuthPlass.Line list
+WoofWare.KnuthPlass.LineBreaker.breakLines [static method]: WoofWare.KnuthPlass.LineBreakOptions -> WoofWare.KnuthPlass.Item [] -> WoofWare.KnuthPlass.Line []
 WoofWare.KnuthPlass.LineBreakOptions inherit obj, implements WoofWare.KnuthPlass.LineBreakOptions System.IEquatable, System.Collections.IStructuralEquatable, WoofWare.KnuthPlass.LineBreakOptions System.IComparable, System.IComparable, System.Collections.IStructuralComparable
 WoofWare.KnuthPlass.LineBreakOptions..ctor [constructor]: (float, float, float, float, float, float)
 WoofWare.KnuthPlass.LineBreakOptions.AdjacentLooseTightDemerits [property]: [read-only] float

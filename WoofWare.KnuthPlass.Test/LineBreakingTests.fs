@@ -73,9 +73,9 @@ module LineBreakingTests =
             (abs line.AdjustmentRatio < 2.0) |> shouldEqual true
 
         // More specifically, both lines should have similar adjustment ratios
-        let ratios = lines |> List.map (fun l -> l.AdjustmentRatio)
-        let maxRatio = ratios |> List.max
-        let minRatio = ratios |> List.min
+        let ratios = lines |> Array.map (fun l -> l.AdjustmentRatio)
+        let maxRatio = ratios |> Array.max
+        let minRatio = ratios |> Array.min
         (maxRatio - minRatio < 1.0) |> shouldEqual true // Lines should be similarly adjusted
 
     [<Test>]
