@@ -1,12 +1,13 @@
 namespace WoofWare.KnuthPlass
 
 open System
+open System.Globalization
 
 /// A module providing helper functions for producing text specified as .NET strings rather than as detailed layout
 /// information.
 [<RequireQualifiedAccess>]
 module Paragraph =
-    let private defaultWordWidth (s : string) = float s.Length
+    let private defaultWordWidth (s : string) = float (StringInfo(s).LengthInTextElements)
 
     /// Formats text into a paragraph with line breaks using the Knuth-Plass algorithm.
     /// Returns the text with line breaks inserted at 'optimal' positions.
@@ -21,15 +22,26 @@ module Paragraph =
             let lines = LineBreaker.breakLines options items
 
             // Extract words for each line
-            // Items alternate: box (even indices) and glue (odd indices)
-            // Word i is at item index i*2
+            // Create a mapping from item index to word index (only for Box items)
+            let boxToWord =
+                items
+                |> List.indexed
+                |> List.choose (fun (i, item) ->
+                    match item with
+                    | Box _ -> Some i
+                    | _ -> None
+                )
+                |> List.indexed
+                |> List.map (fun (wordIdx, itemIdx) -> (itemIdx, wordIdx))
+                |> Map.ofList
+
             let lineTexts =
                 lines
                 |> List.map (fun line ->
-                    // Get all box indices in this line
+                    // Get all box indices in this line and map to words
                     [ line.Start .. line.End - 1 ]
-                    |> List.filter (fun i -> i % 2 = 0) // Boxes are at even indices
-                    |> List.map (fun i -> words.[i / 2])
+                    |> List.choose (fun i -> Map.tryFind i boxToWord)
+                    |> List.map (fun wordIdx -> words.[wordIdx])
                     |> String.concat " "
                 )
 

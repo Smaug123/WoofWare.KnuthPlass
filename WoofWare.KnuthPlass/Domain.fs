@@ -79,7 +79,8 @@ type LineBreakOptions =
     {
         /// Target width for each line
         LineWidth : float
-        /// Tolerance for acceptable lines (typically 1-3). Higher values allow looser lines.
+        /// Maximum allowed badness for a line (badness = 100 * |ratio|^3).
+        /// Typical values: 1-3 for strict, 10 for moderate. Higher values allow looser lines.
         Tolerance : float
         /// Penalty for consecutive lines of very different tightness
         AdjacentLooseTightDemerits : float
@@ -96,7 +97,7 @@ type LineBreakOptions =
     static member Default (lineWidth : float) =
         {
             LineWidth = lineWidth
-            Tolerance = 10.0 // Allow significant stretch/shrink
+            Tolerance = 10.0 // Moderate: allows ratio up to ~0.46
             AdjacentLooseTightDemerits = 10000.0
             DoubleHyphenDemerits = 10000.0
             FinalHyphenDemerits = 5000.0

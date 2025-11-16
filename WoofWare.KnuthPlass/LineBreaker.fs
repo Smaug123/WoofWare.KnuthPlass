@@ -41,7 +41,7 @@ module LineBreaker =
                 width.[i + 1] <- width.[i + 1] + g.Width
                 stretch.[i + 1] <- stretch.[i + 1] + g.Stretch
                 shrink.[i + 1] <- shrink.[i + 1] + g.Shrink
-            | Penalty p -> width.[i + 1] <- width.[i + 1] + p.Width
+            | Penalty _ -> ()
 
         {
             Width = width
@@ -51,13 +51,21 @@ module LineBreaker =
 
     /// Compute adjustment ratio for a line from startIdx to endIdx
     let private computeAdjustmentRatio
+        (itemsArray : Item array)
         (sums : CumulativeSums)
         (lineWidth : float)
         (startIdx : int)
         (endIdx : int)
         : float voption
         =
-        let actualWidth = sums.Width.[endIdx] - sums.Width.[startIdx]
+        let mutable actualWidth = sums.Width.[endIdx] - sums.Width.[startIdx]
+
+        // Add penalty width if line ends at a penalty
+        if endIdx > 0 && endIdx <= itemsArray.Length then
+            match itemsArray.[endIdx - 1] with
+            | Penalty p -> actualWidth <- actualWidth + p.Width
+            | _ -> ()
+
         let diff = lineWidth - actualWidth
 
         if abs diff < 1e-10 then
@@ -69,9 +77,8 @@ module LineBreaker =
             if totalStretch > 0.0 then
                 ValueSome (diff / totalStretch)
             else
-                // No glue to stretch, but line is underfull - this is acceptable
-                // Return a very small positive ratio to indicate underfull
-                ValueSome 0.0
+                // No glue to stretch and line is underfull - cannot fit
+                ValueNone
         else
             // Line is too long, need to compress
             let totalShrink = sums.Shrink.[endIdx] - sums.Shrink.[startIdx]
@@ -115,7 +122,12 @@ module LineBreaker =
 
         // Penalty for fitness class mismatch
         if prevFitness <> currFitness then
-            demerits <- demerits + options.FitnessClassDifferencePenalty
+            let fitnessDiff = abs (int prevFitness - int currFitness)
+            // Large penalty for non-adjacent fitness classes (e.g., Tight to Loose)
+            if fitnessDiff > 1 then
+                demerits <- demerits + options.AdjacentLooseTightDemerits
+            else
+                demerits <- demerits + options.FitnessClassDifferencePenalty
 
         // Penalty for ending with a flagged break
         if isLastLine && currIsFlagged then
@@ -207,9 +219,9 @@ module LineBreaker =
                             if prevNodeIdx <> Int32.MinValue then
                                 let prevNode = nodes.[prevNodeIdx]
 
-                                match computeAdjustmentRatio sums options.LineWidth prevPos i with
-                                | ValueSome ratio when isForced || ratio >= 0.0 || abs ratio <= options.Tolerance ->
-                                    // Accept if: forced break, underfull (ratio >= 0), or within tolerance
+                                match computeAdjustmentRatio itemsArray sums options.LineWidth prevPos i with
+                                | ValueSome ratio when isForced || badness ratio <= options.Tolerance ->
+                                    // Accept if: forced break, or badness within tolerance
                                     let fitness = fitnessClass ratio
                                     let isLast = i = n
 

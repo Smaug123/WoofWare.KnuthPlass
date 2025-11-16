@@ -32,16 +32,23 @@ module Items =
     /// Creates a forced break (infinite penalty against not breaking)
     let forcedBreak () : Item = penalty 0.0 (-infinity) false
 
-    /// Converts a simple string into a list of items (boxes for words, glue for spaces)
+    /// Converts a simple string into a list of items (boxes for words, glue for spaces, forced breaks for newlines)
     let fromString (text : string) (wordWidth : string -> float) (spaceWidth : float) : Item list =
-        let words =
-            text.Replace("\r", "").Split ([| ' ' ; '\n' |], StringSplitOptions.RemoveEmptyEntries)
+        let normalized = text.Replace("\r", "")
+        let paragraphs = normalized.Split([| '\n' |])
 
         [
-            for i, word in Array.indexed words do
-                yield box (wordWidth word)
+            for paragraph in paragraphs do
+                let words = paragraph.Split([| ' ' |], StringSplitOptions.RemoveEmptyEntries)
 
-                // Add glue between words (but not after the last word)
-                if i < words.Length - 1 then
-                    yield glue spaceWidth (spaceWidth * 0.5) (spaceWidth * 0.333)
+                for j, word in Array.indexed words do
+                    yield box (wordWidth word)
+
+                    // Add glue between words (but not after the last word in the paragraph)
+                    if j < words.Length - 1 then
+                        yield glue spaceWidth (spaceWidth * 0.5) (spaceWidth * 0.333)
+
+                // End each paragraph with infinite-stretch glue and forced break
+                yield glue 0.0 infinity 0.0
+                yield forcedBreak ()
         ]
