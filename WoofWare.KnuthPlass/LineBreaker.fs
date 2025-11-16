@@ -143,7 +143,7 @@ module LineBreaker =
                 demerits <- demerits + options.FitnessClassDifferencePenalty
 
         // Penalty for ending with a flagged break
-        if isLastLine && currIsFlagged then
+        if isLastLine && prevWasFlagged then
             demerits <- demerits + options.FinalHyphenDemerits
 
         demerits

@@ -97,3 +97,65 @@ module PenaltyTests =
         // The key test: negative and positive penalties should produce different results
         // If the bug exists (negative treated as positive), they might produce the same result
         linesWithNegative |> shouldNotEqual linesWithPositive
+
+    [<Test>]
+    let ``Final hyphen demerits prevents paragraph ending with hyphen`` () =
+        // This test demonstrates that FinalHyphenDemerits correctly penalizes
+        // ending a paragraph with a hyphenated word (i.e., a hyphen on the
+        // second-to-last line).
+        //
+        // Bug: Previously, the algorithm checked currIsFlagged on the last line,
+        // which is always false since the last position has no penalty. It should
+        // check prevWasFlagged to detect if the previous break was hyphenated.
+        //
+        // Test design: Create a paragraph with two breaking strategies:
+        // - Strategy A: "word1 hy-" / "phen word2" (hyphen before last line)
+        // - Strategy B: "word1" / "hyphen word2" (no hyphen before last line)
+        //
+        // With high FinalHyphenDemerits, strategy B should be strongly preferred.
+
+        let items =
+            [
+                Items.box 50.0 // word1
+                Items.glue 10.0 5.0 3.0
+                Items.box 12.0 // "hy"
+                Items.penalty 3.0 50.0 true // optional hyphen (adds "-" width 3.0 if break here)
+                Items.box 13.0 // "phen"
+                Items.glue 10.0 5.0 3.0
+                Items.box 40.0 // word2
+            ]
+
+        // With low FinalHyphenDemerits, the algorithm chooses the hyphenated version
+        // since it gives a better first line (50 + 10 + 12 + 3 = 75, close to 80)
+        let optionsLowPenalty =
+            { LineBreakOptions.Default 80.0 with
+                FinalHyphenDemerits = 0.0
+            }
+
+        let linesLowPenalty = LineBreaker.breakLines optionsLowPenalty items
+
+        // With high FinalHyphenDemerits, the algorithm should avoid the hyphenated version
+        // and instead break after the first glue, even though it's a worse fit
+        let optionsHighPenalty =
+            { LineBreakOptions.Default 80.0 with
+                FinalHyphenDemerits = 50000000.0
+            }
+
+        let linesHighPenalty = LineBreaker.breakLines optionsHighPenalty items
+
+        // Both should successfully break
+        linesLowPenalty.Length |> shouldBeGreaterThan 0
+        linesHighPenalty.Length |> shouldBeGreaterThan 0
+
+        // With the bug: both produce the same result (likely the hyphenated version)
+        // because FinalHyphenDemerits is never applied.
+        // With the fix: they should differ.
+        linesLowPenalty |> shouldNotEqual linesHighPenalty
+
+        // Specifically, the low penalty version should break at the hyphen (position 4)
+        // giving a near-perfect first line
+        linesLowPenalty.[0].End |> shouldEqual 4
+
+        // While the high penalty version should break after the first glue (position 2)
+        // to avoid ending with a hyphen
+        linesHighPenalty.[0].End |> shouldEqual 2
