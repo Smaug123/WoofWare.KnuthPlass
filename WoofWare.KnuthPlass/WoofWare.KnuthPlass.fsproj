@@ -1,12 +1,33 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Authors>PatrickStevens</Authors>
+    <Copyright>Copyright (c) Patrick Stevens 2025</Copyright>
+    <Description>The Knuth-Plass paragraph layout algorithm.</Description>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/Smaug123/WoofWare.KnuthPlass</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageId>WoofWare.KnuthPlass</PackageId>
+    <PackageLogo>logo.svg</PackageLogo>
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="Domain.fs" />
     <Compile Include="Library.fs" />
+    <EmbeddedResource Include="SurfaceBaseline.txt" />
+    <EmbeddedResource Include="version.json" />
+    <None Include="..\README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+    <None Include="..\logos\light.svg">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
   </ItemGroup>
 
 </Project>

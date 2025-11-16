@@ -3,6 +3,7 @@ namespace WoofWare.KnuthPlass.Test
 open NUnit.Framework
 open WoofWare.KnuthPlass
 open FsUnitTyped
+open WoofWare.Expect
 
 [<TestFixture>]
 module RealWorldTests =
@@ -34,16 +35,41 @@ module RealWorldTests =
         narrowLines.Length |> shouldBeGreaterThan wideLines.Length
 
     [<Test>]
+    let ``formatParagraph' produces formatted text`` () =
+        let text = "The quick brown fox jumps over the lazy dog."
+        let wordWidth (s : string) = float s.Length * 8.0
+        let spaceWidth = 4.0
+        let lineWidth = 80.0
+
+        expect {
+            snapshot @"The quick
+brown fox
+jumps over
+the lazy
+dog."
+            return Format.formatParagraph' lineWidth wordWidth spaceWidth text
+        }
+
+    [<Test>]
     let ``formatParagraph produces formatted text`` () =
         let text = "The quick brown fox jumps over the lazy dog."
         let wordWidth (s : string) = float s.Length * 8.0
         let spaceWidth = 4.0
         let lineWidth = 80.0
 
-        let result = Format.formatParagraph lineWidth wordWidth spaceWidth text
+        expect {
+            snapshot @"The quick
+brown fox
+jumps over
+the lazy
+dog."
+            return Format.formatParagraph' lineWidth wordWidth spaceWidth text
+        }
 
-        // Should produce non-empty result
-        result.Length |> shouldBeGreaterThan 0
-        // Should preserve all words when newlines are removed
-        let normalized = result.Replace ("\n", " ")
-        normalized |> shouldEqual text
+    [<Test>]
+    let ``formatParagraph on Jekyll and Hyde`` () =
+        let text = Assembly.readEmbeddedResource "jekyll_and_hyde.txt"
+        expect' {
+            snapshot ""
+            return Format.formatParagraph 80 text
+        }

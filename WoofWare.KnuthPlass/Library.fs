@@ -1,80 +1,9 @@
 namespace WoofWare.KnuthPlass
 
-/// Represents a fixed-width item (word, character, etc.)
-type Box =
-    {
-        Width : float
-    }
+open System
 
-/// Represents stretchable/shrinkable whitespace
-type Glue =
-    {
-        Width : float
-        Stretch : float
-        Shrink : float
-    }
-
-/// Represents a potential break point with associated cost
-type Penalty =
-    {
-        Width : float
-        Cost : float
-        /// True for flagged penalties (e.g., hyphenated breaks)
-        Flagged : bool
-    }
-
-/// An item in the paragraph to be broken into lines
-type Item =
-    | Box of Box
-    | Glue of Glue
-    | Penalty of Penalty
-
-/// Represents a line in the output
-type Line =
-    {
-        /// Index of first item in this line
-        Start : int
-        /// Index of last item before the break (exclusive)
-        End : int
-        /// Adjustment ratio: how much glue was stretched (positive) or compressed (negative)
-        AdjustmentRatio : float
-    }
-
-/// Options for line breaking
-type LineBreakOptions =
-    {
-        /// Target width for each line
-        LineWidth : float
-        /// Tolerance for acceptable lines (typically 1-3). Higher values allow looser lines.
-        Tolerance : float
-        /// Penalty for consecutive lines of very different tightness
-        AdjacentLooseTightDemerits : float
-        /// Penalty for consecutive hyphenated lines
-        DoubleHyphenDemerits : float
-        /// Penalty for ending a paragraph with a hyphen
-        FinalHyphenDemerits : float
-        /// Penalty multiplier for fitness class differences
-        FitnessClassDifferencePenalty : float
-    }
-
-    /// Creates default options with standard TeX-like values
-    static member Default (lineWidth : float) =
-        {
-            LineWidth = lineWidth
-            Tolerance = 10.0 // Allow significant stretch/shrink
-            AdjacentLooseTightDemerits = 10000.0
-            DoubleHyphenDemerits = 10000.0
-            FinalHyphenDemerits = 5000.0
-            FitnessClassDifferencePenalty = 100.0
-        }
-
+[<RequireQualifiedAccess>]
 module LineBreaker =
-    type FitnessClass =
-        | Tight
-        | Normal
-        | Loose
-        | VeryLoose
-
     type BreakNode =
         {
             Position : int
@@ -387,10 +316,13 @@ module Items =
                     yield glue spaceWidth (spaceWidth * 0.5) (spaceWidth * 0.333)
         ]
 
+[<RequireQualifiedAccess>]
 module Format =
+    let private defaultWordWidth (s : string) = float s.Length
+
     /// Formats text into a paragraph with line breaks using the Knuth-Plass algorithm.
-    /// Returns the text with line breaks inserted at optimal positions.
-    let formatParagraph
+    /// Returns the text with line breaks inserted at 'optimal' positions.
+    let formatParagraph'
         (lineWidth : float)
         (wordWidth : string -> float)
         (spaceWidth : float)
@@ -419,4 +351,8 @@ module Format =
                     |> String.concat " "
                 )
 
-            String.concat "\n" lineTexts
+            String.concat Environment.NewLine lineTexts
+
+    /// Formats text into a paragraph with line breaks using the Knuth-Plass algorithm.
+    /// Returns the text with line breaks inserted at 'optimal' positions.
+    let formatParagraph (lineWidth : float) (text : string) : string = formatParagraph' lineWidth defaultWordWidth 1.0 text
