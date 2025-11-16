@@ -234,7 +234,7 @@ module LineBreaker =
                     for prevPos in max 0 lastForcedBreak .. i - 1 do
                         match computeAdjustmentRatio items sums options.LineWidth prevPos i with
                         | ValueSome ratio when isForced || ratio >= -1.0 ->
-                            // Accept if: forced break, achievable (ratio >= -1), or badness within tolerance
+                            // Accept if feasible (forced break or ratio >= -1); tolerance is handled in computeDemerits
                             let fitness = fitnessClass ratio
                             let isLast = i = n
 

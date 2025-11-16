@@ -11,24 +11,25 @@ module ToleranceTests =
     let private badness (ratio : float) : float = 100.0 * (abs ratio ** 3.0)
 
     [<Test>]
-    let ``Tolerance enforces maximum badness for overfull lines`` () =
-        // Underfull lines (ratio >= 0) are always accepted, but overfull lines (ratio < 0)
-        // should only be accepted if badness <= tolerance
-
-        // Create a single-line paragraph that is overfull with no glue to shrink
+    let ``Tolerance cannot rescue an infeasible overfull line`` () =
+        // Tolerance only affects the demerits assigned to a feasible line. If a break would
+        // require shrinking more than the glue allows, it must remain invalid regardless of tolerance.
         let items = [| Items.box 60.0 |]
 
         // Box is 60 wide, line width is 50
-        // This is overfull with no glue to shrink - should always fail
-        Assert.Throws<System.Exception> (fun () ->
-            LineBreaker.breakLines (LineBreakOptions.Default 50.0) items |> ignore
-        )
+        // This is overfull with no glue to shrink - should always fail even with huge tolerance
+        let options =
+            { LineBreakOptions.Default 50.0 with
+                Tolerance = 5000.0
+            }
+
+        Assert.Throws<System.Exception> (fun () -> LineBreaker.breakLines options items |> ignore)
         |> ignore
 
     [<Test>]
     let ``Underfull lines are always accepted regardless of badness`` () =
-        // Underfull lines (ratio >= 0) can always be achieved by stretching
-        // They should be accepted even with very high badness
+        // Underfull lines (ratio >= 0) can always be achieved by stretching.
+        // They should be accepted even with very high badness; tolerance just compounds their demerits relative to other plans.
 
         let items =
             [|
@@ -47,7 +48,7 @@ module ToleranceTests =
         // Need to stretch by 15, max stretch is 5
         // Ratio = 15/5 = 3.0
         // Badness = 100 * 3^3 = 2700 (way over tolerance)
-        // But should still be accepted because ratio >= 0
+        // The quadratic penalty makes this line extremely expensive, but it must still be considered because the adjustment is feasible.
 
         let lines = LineBreaker.breakLines options items
         lines.Length |> shouldEqual 1
@@ -55,7 +56,8 @@ module ToleranceTests =
 
     [<Test>]
     let ``Overfull lines within tolerance are accepted`` () =
-        // Lines with -1 <= ratio < 0 should be accepted if badness <= tolerance
+        // Lines with -1 <= ratio < 0 should be accepted if the shrinkage is feasible.
+        // Being within tolerance simply means no extra quadratic penalty is added.
 
         let items =
             [|
@@ -73,7 +75,7 @@ module ToleranceTests =
         // Target: 105
         // Need to shrink by 5, max shrink is 5
         // Ratio = -5/5 = -1.0
-        // Badness = 100 * 1^3 = 100 (exactly at tolerance)
+        // Badness = 100 * 1^3 = 100 (exactly at tolerance) so the penalty adds nothing.
 
         let lines = LineBreaker.breakLines options items
         lines.Length |> shouldEqual 1
@@ -100,6 +102,8 @@ module ToleranceTests =
                 Tolerance = 3.0
             }
 
+        // Both settings should find solutions; the difference is that the stricter tolerance will heavily penalise
+        // the looser plan, while the relaxed tolerance lets it compete.
         let strictLines = LineBreaker.breakLines strictOptions items
         let looseLines = LineBreaker.breakLines looseOptions items
 
@@ -108,10 +112,10 @@ module ToleranceTests =
 
     [<Test>]
     let ``Tolerance filtering prunes a globally optimal but tight line`` () =
-        // This test demonstrates the regression where tolerance is incorrectly used to discard an otherwise
-        // feasible line. The first line in the optimal solution has ratio about -0.94 which greatly exceeds the
-        // default tolerance, but the Knuth-Plass algorithm should still consider it so the paragraph can be
-        // optimised globally.
+        // This test guards against the regression where tolerance was used as a feasibility check and discarded
+        // an otherwise optimal line. The first line in the optimal solution has ratio about -0.94 which greatly
+        // exceeds the default tolerance, but the Knuth-Plass algorithm should still consider it so the paragraph
+        // can be optimised globally.
 
         let items =
             [|
@@ -125,7 +129,8 @@ module ToleranceTests =
 
         // With an artificially high tolerance we can observe the globally optimal solution: break after the
         // penalty so the first line contains Box-Glue-Box (ratio ≈ -0.94) and the second line takes the remaining
-        // glue and box (ratio ≈ 3.4). This works because tolerance no longer filters the first line out.
+        // glue and box (ratio ≈ 3.4). This works because tolerance now only changes the demerits instead of
+        // filtering the tight line.
         let tolerantOptions =
             { LineBreakOptions.Default 50.0 with
                 Tolerance = 5000.0
@@ -138,9 +143,9 @@ module ToleranceTests =
         (abs (optimalLines.[0].AdjustmentRatio + 0.9411764705882353)) < 1e-6
         |> shouldEqual true
 
-        // The default tolerance incorrectly prunes this tight line, forcing the algorithm to pick a much worse
-        // break earlier in the paragraph. Once the bug is fixed, the default options should yield the same result
-        // as the tolerant ones above.
+        // Historically the default tolerance incorrectly pruned this tight line, forcing the algorithm to pick a
+        // much worse break earlier in the paragraph. This assertion ensures the default options now behave like
+        // the tolerant ones above.
         let defaultOptions = LineBreakOptions.Default 50.0
         let actualLines = LineBreaker.breakLines defaultOptions items
 

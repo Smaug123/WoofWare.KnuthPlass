@@ -105,8 +105,8 @@ type LineBreakOptions =
     {
         /// Target width for each line
         LineWidth : float
-        /// Maximum allowed badness for a line (badness = 100 * |ratio|^3).
-        /// Typical values: 1-3 for strict, 10 for moderate. Higher values allow looser lines.
+        /// Badness threshold for applying the quadratic tolerance penalty (badness = 100 * |ratio|^3).
+        /// Typical values: 1-3 for strict, 10 for moderate. Higher values delay the penalty and let looser lines survive.
         Tolerance : float
         /// Penalty for consecutive lines of very different tightness
         AdjacentLooseTightDemerits : float
