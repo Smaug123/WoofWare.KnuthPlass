@@ -3,6 +3,7 @@ namespace WoofWare.KnuthPlass
 [<RequireQualifiedAccess>]
 module internal Seq =
 
+    // Bafflingly, this isn't in the standard library.
     let tryMinBy (f : 'a -> 'b) (s : 'a seq) : 'a option =
         use e = s.GetEnumerator ()
 

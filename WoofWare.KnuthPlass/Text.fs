@@ -97,6 +97,19 @@ module Text =
             let lineTexts =
                 lines
                 |> Array.map (fun line ->
+                    // Precompute whether there's a box at or after each position (O(n) instead of O(n²))
+                    let hasBoxAtOrAfter = Dictionary<int, bool> ()
+                    let mutable foundBox = false
+
+                    for i in line.End - 1 .. -1 .. line.Start do
+                        match items.[i] with
+                        | Box _ -> foundBox <- true
+                        | _ -> ()
+
+                        hasBoxAtOrAfter.[i] <- foundBox
+
+                    let hasBoxAtOrAfter = hasBoxAtOrAfter :> IReadOnlyDictionary<int, bool>
+
                     // Join parts and add spaces between words
                     // Need to track where glue was to add spaces
                     let mutable finalResult = []
@@ -116,16 +129,9 @@ module Text =
 
                         | Glue _ when lastWasBox && i < line.End - 1 ->
                             // Add space if there's content after this glue in the line
-                            let hasBoxAfter =
-                                [ i + 1 .. line.End - 1 ]
-                                |> List.exists (fun j ->
-                                    match items.[j] with
-                                    | Box _ -> true
-                                    | _ -> false
-                                )
-
-                            if hasBoxAfter then
-                                finalResult <- " " :: finalResult
+                            match hasBoxAtOrAfter.TryGetValue (i + 1) with
+                            | true, hasBox when hasBox -> finalResult <- " " :: finalResult
+                            | _ -> ()
 
                         | Penalty pen when i = line.End - 1 && pen.Width > 0.0 -> finalResult <- "-" :: finalResult
 

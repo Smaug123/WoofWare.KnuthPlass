@@ -23,6 +23,21 @@ type private CumulativeSums =
 /// The module holding the heart of the Knuth-Plass algorithm.
 [<RequireQualifiedAccess>]
 module LineBreaker =
+    /// A very large adjustment ratio used when a line is underfull (too short) but has no glue
+    /// to stretch. This value ensures the line gets categorized as VeryLoose with high badness,
+    /// making it an unattractive but still feasible breaking option. This is used when we must
+    /// represent extreme looseness in the algorithm's dynamic programming calculations.
+    [<Literal>]
+    let private extremeLooseRatio = 1000.0
+
+    /// Maximum excess tolerance value to prevent overflow when computing the quadratic penalty
+    /// (excess * excess) for tolerance violations. This cap ensures that extremely bad lines
+    /// still receive severe penalties without causing numerical overflow or producing demerits
+    /// values so large they dominate all other algorithmic considerations. With this cap, the
+    /// maximum penalty contribution from tolerance violations is maxExcessTolerance^2.
+    [<Literal>]
+    let private maxExcessTolerance = 10000.0
+
     let private computeCumulativeSums (items : Item[]) : CumulativeSums =
         let n = items.Length
         let width = Array.zeroCreate (n + 1)
@@ -78,7 +93,7 @@ module LineBreaker =
                 // No glue to stretch, but line is underfull
                 // Return a very large ratio to indicate extreme looseness
                 // This ensures the line gets categorized as VeryLoose with high badness
-                ValueSome 1000.0
+                ValueSome extremeLooseRatio
         else if
             // Line is too long, need to compress
             totalShrink > 0.0
@@ -116,7 +131,10 @@ module LineBreaker =
         if abs diff < 1e-10 then
             0.0
         elif diff > 0.0 then
-            if totalStretch > 0.0 then diff / totalStretch else 1000.0
+            if totalStretch > 0.0 then
+                diff / totalStretch
+            else
+                extremeLooseRatio
         else if totalShrink > 0.0 then
             diff / totalShrink
         else
@@ -167,7 +185,7 @@ module LineBreaker =
         // slightly over-tolerance lines, even if other penalties would otherwise
         // favor them.
         if bad > options.Tolerance then
-            let excess = bad - options.Tolerance
+            let excess = min (bad - options.Tolerance) maxExcessTolerance
             demerits <- demerits + (excess * excess)
 
         // Penalty for consecutive flagged breaks (double hyphen)
