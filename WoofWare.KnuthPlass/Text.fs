@@ -7,7 +7,7 @@ open System.Globalization
 /// A module providing helper functions for producing text specified as .NET strings rather than as detailed layout
 /// information.
 [<RequireQualifiedAccess>]
-module Paragraph =
+module Text =
     /// Compute the display width of a string.
     let defaultWordWidth (s : string) : float =
         float (StringInfo(s).LengthInTextElements)
@@ -16,8 +16,9 @@ module Paragraph =
     [<Literal>]
     let SPACE_WIDTH = 1.0
 
-    /// Formats text into a paragraph with line breaks using the Knuth-Plass algorithm.
+    /// Formats text into paragraphs with line breaks using the Knuth-Plass algorithm.
     /// Returns the text with line breaks inserted at 'optimal' positions.
+    /// Newlines in the input are preserved as paragraph breaks (hard breaks).
     let format
         (lineWidth : float)
         (wordWidth : string -> float)
@@ -27,7 +28,13 @@ module Paragraph =
         (text : string)
         : string
         =
-        let words = text.Split ([| ' ' |], StringSplitOptions.RemoveEmptyEntries)
+        // Normalize and split into paragraphs, then words, to match Items.fromString behavior
+        let normalizedText = text.Replace ("\r", "")
+        let paragraphs = normalizedText.Split ('\n')
+
+        let words =
+            paragraphs
+            |> Array.collect (fun p -> p.Split ([| ' ' |], StringSplitOptions.RemoveEmptyEntries))
 
         if words.Length = 0 then
             ""
@@ -129,7 +136,8 @@ module Paragraph =
 
             String.concat Environment.NewLine lineTexts
 
-    /// Formats text into a paragraph with line breaks using the Knuth-Plass algorithm.
+    /// Formats text into paragraphs with line breaks using the Knuth-Plass algorithm.
     /// Returns the text with line breaks inserted at 'optimal' positions.
+    /// Newlines in the input are preserved as paragraph breaks (hard breaks).
     let formatEnglish (lineWidth : float) (text : string) : string =
         format lineWidth defaultWordWidth SPACE_WIDTH Hyphenation.DEFAULT_PENALTY Hyphenation.simpleEnglish text

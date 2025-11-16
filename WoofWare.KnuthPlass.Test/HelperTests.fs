@@ -127,14 +127,14 @@ module HelperTests =
         | _ -> failwith "Should create a Penalty item"
 
     [<Test>]
-    let ``Paragraph.format handles grapheme clusters correctly`` () =
+    let ``Text.format handles grapheme clusters correctly`` () =
         // This string has 3 grapheme clusters but 11 UTF-16 chars
         // 👨‍👩‍👧‍👦 is a family emoji (1 grapheme cluster, 7 chars)
         // 👍🏽 is thumbs up with skin tone (1 grapheme cluster, 4 chars)
         let text = "👨‍👩‍👧‍👦 👍🏽"
 
         // Using default width function which should count grapheme clusters
-        let result = Paragraph.formatEnglish 10.0 text
+        let result = Text.formatEnglish 10.0 text
 
         // Should successfully format without crashing
         // The text should be split since we have 2 grapheme clusters (plus space)

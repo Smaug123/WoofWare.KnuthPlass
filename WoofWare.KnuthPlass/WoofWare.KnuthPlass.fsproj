@@ -20,7 +20,7 @@
     <Compile Include="Seq.fs" />
     <Compile Include="LineBreaker.fs" />
     <Compile Include="Items.fs" />
-    <Compile Include="Paragraph.fs" />
+    <Compile Include="Text.fs" />
     <EmbeddedResource Include="SurfaceBaseline.txt" />
     <EmbeddedResource Include="version.json" />
     <None Include="..\README.md">

@@ -107,42 +107,6 @@ module ToleranceTests =
         looseLines.Length |> shouldBeGreaterThan 0
 
     [<Test>]
-    let ``Tolerance does not reject feasible lines in global optimization`` () =
-        // This test demonstrates that tolerance should NOT be used to reject feasible lines.
-        // The optimal solution may require accepting a tight line (high badness) to avoid worse alternatives.
-
-        let items =
-            [|
-                Items.box 25.0
-                Items.glue 8.0 0.0 10.0 // Can shrink by 10
-                Items.box 25.0
-                Items.glue 8.0 10.0 1.0 // Can stretch by 10
-                Items.box 8.0
-            |]
-
-        let options = LineBreakOptions.Default 50.0
-        // Default tolerance is 10.0
-
-        // Optimal solution: Break after second box (index 3)
-        // Line 1: Box(25) Glue(8,0,10) Box(25) = natural width 58
-        //   Needs to fit in 50, so diff = -8, shrink = 10
-        //   Ratio = -8/10 = -0.8
-        //   Badness = 100 * 0.8^3 = 51.2 > 10.0 (exceeds default tolerance)
-        // Line 2: Glue(8,10,1) Box(8) = natural width 16
-        //   Needs to fit in 50, so diff = 34, stretch = 10
-        //   Ratio = 34/10 = 3.4
-
-        // With the bug (badness filtering), line 1 is rejected, forcing all content on one line:
-        // All items: natural width 74, needs to fit in 50, diff = -24, shrink = 11
-        // Ratio = -24/11 ≈ -2.18 < -1.0 (IMPOSSIBLE - would throw exception)
-
-        // Without the bug, the algorithm accepts the tight line as part of the global optimum
-        let lines = LineBreaker.breakLines options items
-        lines.Length |> shouldEqual 2
-        lines.[0].End |> shouldEqual 3
-        lines.[0].AdjustmentRatio |> shouldEqual -0.8
-
-    [<Test>]
     let ``Tolerance filtering prunes a globally optimal but tight line`` () =
         // This test demonstrates the regression where tolerance is incorrectly used to discard an otherwise
         // feasible line. The first line in the optimal solution has ratio about -0.94 which greatly exceeds the

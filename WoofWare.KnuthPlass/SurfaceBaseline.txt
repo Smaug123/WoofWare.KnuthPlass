@@ -93,11 +93,11 @@ WoofWare.KnuthPlass.LineBreakOptions.get_LineWidth [method]: unit -> float
 WoofWare.KnuthPlass.LineBreakOptions.get_Tolerance [method]: unit -> float
 WoofWare.KnuthPlass.LineBreakOptions.LineWidth [property]: [read-only] float
 WoofWare.KnuthPlass.LineBreakOptions.Tolerance [property]: [read-only] float
-WoofWare.KnuthPlass.Paragraph inherit obj
-WoofWare.KnuthPlass.Paragraph.defaultWordWidth [static method]: string -> float
-WoofWare.KnuthPlass.Paragraph.format [static method]: float -> (string -> float) -> float -> float -> (string -> int list) -> string -> string
-WoofWare.KnuthPlass.Paragraph.formatEnglish [static method]: float -> string -> string
-WoofWare.KnuthPlass.Paragraph.SPACE_WIDTH [static field]: float = 1
+WoofWare.KnuthPlass.Text inherit obj
+WoofWare.KnuthPlass.Text.defaultWordWidth [static method]: string -> float
+WoofWare.KnuthPlass.Text.format [static method]: float -> (string -> float) -> float -> float -> (string -> int list) -> string -> string
+WoofWare.KnuthPlass.Text.formatEnglish [static method]: float -> string -> string
+WoofWare.KnuthPlass.Text.SPACE_WIDTH [static field]: float = 1
 WoofWare.KnuthPlass.Penalty inherit obj, implements WoofWare.KnuthPlass.Penalty System.IEquatable, System.Collections.IStructuralEquatable, WoofWare.KnuthPlass.Penalty System.IComparable, System.IComparable, System.Collections.IStructuralComparable
 WoofWare.KnuthPlass.Penalty..ctor [constructor]: (float, float, bool)
 WoofWare.KnuthPlass.Penalty.Cost [property]: [read-only] float

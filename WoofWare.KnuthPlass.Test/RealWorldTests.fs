@@ -49,7 +49,7 @@ jumps over
 the lazy
 dog."
 
-            return Paragraph.format lineWidth wordWidth spaceWidth Hyphenation.DEFAULT_PENALTY Hyphenation.none text
+            return Text.format lineWidth wordWidth spaceWidth Hyphenation.DEFAULT_PENALTY Hyphenation.none text
         }
 
     [<Test>]
@@ -67,7 +67,7 @@ jumps over
 the lazy
 dog."
 
-            return Paragraph.format lineWidth wordWidth spaceWidth Hyphenation.DEFAULT_PENALTY Hyphenation.none text
+            return Text.format lineWidth wordWidth spaceWidth Hyphenation.DEFAULT_PENALTY Hyphenation.none text
         }
 
     [<Test>]
@@ -95,7 +95,7 @@ his fortune to be the last reputable acquaintance and the last good influence in
 the lives of downgoing men. And to such as these, so long as they came about his
 chambers, he never marked a shade of change in his demeanour."
 
-            return Paragraph.formatEnglish 80.0 text
+            return Text.formatEnglish 80.0 text
         }
 
     [<Test>]
@@ -123,12 +123,5 @@ be the last reputable acquaintance and the last good influence in the lives of
 downgoing men. And to such as these, so long as they came about his chambers, he
 never marked a shade of change in his demeanour."
 
-            return
-                Paragraph.format
-                    80.0
-                    Paragraph.defaultWordWidth
-                    Paragraph.SPACE_WIDTH
-                    5.0
-                    Hyphenation.simpleEnglish
-                    text
+            return Text.format 80.0 Text.defaultWordWidth Text.SPACE_WIDTH 5.0 Hyphenation.simpleEnglish text
         }
