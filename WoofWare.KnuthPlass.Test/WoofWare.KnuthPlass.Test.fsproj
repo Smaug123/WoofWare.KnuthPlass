@@ -13,6 +13,7 @@
     <Compile Include="LineBreakingTests.fs"/>
     <Compile Include="PenaltyTests.fs"/>
     <Compile Include="HelperTests.fs"/>
+    <Compile Include="HyphenationTests.fs"/>
     <Compile Include="RealWorldTests.fs"/>
     <Compile Include="TestSurface.fs" />
     <Compile Include="ToleranceTests.fs"/>

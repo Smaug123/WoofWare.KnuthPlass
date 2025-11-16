@@ -225,7 +225,7 @@ module LineBreaker =
 
                     // Try nodes at each previous position (only the best per fitness class)
                     for prevPos in max 0 lastForcedBreak .. i - 1 do
-                        match computeAdjustmentRatio itemsArray sums options.LineWidth prevPos i with
+                        match computeAdjustmentRatio items sums options.LineWidth prevPos i with
                         | ValueSome ratio when isForced || ratio >= -1.0 || badness ratio <= options.Tolerance ->
                             // Accept if: forced break, achievable (ratio >= -1), or badness within tolerance
                             let fitness = fitnessClass ratio

@@ -24,7 +24,7 @@ module Hyphenation =
             let isVowel (c : char) = "aeiouyAEIOUY".Contains c
 
             [
-                for i in 2 .. word.Length - 4 do
+                for i in 2 .. word.Length - 3 do
                     // Prefer breaking after vowels, before consonants
                     if i > 0 && i < word.Length && isVowel word.[i - 1] && not (isVowel word.[i]) then
                         yield i
@@ -36,7 +36,7 @@ module Hyphenation =
     /// Allows hyphenation at every valid position (respecting TeX minimums).
     /// This is very aggressive and mainly useful for testing.
     let everywhere (word : string) : int list =
-        if word.Length < 5 then [] else [ 2 .. word.Length - 4 ]
+        if word.Length < 5 then [] else [ 2 .. word.Length - 3 ]
 
 /// Module for manipulating Item.
 [<RequireQualifiedAccess>]
@@ -131,8 +131,7 @@ module Items =
 
                 // Add glue between words (but not after the last word in the paragraph)
                 if j < words.Length - 1 then
-                    glue spaceWidth (spaceWidth * 0.5) (spaceWidth * 0.333)
-                    |> arr.Add
+                    glue spaceWidth (spaceWidth * 0.5) (spaceWidth * 0.333) |> arr.Add
 
             // End each paragraph with infinite-stretch glue and forced break
             glue 0.0 infinity 0.0 |> arr.Add
