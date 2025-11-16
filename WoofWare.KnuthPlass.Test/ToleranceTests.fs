@@ -145,3 +145,46 @@ module ToleranceTests =
         let actualLines = LineBreaker.breakLines defaultOptions items
 
         actualLines |> shouldEqual optimalLines
+
+    [<Test>]
+    let ``Algorithm does not accept an extremely loose first line once tolerance penalty is enforced`` () =
+        // Two plans exist for the first line:
+        //   * Break after the first penalty (index 5) and put the rest on following lines.
+        //   * Refuse to break until the forced break at index 11, producing a single deeply
+        //     underfull line.
+        //
+        // Without the missing (badness - tolerance)^2 penalty, the negative penalty at index 10
+        // makes the giant first line look attractive. With the penalty in place, that line’s
+        // badness (~270) is punished heavily, so the earlier break should win.
+
+        let items =
+            [|
+                Items.box 30.0
+                Items.glue 5.0 15.0 5.0
+                Items.penalty 0.0 -25.0 false
+
+                Items.box 20.0
+                Items.glue 5.0 15.0 2.0
+                Items.box 15.0
+                Items.glue 10.0 15.0 0.0
+                Items.box 40.0
+                // Tempt the algorithm into not breaking until the next forced break.
+                Items.glue 0.0 2.0 5.0
+                Items.penalty 0.0 -50.0 false
+                Items.forcedBreak ()
+
+                // Common tail – regardless of the first break, the remainder is identical.
+                Items.glue 10.0 30.0 30.0
+                Items.box 40.0
+                Items.forcedBreak ()
+            |]
+
+        let options =
+            { LineBreakOptions.Default 100.0 with
+                Tolerance = 10.0
+            }
+
+        let lines = LineBreaker.breakLines options items
+
+        // Once tolerance is handled correctly, the first line must end at index 5.
+        lines.[0].End |> shouldEqual 5
