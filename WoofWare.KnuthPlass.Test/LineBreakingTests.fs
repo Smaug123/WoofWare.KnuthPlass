@@ -9,7 +9,7 @@ module LineBreakingTests =
     [<Test>]
     let ``Long paragraph breaks into multiple lines`` () =
         let items =
-            [
+            [|
                 Items.box 30.0
                 Items.glue 10.0 5.0 3.0
                 Items.box 25.0
@@ -19,7 +19,7 @@ module LineBreakingTests =
                 Items.box 35.0
                 Items.glue 10.0 5.0 3.0
                 Items.box 20.0
-            ]
+            |]
 
         let options = LineBreakOptions.Default 80.0
         let lines = LineBreaker.breakLines options items
@@ -48,7 +48,7 @@ module LineBreakingTests =
         //           Total badness: 1² + 1² = 2.0
 
         let items =
-            [
+            [|
                 Items.box 8.0
                 Items.glue 2.0 1.0 1.0 // width/stretch/shrink
                 Items.box 8.0
@@ -60,7 +60,7 @@ module LineBreakingTests =
                 Items.box 8.0
                 Items.glue 2.0 1.0 1.0
                 Items.box 8.0
-            ]
+            |]
 
         let options = LineBreakOptions.Default 30.0
         let lines = LineBreaker.breakLines options items
@@ -96,13 +96,13 @@ module LineBreakingTests =
         // With the fix, option 1 is heavily penalized (ratio=1000.0, badness=1e11)
         // so the algorithm prefers option 2 despite it being tight
         let items =
-            [
+            [|
                 Items.box 15.0 // "word1"
                 Items.glue 10.0 5.0 10.0 // Need shrink=10 to make one-line solution achievable
                 Items.box 15.0 // "word2"
                 Items.glue 10.0 5.0 10.0 // Total shrink=20 allows ratio=-1.0 for one line
                 Items.box 40.0 // "word3" - if alone on a line, it's underfull with no glue
-            ]
+            |]
 
         let options = LineBreakOptions.Default 70.0
         let lines = LineBreaker.breakLines options items

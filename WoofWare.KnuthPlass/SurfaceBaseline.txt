@@ -52,8 +52,8 @@ WoofWare.KnuthPlass.Item.Tag [property]: [read-only] int
 WoofWare.KnuthPlass.Items inherit obj
 WoofWare.KnuthPlass.Items.box [static method]: float -> WoofWare.KnuthPlass.Item
 WoofWare.KnuthPlass.Items.forcedBreak [static method]: unit -> WoofWare.KnuthPlass.Item
-WoofWare.KnuthPlass.Items.fromEnglishString [static method]: (string -> float) -> float -> string -> WoofWare.KnuthPlass.Item list
-WoofWare.KnuthPlass.Items.fromString [static method]: (string -> float) -> float -> (string -> int list) -> float -> string -> WoofWare.KnuthPlass.Item list
+WoofWare.KnuthPlass.Items.fromEnglishString [static method]: (string -> float) -> float -> string -> WoofWare.KnuthPlass.Item []
+WoofWare.KnuthPlass.Items.fromString [static method]: (string -> float) -> float -> (string -> int list) -> float -> string -> WoofWare.KnuthPlass.Item []
 WoofWare.KnuthPlass.Items.glue [static method]: float -> float -> float -> WoofWare.KnuthPlass.Item
 WoofWare.KnuthPlass.Items.penalty [static method]: float -> float -> bool -> WoofWare.KnuthPlass.Item
 WoofWare.KnuthPlass.Line inherit obj, implements WoofWare.KnuthPlass.Line System.IEquatable, System.Collections.IStructuralEquatable, WoofWare.KnuthPlass.Line System.IComparable, System.IComparable, System.Collections.IStructuralComparable
@@ -66,7 +66,7 @@ WoofWare.KnuthPlass.Line.get_End [method]: unit -> int
 WoofWare.KnuthPlass.Line.get_Start [method]: unit -> int
 WoofWare.KnuthPlass.Line.Start [property]: [read-only] int
 WoofWare.KnuthPlass.LineBreaker inherit obj
-WoofWare.KnuthPlass.LineBreaker.breakLines [static method]: WoofWare.KnuthPlass.LineBreakOptions -> WoofWare.KnuthPlass.Item list -> WoofWare.KnuthPlass.Line list
+WoofWare.KnuthPlass.LineBreaker.breakLines [static method]: WoofWare.KnuthPlass.LineBreakOptions -> WoofWare.KnuthPlass.Item [] -> WoofWare.KnuthPlass.Line list
 WoofWare.KnuthPlass.LineBreakOptions inherit obj, implements WoofWare.KnuthPlass.LineBreakOptions System.IEquatable, System.Collections.IStructuralEquatable, WoofWare.KnuthPlass.LineBreakOptions System.IComparable, System.IComparable, System.Collections.IStructuralComparable
 WoofWare.KnuthPlass.LineBreakOptions..ctor [constructor]: (float, float, float, float, float, float)
 WoofWare.KnuthPlass.LineBreakOptions.AdjacentLooseTightDemerits [property]: [read-only] float

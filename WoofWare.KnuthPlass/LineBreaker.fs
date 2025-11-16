@@ -23,9 +23,8 @@ type private CumulativeSums =
 /// The module holding the heart of the Knuth-Plass algorithm.
 [<RequireQualifiedAccess>]
 module LineBreaker =
-    let private computeCumulativeSums (items : Item list) : CumulativeSums =
-        let arr = items |> List.toArray
-        let n = arr.Length
+    let private computeCumulativeSums (items : Item[]) : CumulativeSums =
+        let n = items.Length
         let width = Array.zeroCreate (n + 1)
         let stretch = Array.zeroCreate (n + 1)
         let shrink = Array.zeroCreate (n + 1)
@@ -35,7 +34,7 @@ module LineBreaker =
             stretch.[i + 1] <- stretch.[i]
             shrink.[i + 1] <- shrink.[i]
 
-            match arr.[i] with
+            match items.[i] with
             | Box b -> width.[i + 1] <- width.[i + 1] + b.Width
             | Glue g ->
                 width.[i + 1] <- width.[i + 1] + g.Width
@@ -180,12 +179,13 @@ module LineBreaker =
     /// Break a paragraph into lines using the Knuth-Plass algorithm.
     /// Returns a list of lines with their start/end positions and adjustment ratios.
     /// Raises an exception if no valid breaking is possible.
-    let breakLines (options : LineBreakOptions) (items : Item list) : Line list =
-        if items.IsEmpty then
+    ///
+    /// This function doesn't mutate `items`.
+    let breakLines (options : LineBreakOptions) (items : Item[]) : Line list =
+        if items.Length = 0 then
             []
         else
-            let itemsArray = items |> List.toArray
-            let n = itemsArray.Length
+            let n = items.Length
             let sums = computeCumulativeSums items
 
             // Track the best node at each position for each fitness class.
@@ -219,8 +219,8 @@ module LineBreaker =
 
             // For each position, find the best predecessor
             for i in 1..n do
-                if isValidBreakpoint itemsArray i then
-                    let penaltyCost, isFlagged = getPenaltyAt itemsArray i
+                if isValidBreakpoint items i then
+                    let penaltyCost, isFlagged = getPenaltyAt items i
                     let isForced = penaltyCost = -infinity
 
                     // Try nodes at each previous position (only the best per fitness class)

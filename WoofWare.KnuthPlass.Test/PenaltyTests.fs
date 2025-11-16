@@ -9,14 +9,14 @@ module PenaltyTests =
     [<Test>]
     let ``Penalty affects break choice`` () =
         let items =
-            [
+            [|
                 Items.box 30.0
                 Items.glue 10.0 5.0 3.0
                 Items.box 30.0
                 Items.penalty 0.0 1000.0 false
                 Items.glue 10.0 5.0 3.0
                 Items.box 30.0
-            ]
+            |]
 
         let options = LineBreakOptions.Default 60.0
         let lines = LineBreaker.breakLines options items
@@ -26,7 +26,7 @@ module PenaltyTests =
     [<Test>]
     let ``Flagged penalties incur double hyphen demerits`` () =
         let items =
-            [
+            [|
                 Items.box 40.0
                 Items.penalty 5.0 50.0 true
                 Items.glue 10.0 5.0 3.0
@@ -34,7 +34,7 @@ module PenaltyTests =
                 Items.penalty 5.0 50.0 true
                 Items.glue 10.0 5.0 3.0
                 Items.box 40.0
-            ]
+            |]
 
         let options =
             { LineBreakOptions.Default 60.0 with
@@ -58,7 +58,7 @@ module PenaltyTests =
         // the penalty were absent or positive.
 
         let itemsWithNegativePenalty =
-            [
+            [|
                 Items.box 25.0
                 Items.glue 10.0 5.0 3.0
                 Items.box 25.0
@@ -67,10 +67,10 @@ module PenaltyTests =
                 Items.box 25.0
                 Items.glue 10.0 5.0 3.0
                 Items.box 25.0
-            ]
+            |]
 
         let itemsWithPositivePenalty =
-            [
+            [|
                 Items.box 25.0
                 Items.glue 10.0 5.0 3.0
                 Items.box 25.0
@@ -79,7 +79,7 @@ module PenaltyTests =
                 Items.box 25.0
                 Items.glue 10.0 5.0 3.0
                 Items.box 25.0
-            ]
+            |]
 
         let options = LineBreakOptions.Default 70.0
 
@@ -115,7 +115,7 @@ module PenaltyTests =
         // With high FinalHyphenDemerits, strategy B should be strongly preferred.
 
         let items =
-            [
+            [|
                 Items.box 50.0 // word1
                 Items.glue 10.0 5.0 3.0
                 Items.box 12.0 // "hy"
@@ -123,7 +123,7 @@ module PenaltyTests =
                 Items.box 13.0 // "phen"
                 Items.glue 10.0 5.0 3.0
                 Items.box 40.0 // word2
-            ]
+            |]
 
         // With low FinalHyphenDemerits, the algorithm chooses the hyphenated version
         // since it gives a better first line (50 + 10 + 12 + 3 = 75, close to 80)

@@ -37,7 +37,6 @@ module Paragraph =
 
             let options = LineBreakOptions.Default lineWidth
             let lines = LineBreaker.breakLines options items
-            let itemsArray = items |> List.toArray
 
             // Pre-compute word parts based on hyphenation points
             let wordParts =
@@ -78,8 +77,8 @@ module Paragraph =
             let itemIndexToBoxNumber = Dictionary<int, int> ()
             let mutable currentBoxNum = 0
 
-            for i in 0 .. itemsArray.Length - 1 do
-                match itemsArray.[i] with
+            for i in 0 .. items.Length - 1 do
+                match items.[i] with
                 | Box _ ->
                     itemIndexToBoxNumber.[i] <- currentBoxNum
                     currentBoxNum <- currentBoxNum + 1
@@ -97,7 +96,7 @@ module Paragraph =
                     let mutable lastWasBox = false
 
                     for i in line.Start .. line.End - 1 do
-                        match itemsArray.[i] with
+                        match items.[i] with
                         | Box _ ->
                             match itemIndexToBoxNumber.TryGetValue i with
                             | true, boxNum ->
@@ -113,7 +112,7 @@ module Paragraph =
                             let hasBoxAfter =
                                 [ i + 1 .. line.End - 1 ]
                                 |> List.exists (fun j ->
-                                    match itemsArray.[j] with
+                                    match items.[j] with
                                     | Box _ -> true
                                     | _ -> false
                                 )

@@ -9,13 +9,13 @@ module ForcedBreakTests =
     [<Test>]
     let ``Forced break splits lines`` () =
         let items =
-            [
+            [|
                 Items.box 30.0
                 Items.glue 10.0 5.0 3.0
                 Items.box 20.0
                 Items.forcedBreak ()
                 Items.box 40.0
-            ]
+            |]
 
         let options = LineBreakOptions.Default 100.0
         let lines = LineBreaker.breakLines options items
@@ -29,13 +29,13 @@ module ForcedBreakTests =
     [<Test>]
     let ``Multiple forced breaks create multiple lines`` () =
         let items =
-            [
+            [|
                 Items.box 20.0
                 Items.forcedBreak ()
                 Items.box 30.0
                 Items.forcedBreak ()
                 Items.box 40.0
-            ]
+            |]
 
         let options = LineBreakOptions.Default 100.0
         let lines = LineBreaker.breakLines options items

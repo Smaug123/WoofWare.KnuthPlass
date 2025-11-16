@@ -114,30 +114,33 @@ module Items =
         (getHyphenationPoints : string -> int list)
         (hyphenPenalty : float)
         (text : string)
-        : Item list
+        : Item[]
         =
         let normalized = text.Replace ("\r", "")
         let paragraphs = normalized.Split '\n'
         let hyphenWidth = wordWidth "-"
 
-        [
-            for paragraph in paragraphs do
-                let words = paragraph.Split ([| ' ' |], StringSplitOptions.RemoveEmptyEntries)
+        let arr = ResizeArray ()
 
-                for j, word in Array.indexed words do
-                    // Add boxes (and penalties if hyphenation enabled) for the word
-                    yield! createWordItems word wordWidth hyphenWidth hyphenPenalty getHyphenationPoints
+        for paragraph in paragraphs do
+            let words = paragraph.Split ([| ' ' |], StringSplitOptions.RemoveEmptyEntries)
 
-                    // Add glue between words (but not after the last word in the paragraph)
-                    if j < words.Length - 1 then
-                        yield glue spaceWidth (spaceWidth * 0.5) (spaceWidth * 0.333)
+            for j, word in Array.indexed words do
+                // Add boxes (and penalties if hyphenation enabled) for the word
+                arr.AddRange (createWordItems word wordWidth hyphenWidth hyphenPenalty getHyphenationPoints)
 
-                // End each paragraph with infinite-stretch glue and forced break
-                yield glue 0.0 infinity 0.0
-                yield forcedBreak ()
-        ]
+                // Add glue between words (but not after the last word in the paragraph)
+                if j < words.Length - 1 then
+                    glue spaceWidth (spaceWidth * 0.5) (spaceWidth * 0.333)
+                    |> arr.Add
+
+            // End each paragraph with infinite-stretch glue and forced break
+            glue 0.0 infinity 0.0 |> arr.Add
+            forcedBreak () |> arr.Add
+
+        arr.ToArray ()
 
     /// Converts a simple string into a list of items (boxes for words, glue for spaces, forced breaks for newlines).
     /// Uses simple English hyphenation rules.
-    let fromEnglishString (wordWidth : string -> float) (spaceWidth : float) (text : string) : Item list =
+    let fromEnglishString (wordWidth : string -> float) (spaceWidth : float) (text : string) : Item[] =
         fromString wordWidth spaceWidth Hyphenation.simpleEnglish Hyphenation.DEFAULT_PENALTY text
