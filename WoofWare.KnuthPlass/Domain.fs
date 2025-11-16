@@ -60,10 +60,10 @@ type Line =
 /// visually jarring, so the algorithm penalises it.
 /// </remarks>
 type FitnessClass =
-    | Tight
-    | Normal
-    | Loose
-    | VeryLoose
+    | Tight = 0
+    | Normal = 1
+    | Loose = 2
+    | VeryLoose = 3
 
 /// Options for line breaking
 type LineBreakOptions =

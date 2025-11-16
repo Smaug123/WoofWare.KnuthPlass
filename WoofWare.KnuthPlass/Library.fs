@@ -54,40 +54,40 @@ module LineBreaker =
         (lineWidth : float)
         (startIdx : int)
         (endIdx : int)
-        : float option
+        : float voption
         =
         let actualWidth = sums.Width.[endIdx] - sums.Width.[startIdx]
         let diff = lineWidth - actualWidth
 
         if abs diff < 1e-10 then
-            Some 0.0
+            ValueSome 0.0
         elif diff > 0.0 then
             // Line is too short, need to stretch
             let totalStretch = sums.Stretch.[endIdx] - sums.Stretch.[startIdx]
 
             if totalStretch > 0.0 then
-                Some (diff / totalStretch)
+                ValueSome (diff / totalStretch)
             else
                 // No glue to stretch, but line is underfull - this is acceptable
                 // Return a very small positive ratio to indicate underfull
-                Some 0.0
+                ValueSome 0.0
         else
             // Line is too long, need to compress
             let totalShrink = sums.Shrink.[endIdx] - sums.Shrink.[startIdx]
 
             if totalShrink > 0.0 then
-                Some (diff / totalShrink)
+                ValueSome (diff / totalShrink)
             else
                 // No glue to shrink and line is overfull - cannot fit
-                None
+                ValueNone
 
-    let private fitnessClass (ratio : float) : FitnessClass =
-        if ratio < -0.5 then Tight
-        elif ratio <= 0.5 then Normal
-        elif ratio <= 1.0 then Loose
-        else VeryLoose
+    let inline private fitnessClass (ratio : float) : FitnessClass =
+        if ratio < -0.5 then FitnessClass.Tight
+        elif ratio <= 0.5 then FitnessClass.Normal
+        elif ratio <= 1.0 then FitnessClass.Loose
+        else FitnessClass.VeryLoose
 
-    let private badness (ratio : float) : float =
+    let inline private badness (ratio : float) : float =
         let r = abs ratio
         100.0 * (r ** 3.0)
 
@@ -160,8 +160,15 @@ module LineBreaker =
             let n = itemsArray.Length
             let sums = computeCumulativeSums items
 
-            // Track best node at each position for each fitness class
-            let bestNodes = System.Collections.Generic.Dictionary<int * FitnessClass, int> ()
+            // Track the best node at each position for each fitness class.
+            // A value of IntMin means "not set".
+            let bestNodes = Array.create<int> (4 * (n + 1)) Int32.MinValue
+
+            let inline getBestNode (f : FitnessClass) (pos : int) =
+                bestNodes.[(n + 1) * int<FitnessClass> f + pos]
+
+            let inline setBestNode (f : FitnessClass) (pos : int) (v : int) =
+                bestNodes.[(n + 1) * int<FitnessClass> f + pos] <- v
 
             // All nodes for backtracking
             let nodes = ResizeArray<BreakNode> ()
@@ -173,11 +180,11 @@ module LineBreaker =
                     Demerits = 0.0
                     Ratio = 0.0
                     PreviousNode = None
-                    Fitness = Normal
+                    Fitness = FitnessClass.Normal
                     WasFlagged = false
                 }
 
-            bestNodes.[(0, Normal)] <- 0
+            setBestNode FitnessClass.Normal 0 0
 
             // Track the last forced break position to prevent skipping over it
             let mutable lastForcedBreak = -1
@@ -197,7 +204,7 @@ module LineBreaker =
                         // and don't skip over forced breaks
                         if startPos < i && startPos >= lastForcedBreak then
                             match computeAdjustmentRatio sums options.LineWidth startPos i with
-                            | Some ratio when isForced || ratio >= 0.0 || abs ratio <= options.Tolerance ->
+                            | ValueSome ratio when isForced || ratio >= 0.0 || abs ratio <= options.Tolerance ->
                                 // Accept if: forced break, underfull (ratio >= 0), or within tolerance
                                 let fitness = fitnessClass ratio
                                 let isLast = i = n
@@ -215,12 +222,13 @@ module LineBreaker =
                                         isLast
 
                                 // Check if this is better than existing node at this position/fitness
-                                let key = (i, fitness)
-
                                 let shouldAdd =
-                                    match bestNodes.TryGetValue key with
-                                    | true, existingIdx -> demerits < nodes.[existingIdx].Demerits
-                                    | false, _ -> true
+                                    let result = getBestNode fitness i
+
+                                    if result = Int32.MinValue then
+                                        true
+                                    else
+                                        demerits < nodes.[result].Demerits
 
                                 if shouldAdd then
                                     let newNode =
@@ -234,7 +242,7 @@ module LineBreaker =
                                         }
 
                                     nodes.Add newNode
-                                    bestNodes.[key] <- nodes.Count - 1
+                                    setBestNode fitness i (nodes.Count - 1)
 
                             | _ -> () // Line doesn't fit
 
@@ -243,17 +251,16 @@ module LineBreaker =
                         lastForcedBreak <- i
 
             // Find best ending node
-            let endNodes =
+            let bestEndIdx =
                 nodes
                 |> Seq.indexed
                 |> Seq.filter (fun (_, node) -> node.Position = n)
-                |> Seq.toList
+                |> Seq.tryMinBy (fun (_, node) -> node.Demerits)
+                |> Option.map fst
 
-            match endNodes with
-            | [] -> failwith "No valid line breaking found"
-            | _ ->
-                let bestEndIdx, _ = endNodes |> List.minBy (fun (_, node) -> node.Demerits)
-
+            match bestEndIdx with
+            | None -> failwith "No valid line breaking found"
+            | Some bestEndIdx ->
                 // Backtrack to recover the solution
                 let rec backtrack acc nodeIdx =
                     let node = nodes.[nodeIdx]
@@ -305,7 +312,8 @@ module Items =
 
     /// Converts a simple string into a list of items (boxes for words, glue for spaces)
     let fromString (text : string) (wordWidth : string -> float) (spaceWidth : float) : Item list =
-        let words = text.Split ([| ' ' |], System.StringSplitOptions.RemoveEmptyEntries)
+        let words =
+            text.Replace("\r", "").Split ([| ' ' ; '\n' |], StringSplitOptions.RemoveEmptyEntries)
 
         [
             for i, word in Array.indexed words do
@@ -329,7 +337,7 @@ module Format =
         (text : string)
         : string
         =
-        let words = text.Split ([| ' ' |], System.StringSplitOptions.RemoveEmptyEntries)
+        let words = text.Split ([| ' ' |], StringSplitOptions.RemoveEmptyEntries)
 
         if words.Length = 0 then
             ""
@@ -355,4 +363,5 @@ module Format =
 
     /// Formats text into a paragraph with line breaks using the Knuth-Plass algorithm.
     /// Returns the text with line breaks inserted at 'optimal' positions.
-    let formatParagraph (lineWidth : float) (text : string) : string = formatParagraph' lineWidth defaultWordWidth 1.0 text
+    let formatParagraph (lineWidth : float) (text : string) : string =
+        formatParagraph' lineWidth defaultWordWidth 1.0 text

@@ -23,4 +23,3 @@ module TestSurface =
     [<Test>]
     let ``Ensure public API is fully documented`` () =
         DocCoverage.assertFullyDocumented assembly
-
