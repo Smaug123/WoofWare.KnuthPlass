@@ -250,6 +250,9 @@ module LineBreaker =
 
             bestNodes.[(0, Normal)] <- 0
 
+            // Track the last forced break position to prevent skipping over it
+            let mutable lastForcedBreak = -1
+
             // For each position, find the best predecessor
             for i in 1..n do
                 if isValidBreakpoint itemsArray i then
@@ -262,9 +265,11 @@ module LineBreaker =
                         let startPos = prevNode.Position
 
                         // Only consider nodes at earlier positions
-                        if startPos < i then
+                        // and don't skip over forced breaks
+                        if startPos < i && startPos >= lastForcedBreak then
                             match computeAdjustmentRatio sums options.LineWidth startPos i with
-                            | Some ratio when isForced || abs ratio <= options.Tolerance ->
+                            | Some ratio when isForced || ratio >= 0.0 || abs ratio <= options.Tolerance ->
+                                // Accept if: forced break, underfull (ratio >= 0), or within tolerance
                                 let fitness = fitnessClass ratio
                                 let isLast = i = n
 
@@ -303,6 +308,10 @@ module LineBreaker =
                                     bestNodes.[key] <- nodes.Count - 1
 
                             | _ -> () // Line doesn't fit
+
+                    // If this is a forced break, update the last forced break position
+                    if isForced then
+                        lastForcedBreak <- i
 
             // Find best ending node
             let endNodes =

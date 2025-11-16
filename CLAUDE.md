@@ -3,6 +3,12 @@
 ## Before committing
 Always run `dotnet fantomas .` to format the code before creating commits.
 
+## Algorithm Status
+
+The Knuth-Plass algorithm is implemented with 19/23 tests passing. Remaining issues:
+- Forced break handling needs debugging (tests expect specific line break positions)
+- Edge cases with high tolerance values and multiple breakpoints
+
 # NUnit bugs
 
 NUnit's filtering is pretty borked.
