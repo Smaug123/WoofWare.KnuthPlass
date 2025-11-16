@@ -233,8 +233,8 @@ module LineBreaker =
                                 let prevNode = nodes.[prevNodeIdx]
 
                                 match computeAdjustmentRatio itemsArray sums options.LineWidth prevPos i with
-                                | ValueSome ratio when isForced || ratio >= 0.0 || abs ratio <= options.Tolerance ->
-                                    // Accept if: forced break, underfull (ratio >= 0), or within tolerance
+                                | ValueSome ratio when isForced || ratio >= -1.0 || badness ratio <= options.Tolerance ->
+                                    // Accept if: forced break, achievable (ratio >= -1), or badness within tolerance
                                     let fitness = fitnessClass ratio
                                     let isLast = i = n
 

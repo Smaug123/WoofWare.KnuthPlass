@@ -1,0 +1,109 @@
+WoofWare.KnuthPlass.Box inherit obj, implements WoofWare.KnuthPlass.Box System.IEquatable, System.Collections.IStructuralEquatable, WoofWare.KnuthPlass.Box System.IComparable, System.IComparable, System.Collections.IStructuralComparable
+WoofWare.KnuthPlass.Box..ctor [constructor]: float
+WoofWare.KnuthPlass.Box.Equals [method]: (WoofWare.KnuthPlass.Box, System.Collections.IEqualityComparer) -> bool
+WoofWare.KnuthPlass.Box.get_Width [method]: unit -> float
+WoofWare.KnuthPlass.Box.Width [property]: [read-only] float
+WoofWare.KnuthPlass.FitnessClass inherit System.Enum
+WoofWare.KnuthPlass.FitnessClass.Loose [static field]: WoofWare.KnuthPlass.FitnessClass = Loose
+WoofWare.KnuthPlass.FitnessClass.Normal [static field]: WoofWare.KnuthPlass.FitnessClass = Normal
+WoofWare.KnuthPlass.FitnessClass.Tight [static field]: WoofWare.KnuthPlass.FitnessClass = Tight
+WoofWare.KnuthPlass.FitnessClass.value__ [field]: int
+WoofWare.KnuthPlass.FitnessClass.VeryLoose [static field]: WoofWare.KnuthPlass.FitnessClass = VeryLoose
+WoofWare.KnuthPlass.Glue inherit obj, implements WoofWare.KnuthPlass.Glue System.IEquatable, System.Collections.IStructuralEquatable, WoofWare.KnuthPlass.Glue System.IComparable, System.IComparable, System.Collections.IStructuralComparable
+WoofWare.KnuthPlass.Glue..ctor [constructor]: (float, float, float)
+WoofWare.KnuthPlass.Glue.Equals [method]: (WoofWare.KnuthPlass.Glue, System.Collections.IEqualityComparer) -> bool
+WoofWare.KnuthPlass.Glue.get_Shrink [method]: unit -> float
+WoofWare.KnuthPlass.Glue.get_Stretch [method]: unit -> float
+WoofWare.KnuthPlass.Glue.get_Width [method]: unit -> float
+WoofWare.KnuthPlass.Glue.Shrink [property]: [read-only] float
+WoofWare.KnuthPlass.Glue.Stretch [property]: [read-only] float
+WoofWare.KnuthPlass.Glue.Width [property]: [read-only] float
+WoofWare.KnuthPlass.Hyphenation inherit obj
+WoofWare.KnuthPlass.Hyphenation.DEFAULT_PENALTY [static field]: float = 50
+WoofWare.KnuthPlass.Hyphenation.everywhere [static method]: string -> int list
+WoofWare.KnuthPlass.Hyphenation.none [static method]: string -> int list
+WoofWare.KnuthPlass.Hyphenation.simpleEnglish [static method]: string -> int list
+WoofWare.KnuthPlass.Item inherit obj, implements WoofWare.KnuthPlass.Item System.IEquatable, System.Collections.IStructuralEquatable, WoofWare.KnuthPlass.Item System.IComparable, System.IComparable, System.Collections.IStructuralComparable - union type with 3 cases
+WoofWare.KnuthPlass.Item+Box inherit WoofWare.KnuthPlass.Item
+WoofWare.KnuthPlass.Item+Box.get_Item [method]: unit -> WoofWare.KnuthPlass.Box
+WoofWare.KnuthPlass.Item+Box.Item [property]: [read-only] WoofWare.KnuthPlass.Box
+WoofWare.KnuthPlass.Item+Glue inherit WoofWare.KnuthPlass.Item
+WoofWare.KnuthPlass.Item+Glue.get_Item [method]: unit -> WoofWare.KnuthPlass.Glue
+WoofWare.KnuthPlass.Item+Glue.Item [property]: [read-only] WoofWare.KnuthPlass.Glue
+WoofWare.KnuthPlass.Item+Penalty inherit WoofWare.KnuthPlass.Item
+WoofWare.KnuthPlass.Item+Penalty.get_Item [method]: unit -> WoofWare.KnuthPlass.Penalty
+WoofWare.KnuthPlass.Item+Penalty.Item [property]: [read-only] WoofWare.KnuthPlass.Penalty
+WoofWare.KnuthPlass.Item+Tags inherit obj
+WoofWare.KnuthPlass.Item+Tags.Box [static field]: int = 0
+WoofWare.KnuthPlass.Item+Tags.Glue [static field]: int = 1
+WoofWare.KnuthPlass.Item+Tags.Penalty [static field]: int = 2
+WoofWare.KnuthPlass.Item.Equals [method]: (WoofWare.KnuthPlass.Item, System.Collections.IEqualityComparer) -> bool
+WoofWare.KnuthPlass.Item.get_IsBox [method]: unit -> bool
+WoofWare.KnuthPlass.Item.get_IsGlue [method]: unit -> bool
+WoofWare.KnuthPlass.Item.get_IsPenalty [method]: unit -> bool
+WoofWare.KnuthPlass.Item.get_Tag [method]: unit -> int
+WoofWare.KnuthPlass.Item.IsBox [property]: [read-only] bool
+WoofWare.KnuthPlass.Item.IsGlue [property]: [read-only] bool
+WoofWare.KnuthPlass.Item.IsPenalty [property]: [read-only] bool
+WoofWare.KnuthPlass.Item.NewBox [static method]: WoofWare.KnuthPlass.Box -> WoofWare.KnuthPlass.Item
+WoofWare.KnuthPlass.Item.NewGlue [static method]: WoofWare.KnuthPlass.Glue -> WoofWare.KnuthPlass.Item
+WoofWare.KnuthPlass.Item.NewPenalty [static method]: WoofWare.KnuthPlass.Penalty -> WoofWare.KnuthPlass.Item
+WoofWare.KnuthPlass.Item.Tag [property]: [read-only] int
+WoofWare.KnuthPlass.Items inherit obj
+WoofWare.KnuthPlass.Items.box [static method]: float -> WoofWare.KnuthPlass.Item
+WoofWare.KnuthPlass.Items.forcedBreak [static method]: unit -> WoofWare.KnuthPlass.Item
+WoofWare.KnuthPlass.Items.fromEnglishString [static method]: (string -> float) -> float -> string -> WoofWare.KnuthPlass.Item list
+WoofWare.KnuthPlass.Items.fromString [static method]: (string -> float) -> float -> (string -> int list) -> float -> string -> WoofWare.KnuthPlass.Item list
+WoofWare.KnuthPlass.Items.glue [static method]: float -> float -> float -> WoofWare.KnuthPlass.Item
+WoofWare.KnuthPlass.Items.penalty [static method]: float -> float -> bool -> WoofWare.KnuthPlass.Item
+WoofWare.KnuthPlass.Line inherit obj, implements WoofWare.KnuthPlass.Line System.IEquatable, System.Collections.IStructuralEquatable, WoofWare.KnuthPlass.Line System.IComparable, System.IComparable, System.Collections.IStructuralComparable
+WoofWare.KnuthPlass.Line..ctor [constructor]: (int, int, float)
+WoofWare.KnuthPlass.Line.AdjustmentRatio [property]: [read-only] float
+WoofWare.KnuthPlass.Line.End [property]: [read-only] int
+WoofWare.KnuthPlass.Line.Equals [method]: (WoofWare.KnuthPlass.Line, System.Collections.IEqualityComparer) -> bool
+WoofWare.KnuthPlass.Line.get_AdjustmentRatio [method]: unit -> float
+WoofWare.KnuthPlass.Line.get_End [method]: unit -> int
+WoofWare.KnuthPlass.Line.get_Start [method]: unit -> int
+WoofWare.KnuthPlass.Line.Start [property]: [read-only] int
+WoofWare.KnuthPlass.LineBreaker inherit obj
+WoofWare.KnuthPlass.LineBreaker.breakLines [static method]: WoofWare.KnuthPlass.LineBreakOptions -> WoofWare.KnuthPlass.Item list -> WoofWare.KnuthPlass.Line list
+WoofWare.KnuthPlass.LineBreakOptions inherit obj, implements WoofWare.KnuthPlass.LineBreakOptions System.IEquatable, System.Collections.IStructuralEquatable, WoofWare.KnuthPlass.LineBreakOptions System.IComparable, System.IComparable, System.Collections.IStructuralComparable
+WoofWare.KnuthPlass.LineBreakOptions..ctor [constructor]: (float, float, float, float, float, float)
+WoofWare.KnuthPlass.LineBreakOptions.AdjacentLooseTightDemerits [property]: [read-only] float
+WoofWare.KnuthPlass.LineBreakOptions.Default [static method]: float -> WoofWare.KnuthPlass.LineBreakOptions
+WoofWare.KnuthPlass.LineBreakOptions.DefaultAdjacentLooseTightDemerits [static property]: [read-only] float
+WoofWare.KnuthPlass.LineBreakOptions.DefaultDoubleHyphenDemerits [static property]: [read-only] float
+WoofWare.KnuthPlass.LineBreakOptions.DefaultFinalHyphenDemerits [static property]: [read-only] float
+WoofWare.KnuthPlass.LineBreakOptions.DefaultFitnessClassDifferencePenalty [static property]: [read-only] float
+WoofWare.KnuthPlass.LineBreakOptions.DefaultTolerance [static property]: [read-only] float
+WoofWare.KnuthPlass.LineBreakOptions.DoubleHyphenDemerits [property]: [read-only] float
+WoofWare.KnuthPlass.LineBreakOptions.Equals [method]: (WoofWare.KnuthPlass.LineBreakOptions, System.Collections.IEqualityComparer) -> bool
+WoofWare.KnuthPlass.LineBreakOptions.FinalHyphenDemerits [property]: [read-only] float
+WoofWare.KnuthPlass.LineBreakOptions.FitnessClassDifferencePenalty [property]: [read-only] float
+WoofWare.KnuthPlass.LineBreakOptions.get_AdjacentLooseTightDemerits [method]: unit -> float
+WoofWare.KnuthPlass.LineBreakOptions.get_DefaultAdjacentLooseTightDemerits [static method]: unit -> float
+WoofWare.KnuthPlass.LineBreakOptions.get_DefaultDoubleHyphenDemerits [static method]: unit -> float
+WoofWare.KnuthPlass.LineBreakOptions.get_DefaultFinalHyphenDemerits [static method]: unit -> float
+WoofWare.KnuthPlass.LineBreakOptions.get_DefaultFitnessClassDifferencePenalty [static method]: unit -> float
+WoofWare.KnuthPlass.LineBreakOptions.get_DefaultTolerance [static method]: unit -> float
+WoofWare.KnuthPlass.LineBreakOptions.get_DoubleHyphenDemerits [method]: unit -> float
+WoofWare.KnuthPlass.LineBreakOptions.get_FinalHyphenDemerits [method]: unit -> float
+WoofWare.KnuthPlass.LineBreakOptions.get_FitnessClassDifferencePenalty [method]: unit -> float
+WoofWare.KnuthPlass.LineBreakOptions.get_LineWidth [method]: unit -> float
+WoofWare.KnuthPlass.LineBreakOptions.get_Tolerance [method]: unit -> float
+WoofWare.KnuthPlass.LineBreakOptions.LineWidth [property]: [read-only] float
+WoofWare.KnuthPlass.LineBreakOptions.Tolerance [property]: [read-only] float
+WoofWare.KnuthPlass.Paragraph inherit obj
+WoofWare.KnuthPlass.Paragraph.defaultWordWidth [static method]: string -> float
+WoofWare.KnuthPlass.Paragraph.format [static method]: float -> (string -> float) -> float -> float -> (string -> int list) -> string -> string
+WoofWare.KnuthPlass.Paragraph.formatEnglish [static method]: float -> string -> string
+WoofWare.KnuthPlass.Paragraph.SPACE_WIDTH [static field]: float = 1
+WoofWare.KnuthPlass.Penalty inherit obj, implements WoofWare.KnuthPlass.Penalty System.IEquatable, System.Collections.IStructuralEquatable, WoofWare.KnuthPlass.Penalty System.IComparable, System.IComparable, System.Collections.IStructuralComparable
+WoofWare.KnuthPlass.Penalty..ctor [constructor]: (float, float, bool)
+WoofWare.KnuthPlass.Penalty.Cost [property]: [read-only] float
+WoofWare.KnuthPlass.Penalty.Equals [method]: (WoofWare.KnuthPlass.Penalty, System.Collections.IEqualityComparer) -> bool
+WoofWare.KnuthPlass.Penalty.Flagged [property]: [read-only] bool
+WoofWare.KnuthPlass.Penalty.get_Cost [method]: unit -> float
+WoofWare.KnuthPlass.Penalty.get_Flagged [method]: unit -> bool
+WoofWare.KnuthPlass.Penalty.get_Width [method]: unit -> float
+WoofWare.KnuthPlass.Penalty.Width [property]: [read-only] float

@@ -50,10 +50,14 @@ type Penalty =
 
 /// An item in the paragraph to be broken into lines
 type Item =
+    /// A content box, e.g. a word, word-fragment, or character.
     | Box of Box
+    /// Whitespace that can stretch or shrink.
     | Glue of Glue
+    /// A potential break point in the text (e.g. somewhere to add a hyphen).
     | Penalty of Penalty
 
+    /// Terse but human-readable non-round-trip string representation.
     override this.ToString () =
         match this with
         | Item.Box box -> box.ToString ()
@@ -111,13 +115,24 @@ type LineBreakOptions =
         FitnessClassDifferencePenalty : float
     }
 
+    /// Default tolerance value: moderate setting that allows ratio up to ~0.46
+    static member DefaultTolerance = 10.0
+    /// Default penalty for consecutive lines of very different tightness
+    static member DefaultAdjacentLooseTightDemerits = 10000.0
+    /// Default penalty for consecutive hyphenated lines
+    static member DefaultDoubleHyphenDemerits = 10000.0
+    /// Default penalty for ending a paragraph with a hyphen
+    static member DefaultFinalHyphenDemerits = 5000.0
+    /// Default penalty for fitness class differences
+    static member DefaultFitnessClassDifferencePenalty = 100.0
+
     /// Creates default options with standard TeX-like values
     static member Default (lineWidth : float) =
         {
             LineWidth = lineWidth
-            Tolerance = 10.0 // Moderate: allows ratio up to ~0.46
-            AdjacentLooseTightDemerits = 10000.0
-            DoubleHyphenDemerits = 10000.0
-            FinalHyphenDemerits = 5000.0
-            FitnessClassDifferencePenalty = 100.0
+            Tolerance = LineBreakOptions.DefaultTolerance
+            AdjacentLooseTightDemerits = LineBreakOptions.DefaultAdjacentLooseTightDemerits
+            DoubleHyphenDemerits = LineBreakOptions.DefaultDoubleHyphenDemerits
+            FinalHyphenDemerits = LineBreakOptions.DefaultFinalHyphenDemerits
+            FitnessClassDifferencePenalty = LineBreakOptions.DefaultFitnessClassDifferencePenalty
         }

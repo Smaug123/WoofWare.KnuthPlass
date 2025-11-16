@@ -21,7 +21,7 @@ module Hyphenation =
         else
             // Allow hyphenation between characters, respecting min constraints
             // Prefer breaking after vowels (a simple heuristic)
-            let isVowel (c : char) = "aeiouyAEIOUY".Contains (c)
+            let isVowel (c : char) = "aeiouyAEIOUY".Contains c
 
             [
                 for i in 2 .. word.Length - 4 do
@@ -38,6 +38,7 @@ module Hyphenation =
     let everywhere (word : string) : int list =
         if word.Length < 5 then [] else [ 2 .. word.Length - 4 ]
 
+/// Module for manipulating Item.
 [<RequireQualifiedAccess>]
 module Items =
     /// Creates a box with the given width
@@ -100,7 +101,7 @@ module Items =
                     lastIdx <- point
 
                 // Final box for the remaining part
-                let finalPart = word.Substring (lastIdx)
+                let finalPart = word.Substring lastIdx
                 yield box (wordWidth finalPart)
             ]
 
@@ -116,7 +117,7 @@ module Items =
         : Item list
         =
         let normalized = text.Replace ("\r", "")
-        let paragraphs = normalized.Split ([| '\n' |])
+        let paragraphs = normalized.Split '\n'
         let hyphenWidth = wordWidth "-"
 
         [

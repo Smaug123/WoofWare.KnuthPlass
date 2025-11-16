@@ -58,7 +58,7 @@ module Paragraph =
                             parts.Add (word.Substring (lastIdx, point - lastIdx))
                             lastIdx <- point
 
-                        parts.Add (word.Substring (lastIdx))
+                        parts.Add (word.Substring lastIdx)
                         parts.ToArray ()
                 )
 
@@ -91,7 +91,7 @@ module Paragraph =
                                 |> List.length
 
                             match Map.tryFind boxNum boxToText with
-                            | Some text -> result.Add (text)
+                            | Some text -> result.Add text
                             | None -> ()
 
                         | Glue _ ->
@@ -101,7 +101,7 @@ module Paragraph =
                         | Penalty pen ->
                             // If this is the last item in the line and it has width (hyphen), add it
                             if i = line.End - 1 && pen.Width > 0.0 then
-                                result.Add ("-")
+                                result.Add "-"
 
                     // Join parts and add spaces between words
                     // Need to track where glue was to add spaces

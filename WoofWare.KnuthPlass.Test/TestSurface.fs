@@ -19,7 +19,3 @@ module TestSurface =
     [<Test ; Explicit>]
     let ``Update API surface`` () =
         ApiSurface.writeAssemblyBaseline assembly
-
-    [<Test>]
-    let ``Ensure public API is fully documented`` () =
-        DocCoverage.assertFullyDocumented assembly

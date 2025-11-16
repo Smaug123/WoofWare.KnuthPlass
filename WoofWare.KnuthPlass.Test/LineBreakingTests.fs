@@ -61,20 +61,21 @@ module LineBreakingTests =
         // Scenario: Three boxes that could break in two ways:
         // 1. Break after "word1 word2", leaving just "word3" alone on second line
         //    - Line 2 would be just Box(40) = 40 units on a 70-unit line with NO glue
-        //    - This should be heavily penalized
+        //    - This should be heavily penalized (ratio=1000.0, badness=1e11)
         // 2. Keep "word1 word2 word3" together on one line
         //    - Total: 15 + 10 + 15 + 10 + 40 = 90 units on 70-unit line
-        //    - Ratio = -20/9 ≈ -2.22, within default tolerance of 3.0
+        //    - Need to shrink by 20, total shrink = 20
+        //    - Ratio = -20/20 = -1.0, badness = 100
         //
         // With the bug, option 1 looks perfect (ratio=0.0, badness=0)
-        // With the fix, option 1 is heavily penalized (ratio=1000.0, badness=1e9)
+        // With the fix, option 1 is heavily penalized (ratio=1000.0, badness=1e11)
         // so the algorithm prefers option 2 despite it being tight
         let items =
             [
                 Items.box 15.0 // "word1"
-                Items.glue 10.0 5.0 3.0
+                Items.glue 10.0 5.0 10.0 // Need shrink=10 to make one-line solution achievable
                 Items.box 15.0 // "word2"
-                Items.glue 10.0 5.0 3.0
+                Items.glue 10.0 5.0 10.0 // Total shrink=20 allows ratio=-1.0 for one line
                 Items.box 40.0 // "word3" - if alone on a line, it's underfull with no glue
             ]
 
