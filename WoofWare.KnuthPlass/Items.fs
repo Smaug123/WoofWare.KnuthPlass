@@ -138,6 +138,6 @@ module Items =
         ]
 
     /// Converts a simple string into a list of items (boxes for words, glue for spaces, forced breaks for newlines).
-    /// Does not use hyphenation.
+    /// Uses simple English hyphenation rules.
     let fromEnglishString (wordWidth : string -> float) (spaceWidth : float) (text : string) : Item list =
         fromString wordWidth spaceWidth Hyphenation.simpleEnglish Hyphenation.DEFAULT_PENALTY text

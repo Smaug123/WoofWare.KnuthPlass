@@ -91,27 +91,6 @@ module Paragraph =
             let lineTexts =
                 lines
                 |> List.map (fun line ->
-                    let result = ResizeArray ()
-
-                    for i in line.Start .. line.End - 1 do
-                        match itemsArray.[i] with
-                        | Box _ ->
-                            match itemIndexToBoxNumber.TryGetValue i with
-                            | true, boxNum ->
-                                match boxToText.TryGetValue boxNum with
-                                | true, text -> result.Add text
-                                | false, _ -> ()
-                            | false, _ -> ()
-
-                        | Glue _ ->
-                            // Add space (but not at start/end of line, handled by checking next item)
-                            ()
-
-                        | Penalty pen ->
-                            // If this is the last item in the line and it has width (hyphen), add it
-                            if i = line.End - 1 && pen.Width > 0.0 then
-                                result.Add "-"
-
                     // Join parts and add spaces between words
                     // Need to track where glue was to add spaces
                     let mutable finalResult = []
