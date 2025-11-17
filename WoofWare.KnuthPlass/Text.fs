@@ -34,7 +34,7 @@ module Text =
         =
         // Normalize and split into paragraphs, then words, to match Items.fromString behavior
         let normalizedText = text.Replace ("\r", "")
-        let paragraphs = normalizedText.Split ('\n')
+        let paragraphs = normalizedText.Split '\n'
 
         let words =
             paragraphs
