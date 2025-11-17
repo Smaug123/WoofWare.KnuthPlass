@@ -110,3 +110,29 @@ module LineBreakingTests =
         // Should choose to keep everything on one line (tight but within tolerance)
         // rather than creating an underfull second line with no glue
         lines.Length |> shouldEqual 1
+
+    [<Test>]
+    let ``Hyphenation is preferred when trailing glue cannot stretch`` () =
+        // If we break immediately after the glue (index 2), the line width is 30 on a 31-unit line
+        // but there is zero glue remaining to stretch. computeAdjustmentRatio currently treats
+        // that trailing glue as available, so the ratio looks perfect (diff=1, stretch=10 => 0.1)
+        // even though TeX would see an underfull line. The hyphenated break (index 4) costs 100
+        // but perfectly fills the line with actual boxes.
+        let items =
+            [|
+                Items.box 20.0
+                Items.glue 10.0 10.0 3.0
+                Items.box 0.5
+                Items.penalty 0.5 100.0 true
+                Items.box 15.0
+                Items.glue 5.0 5.0 2.0
+                Items.box 10.0
+            |]
+
+        let options = LineBreakOptions.Default 31.0
+        let lines = LineBreaker.breakLines options items
+
+        lines.Length |> shouldEqual 2
+        lines.[0].Start |> shouldEqual 0
+        // Under the bug, this is 2 (break after glue). With the fix it moves to 4.
+        lines.[0].End |> shouldEqual 4
