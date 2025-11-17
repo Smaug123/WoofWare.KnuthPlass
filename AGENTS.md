@@ -50,11 +50,6 @@ dotnet fantomas .
 
 Always run `dotnet fantomas .` and `./analyzers/run.sh` before committing.
 
-## Algorithm Status
-
-The Knuth-Plass algorithm is implemented with 22/23 tests passing. Remaining issue:
-- One line breaking test failing related to balanced vs greedy breaks
-
 # NUnit bugs
 
 NUnit's filtering is pretty borked.
