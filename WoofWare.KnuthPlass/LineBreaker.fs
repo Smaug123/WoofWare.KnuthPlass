@@ -20,6 +20,65 @@ type private CumulativeSums =
         Shrink : float[]
     }
 
+[<Struct>]
+type internal WidthTriple =
+    {
+        Width : float
+        Stretch : float
+        Shrink : float
+    }
+
+[<RequireQualifiedAccess>]
+module internal WidthTriple =
+    let zero : WidthTriple =
+        {
+            Width = 0.0
+            Stretch = 0.0
+            Shrink = 0.0
+        }
+
+    let inline add (a : WidthTriple) (b : WidthTriple) : WidthTriple =
+        {
+            Width = a.Width + b.Width
+            Stretch = a.Stretch + b.Stretch
+            Shrink = a.Shrink + b.Shrink
+        }
+
+    let inline subtract (minuend : WidthTriple) (subtrahend : WidthTriple) : WidthTriple =
+        {
+            Width = minuend.Width - subtrahend.Width
+            Stretch = minuend.Stretch - subtrahend.Stretch
+            Shrink = minuend.Shrink - subtrahend.Shrink
+        }
+
+    let inline ofItem (item : Item) : WidthTriple =
+        match item with
+        | Box box ->
+            {
+                Width = box.Width
+                Stretch = 0.0
+                Shrink = 0.0
+            }
+        | Glue glue ->
+            {
+                Width = glue.Width
+                Stretch = glue.Stretch
+                Shrink = glue.Shrink
+            }
+        | Penalty _ -> zero
+
+type private ActiveEntryKind =
+    | Sentinel
+    | ActiveNode of nodeIndex : int
+    | Delta of WidthTriple
+
+type private ActiveEntry =
+    {
+        mutable Prev : int
+        mutable Next : int
+        mutable Kind : ActiveEntryKind
+    }
+
 /// The module holding the heart of the Knuth-Plass algorithm.
 [<RequireQualifiedAccess>]
 module LineBreaker =
@@ -94,10 +153,8 @@ module LineBreaker =
                 // Return a very large ratio to indicate extreme looseness
                 // This ensures the line gets categorized as VeryLoose with high badness
                 ValueSome extremeLooseRatio
-        else if
-            // Line is too long, need to compress
-            totalShrink > 0.0
-        then
+        // Line is too long, need to compress
+        else if totalShrink > 0.0 then
             ValueSome (diff / totalShrink)
         else
             // No glue to shrink and line is overfull - cannot fit
@@ -244,6 +301,13 @@ module LineBreaker =
         else
             0.0, false
 
+    type private PendingCandidate =
+        {
+            PrevNodeIdx : int
+            Ratio : float
+            Demerits : float
+        }
+
     /// Break a paragraph into lines using the Knuth-Plass algorithm.
     /// Returns a list of lines with their start/end positions and adjustment ratios.
     /// Raises an exception if no valid breaking is possible.
@@ -282,69 +346,284 @@ module LineBreaker =
 
             setBestNode FitnessClass.Normal 0 0
 
-            // Track the last forced break position to prevent skipping over it
-            let mutable lastForcedBreak = -1
+            // Active list of candidate predecessors
+            let activeEntries = ResizeArray<ActiveEntry> ()
+
+            let addEntry (kind : ActiveEntryKind) =
+                let idx = activeEntries.Count
+
+                activeEntries.Add
+                    {
+                        Prev = idx
+                        Next = idx
+                        Kind = kind
+                    }
+
+                idx
+
+            let insertAfter (existingIdx : int) (newIdx : int) =
+                let nextIdx = activeEntries.[existingIdx].Next
+                activeEntries.[newIdx].Prev <- existingIdx
+                activeEntries.[newIdx].Next <- nextIdx
+                activeEntries.[existingIdx].Next <- newIdx
+                activeEntries.[nextIdx].Prev <- newIdx
+
+            let removeEntry (idx : int) =
+                let prevIdx = activeEntries.[idx].Prev
+                let nextIdx = activeEntries.[idx].Next
+                activeEntries.[prevIdx].Next <- nextIdx
+                activeEntries.[nextIdx].Prev <- prevIdx
+                activeEntries.[idx].Prev <- -1
+                activeEntries.[idx].Next <- -1
+
+            let activeHead = addEntry ActiveEntryKind.Sentinel
+            activeEntries.[activeHead].Prev <- activeHead
+            activeEntries.[activeHead].Next <- activeHead
+
+            let nodeActiveEntry = ResizeArray<int> ()
+
+            let ensureNodeEntry (idx : int) =
+                while nodeActiveEntry.Count <= idx do
+                    nodeActiveEntry.Add -1
+
+            let appendActiveEntryForNode (nodeIdx : int) (nodePos : int) =
+                ensureNodeEntry nodeIdx
+
+                let lastActiveIdx = activeEntries.[activeHead].Prev
+
+                let entryIdx =
+                    if lastActiveIdx = activeHead then
+                        let idx = addEntry (ActiveEntryKind.ActiveNode nodeIdx)
+                        insertAfter activeHead idx
+                        idx
+                    else
+                        match activeEntries.[lastActiveIdx].Kind with
+                        | ActiveEntryKind.ActiveNode prevNodeIdx ->
+                            let prevPos = nodes.[prevNodeIdx].Position
+
+                            let delta =
+                                {
+                                    Width = sums.Width.[nodePos] - sums.Width.[prevPos]
+                                    Stretch = sums.Stretch.[nodePos] - sums.Stretch.[prevPos]
+                                    Shrink = sums.Shrink.[nodePos] - sums.Shrink.[prevPos]
+                                }
+
+                            let deltaIdx = addEntry (ActiveEntryKind.Delta delta)
+                            insertAfter lastActiveIdx deltaIdx
+
+                            let idx = addEntry (ActiveEntryKind.ActiveNode nodeIdx)
+                            insertAfter deltaIdx idx
+                            idx
+                        | _ -> failwith "Invariant violation: last active entry should always be an active node."
+
+                nodeActiveEntry.[nodeIdx] <- entryIdx
+
+            let mutable activeWidth = WidthTriple.zero
+
+            let rec removeActiveEntry (entryIdx : int) =
+                if entryIdx = -1 then
+                    ()
+                else
+                    match activeEntries.[entryIdx].Kind with
+                    | ActiveEntryKind.ActiveNode nodeIdx ->
+                        nodeActiveEntry.[nodeIdx] <- -1
+                        let prevIdx = activeEntries.[entryIdx].Prev
+                        let nextIdx = activeEntries.[entryIdx].Next
+
+                        match activeEntries.[prevIdx].Kind, activeEntries.[nextIdx].Kind with
+                        | ActiveEntryKind.Sentinel, ActiveEntryKind.Sentinel ->
+                            activeWidth <- WidthTriple.zero
+                            removeEntry entryIdx
+                        | ActiveEntryKind.Sentinel, ActiveEntryKind.Delta deltaAfter ->
+                            activeWidth <- WidthTriple.subtract activeWidth deltaAfter
+                            removeEntry nextIdx
+                            removeEntry entryIdx
+                        | ActiveEntryKind.Delta deltaBefore, ActiveEntryKind.Delta deltaAfter ->
+                            let combined = WidthTriple.add deltaBefore deltaAfter
+                            activeEntries.[prevIdx].Kind <- ActiveEntryKind.Delta combined
+                            removeEntry nextIdx
+                            removeEntry entryIdx
+                        | ActiveEntryKind.Delta _, ActiveEntryKind.Sentinel ->
+                            removeEntry prevIdx
+                            removeEntry entryIdx
+                        | (ActiveEntryKind.Sentinel, ActiveEntryKind.ActiveNode _)
+                        | (ActiveEntryKind.Delta _, ActiveEntryKind.ActiveNode _) ->
+                            // No delta separating entries; simply remove this node.
+                            removeEntry entryIdx
+                        | ActiveEntryKind.ActiveNode _, _ ->
+                            failwith "Invariant violation: active nodes should be separated by delta nodes."
+                    | _ -> ()
+
+            let clearActiveList () =
+                let mutable entryIdx = activeEntries.[activeHead].Next
+
+                while entryIdx <> activeHead do
+                    let nextIdx = activeEntries.[entryIdx].Next
+
+                    match activeEntries.[entryIdx].Kind with
+                    | ActiveEntryKind.ActiveNode nodeIdx -> nodeActiveEntry.[nodeIdx] <- -1
+                    | _ -> ()
+
+                    activeEntries.[entryIdx].Prev <- -1
+                    activeEntries.[entryIdx].Next <- -1
+                    entryIdx <- nextIdx
+
+                activeEntries.[activeHead].Next <- activeHead
+                activeEntries.[activeHead].Prev <- activeHead
+                activeWidth <- WidthTriple.zero
+
+            // Seed the active list with the start node
+            appendActiveEntryForNode 0 0
+
+            let inline computeRatioFromTriple (widthTriple : WidthTriple) (endIdx : int) =
+                let penaltyWidth =
+                    if endIdx > 0 && endIdx <= items.Length then
+                        match items.[endIdx - 1] with
+                        | Penalty p -> p.Width
+                        | _ -> 0.0
+                    else
+                        0.0
+
+                let actualWidth = widthTriple.Width + penaltyWidth
+                let diff = options.LineWidth - actualWidth
+
+                let ratio =
+                    if abs diff < 1e-10 then
+                        ValueSome 0.0
+                    elif diff > 0.0 then
+                        if widthTriple.Stretch > 0.0 then
+                            ValueSome (diff / widthTriple.Stretch)
+                        else
+                            ValueSome extremeLooseRatio
+                    elif widthTriple.Shrink > 0.0 then
+                        ValueSome (diff / widthTriple.Shrink)
+                    else
+                        ValueNone
+
+                ratio, actualWidth
 
             // For each position, find the best predecessor
             for i in 1..n do
+                // Update the active width to include the contribution from the previous item
+                let itemTriple = WidthTriple.ofItem items.[i - 1]
+                activeWidth <- WidthTriple.add activeWidth itemTriple
+
                 if isValidBreakpoint items i then
                     let penaltyCost, isFlagged = getPenaltyAt items i
                     let isForced = penaltyCost = -infinity
 
-                    // Try nodes at each previous position (only the best per fitness class)
-                    for prevPos in max 0 lastForcedBreak .. i - 1 do
-                        match computeAdjustmentRatio items sums options.LineWidth prevPos i with
-                        | ValueSome ratio when isForced || ratio >= -1.0 ->
-                            // Accept if feasible (forced break or ratio >= -1); tolerance is handled in computeDemerits
-                            let fitness = fitnessClass ratio
-                            let isLast = i = n
+                    let pendingNodes : PendingCandidate option array = Array.create 4 None
+                    let nodesToDeactivate = System.Collections.Generic.HashSet<int> ()
+                    let newlyCreatedNodes = ResizeArray<int> ()
 
-                            // Check the best node for each fitness class at this position
-                            for fitnessIdx in 0..3 do
-                                let prevNodeIdx = getBestNode (enum<FitnessClass> fitnessIdx) prevPos
+                    let mutable entryIdx = activeEntries.[activeHead].Next
+                    let mutable curActiveWidth = activeWidth
 
-                                if prevNodeIdx <> Int32.MinValue then
-                                    let prevNode = nodes.[prevNodeIdx]
+                    while entryIdx <> activeHead do
+                        match activeEntries.[entryIdx].Kind with
+                        | ActiveEntryKind.Delta delta ->
+                            curActiveWidth <- WidthTriple.subtract curActiveWidth delta
+                            entryIdx <- activeEntries.[entryIdx].Next
+                        | ActiveEntryKind.ActiveNode prevNodeIdx ->
+                            let currentEntryIdx = entryIdx
+                            entryIdx <- activeEntries.[entryIdx].Next
 
-                                    let demerits =
-                                        prevNode.Demerits
-                                        + computeDemerits
-                                            options
-                                            ratio
-                                            penaltyCost
-                                            prevNode.Fitness
-                                            fitness
-                                            prevNode.WasFlagged
-                                            isFlagged
-                                            isLast
+                            let prevNode = nodes.[prevNodeIdx]
+                            let prevPos = prevNode.Position
 
-                                    // Check if this is better than existing node at this position/fitness
-                                    let shouldAdd =
-                                        let result = getBestNode fitness i
+                            let ratioResult, actualWidth = computeRatioFromTriple curActiveWidth i
+                            let overfullAmount = max 0.0 (actualWidth - options.LineWidth)
+                            let totalShrinkAvailable = sums.Shrink.[n] - sums.Shrink.[prevPos]
+                            let canEverFit = overfullAmount <= totalShrinkAvailable + 1e-9
 
-                                        if result = Int32.MinValue then
-                                            true
-                                        else
-                                            demerits < nodes.[result].Demerits
+                            match ratioResult with
+                            | ValueSome ratio when isForced || ratio >= -1.0 ->
+                                let fitness = fitnessClass ratio
+                                let isLast = i = n
 
-                                    if shouldAdd then
-                                        let newNode =
+                                let demerits =
+                                    prevNode.Demerits
+                                    + computeDemerits
+                                        options
+                                        ratio
+                                        penaltyCost
+                                        prevNode.Fitness
+                                        fitness
+                                        prevNode.WasFlagged
+                                        isFlagged
+                                        isLast
+
+                                let fitnessIdx = int<FitnessClass> fitness
+
+                                let shouldUpdate =
+                                    match pendingNodes.[fitnessIdx] with
+                                    | None -> true
+                                    | Some existing -> demerits < existing.Demerits
+
+                                if shouldUpdate then
+                                    pendingNodes.[fitnessIdx] <-
+                                        Some
                                             {
-                                                Position = i
-                                                Demerits = demerits
+                                                PrevNodeIdx = prevNodeIdx
                                                 Ratio = ratio
-                                                PreviousNode = Some prevNodeIdx
-                                                Fitness = fitness
-                                                WasFlagged = isFlagged
+                                                Demerits = demerits
                                             }
+                            | _ ->
+                                if not canEverFit && not isForced then
+                                    nodesToDeactivate.Add currentEntryIdx |> ignore
+                        | ActiveEntryKind.Sentinel -> entryIdx <- activeEntries.[entryIdx].Next
 
-                                        nodes.Add newNode
-                                        setBestNode fitness i (nodes.Count - 1)
-                        | _ -> () // Line doesn't fit
+                    for entry in nodesToDeactivate do
+                        removeActiveEntry entry
 
-                    // If this is a forced break, update the last forced break position
+                    for fitnessIdx in 0..3 do
+                        match pendingNodes.[fitnessIdx] with
+                        | Some pending ->
+                            let fitness = enum<FitnessClass> fitnessIdx
+                            let existingNodeIdx = getBestNode fitness i
+
+                            let shouldAdd =
+                                if existingNodeIdx = Int32.MinValue then
+                                    true
+                                else
+                                    pending.Demerits < nodes.[existingNodeIdx].Demerits
+
+                            if shouldAdd then
+                                if existingNodeIdx <> Int32.MinValue then
+                                    let entry = nodeActiveEntry.[existingNodeIdx]
+
+                                    if entry <> -1 then
+                                        removeActiveEntry entry
+
+                                let newNode =
+                                    {
+                                        Position = i
+                                        Demerits = pending.Demerits
+                                        Ratio = pending.Ratio
+                                        PreviousNode = Some pending.PrevNodeIdx
+                                        Fitness = fitness
+                                        WasFlagged = isFlagged
+                                    }
+
+                                nodes.Add newNode
+                                let nodeIdx = nodes.Count - 1
+                                setBestNode fitness i nodeIdx
+                                ensureNodeEntry nodeIdx
+                                nodeActiveEntry.[nodeIdx] <- -1
+
+                                if isForced then
+                                    newlyCreatedNodes.Add nodeIdx
+                                else
+                                    appendActiveEntryForNode nodeIdx i
+                        | None -> ()
+
                     if isForced then
-                        lastForcedBreak <- i
+                        clearActiveList ()
+
+                        for nodeIdx in newlyCreatedNodes do
+                            appendActiveEntryForNode nodeIdx i
+
+                        activeWidth <- WidthTriple.zero
 
             // Find best ending node
             let bestEndIdx =
