@@ -15,6 +15,7 @@
     <Compile Include="HelperTests.fs"/>
     <Compile Include="HyphenationTests.fs"/>
     <Compile Include="RealWorldTests.fs"/>
+    <Compile Include="TestPerformance.fs" />
     <Compile Include="TestSurface.fs" />
     <Compile Include="ToleranceTests.fs"/>
     <EmbeddedResource Include="publicdomain/*" />
