@@ -127,10 +127,7 @@ module GlueTests =
         for line in lines do
             let breakIndex = line.End
 
-            if breakIndex > 1 && breakIndex < items.Length then
-                match items.[breakIndex - 1] with
-                | Item.Glue _ ->
-                    match items.[breakIndex - 2] with
-                    | Item.Glue _ -> failwith "Found a break between two glues!"
-                    | _ -> ()
+            if breakIndex > 0 && breakIndex < items.Length then
+                match items.[breakIndex - 1], items.[breakIndex] with
+                | Item.Glue _, Item.Glue _ -> failwith "Found a break between two glues!"
                 | _ -> ()
