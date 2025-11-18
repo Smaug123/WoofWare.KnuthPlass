@@ -136,3 +136,28 @@ module LineBreakingTests =
         lines.[0].Start |> shouldEqual 0
         // Under the bug, this is 2 (break after glue). With the fix it moves to 4.
         lines.[0].End |> shouldEqual 4
+
+    [<Test>]
+    let ``Line can require waiting for later glue shrink`` () =
+        // The first glue provides very little shrink, so the line is still overfull even after
+        // compressing it completely. Only once we include the second glue (with large shrink)
+        // does the line become feasible again. A regression in the active-node tracking dropped
+        // that starting position as soon as it saw the overfull candidate, so it never examined
+        // the later feasible breakpoint and failed the entire paragraph.
+        let items =
+            [|
+                Items.box 14.430629179148562
+                Items.glue 3.6283746540396093 1.3821153460269547 0.5667564797860005
+                Items.box 3.902224130560937
+                Items.glue 0.435279093053825 2.521040834521651 11.99409784325783
+                Items.box 7.492267507792638
+            |]
+
+        let options = LineBreakOptions.Default 16.176080639849094
+        let lines = LineBreaker.breakLines options items
+
+        lines.Length |> shouldEqual 2
+        lines.[0].Start |> shouldEqual 0
+        lines.[0].End |> shouldEqual 4
+        lines.[1].Start |> shouldEqual 4
+        lines.[1].End |> shouldEqual 5
