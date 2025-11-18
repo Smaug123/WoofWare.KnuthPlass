@@ -35,3 +35,39 @@ module GlueTests =
 
         lines.Length |> shouldEqual 1
         (abs lines.[0].AdjustmentRatio < 1e-6) |> shouldEqual true
+
+    [<Test>]
+    let ``Glue at start of line should be discarded from width calculation`` () =
+        let items =
+            [|
+                Items.box 40.0 // "word" on first line
+                Items.penalty 5.0 (-infinity) false // forced break with hyphen width
+                Items.glue 20.0 10.0 5.0 // space that should be discarded on second line
+                Items.box 30.0 // "word" on second line
+                Items.glue 10.0 5.0 3.0 // another glue
+                Items.box 20.0 // another box
+            |]
+
+        let options = LineBreakOptions.Default 100.0
+        let lines = LineBreaker.breakLines options items
+
+        // Should break into 2 lines at the forced break
+        lines.Length |> shouldEqual 2
+
+        // First line: Box(40) + Penalty(5) = 45
+        // adjustment ratio = (100 - 45) / 0 = infinity (but we expect it to be handled)
+        lines.[0].Start |> shouldEqual 0
+        lines.[0].End |> shouldEqual 2
+
+        // Second line should start immediately after the forced break.
+        lines.[1].Start |> shouldEqual 2
+
+        let secondLineRatio = lines.[1].AdjustmentRatio
+
+        // Glue at position 2 is discardable, so the second line only contains:
+        //   Box(30) + Glue(10 stretch 5 shrink 3) + Box(20)
+        // The resulting width is 60 with 5 units of stretch. With a 100-unit target width,
+        // the ratio must therefore be (100 - 60) / 5 = 8.0. Including the leading glue would
+        // yield roughly 1.333, which keeps the bug alive.
+        let expectedRatio = (options.LineWidth - 60.0) / 5.0
+        secondLineRatio |> shouldEqual expectedRatio
