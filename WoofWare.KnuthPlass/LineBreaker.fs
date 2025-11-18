@@ -212,7 +212,7 @@ module LineBreaker =
         demerits
 
     /// In Knuth-Plass, we can break at the following positions:
-    /// 1. After any glue
+    /// 1. After any glue (but not between two consecutive glues)
     /// 2. At any penalty
     /// 3. At the end of the paragraph
     let private isValidBreakpoint (itemsArray : Item array) (idx : int) : bool =
@@ -223,7 +223,14 @@ module LineBreaker =
         elif idx > 0 && idx <= itemsArray.Length then
             // Look at the item just before this position
             match itemsArray.[idx - 1] with
-            | Glue _ -> true // Can break after glue
+            | Glue _ ->
+                // Can break after glue, but not if the next item is also glue
+                if idx < itemsArray.Length then
+                    match itemsArray.[idx] with
+                    | Glue _ -> false // Cannot break between two consecutive glues
+                    | _ -> true
+                else
+                    true // At end of array
             | Penalty _ -> true // Can break at penalty
             | Box _ -> false // Cannot break after a box
         else
