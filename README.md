@@ -63,4 +63,4 @@ I'm pretty unlikely to add whole new features for you, but am probably willing t
 
 This project is licensed to you under the MIT licence, a copy of which can be found at [./LICENSE.md](./LICENSE.md).
 
-Texts of the example text files are in the public domain; these are contained in the `WoofWare.KnuthPlass.Text/publicdomain` folder.
+Texts of the example text files are in the public domain; these are contained in the `WoofWare.KnuthPlass.Test/publicdomain` folder.

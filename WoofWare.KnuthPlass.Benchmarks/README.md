@@ -42,7 +42,7 @@ dotnet run -c Release --filter *MemoryProfile*
 
 ### LineBreakingBenchmarks
 
-Tests the core line breaking algorithm with varying paragraph sizes (100, 500, 1000, 5000 words).
+Tests the core line breaking algorithm with varying paragraph sizes.
 
 **Purpose:** Verify that the algorithm maintains O(N) time complexity as input size increases.
 
@@ -87,58 +87,6 @@ BenchmarkDotNet produces detailed reports including:
 | BreakLines | 5000      | 612.34 μs | 3.456 μs | 3.234 μs |  768.0 KB |
 ```
 
-## Best Practices
+## Expected results
 
-1. **Always use Release mode**: Debug builds include additional checks that skew results
-2. **Close other applications**: Reduce system noise during benchmarking
-3. **Run multiple times**: BenchmarkDotNet automatically runs multiple iterations; let it complete
-4. **Check for linearity**: For the main algorithm, time should scale linearly with input size
-5. **Monitor allocations**: Watch for unexpected memory allocations that could indicate inefficiencies
-
-## Adding New Benchmarks
-
-To add a new benchmark:
-
-1. Create a new class in `Benchmarks.fs`
-2. Add `[<MemoryDiagnoser>]` and `[<SimpleJob(RuntimeMoniker.Net90)>]` attributes
-3. Use `[<GlobalSetup>]` for initialization
-4. Mark benchmark methods with `[<Benchmark>]`
-5. Use `[<Params(...)>]` to test different parameter values
-
-Example:
-
-```fsharp
-[<MemoryDiagnoser>]
-[<SimpleJob(RuntimeMoniker.Net90)>]
-type MyNewBenchmarks() =
-
-    [<Params(10, 100, 1000)>]
-    member val Size = 0 with get, set
-
-    [<DefaultValue>]
-    val mutable data: int array
-
-    [<GlobalSetup>]
-    member this.Setup() =
-        this.data <- Array.init this.Size id
-
-    [<Benchmark>]
-    member this.MyBenchmark() =
-        // Your code here
-        ()
-```
-
-## Comparison with Original Test
-
-The original `TestPerformance.fs` was a simple unit test that:
-- Timed a single execution
-- Had a fixed 1000ms timeout assertion
-- Didn't measure memory or provide detailed statistics
-
-BenchmarkDotNet improvements:
-- **Multiple runs**: Automatic warmup and multiple iterations for statistical accuracy
-- **Memory diagnostics**: Tracks allocations and GC pressure
-- **Parameter variations**: Tests multiple input sizes automatically
-- **Statistical analysis**: Provides mean, standard deviation, confidence intervals
-- **Standardized reporting**: Industry-standard benchmark format
-- **Multiple scenarios**: Separate benchmarks for different use cases
+The main algorithm should have time scaling linearly with input size.

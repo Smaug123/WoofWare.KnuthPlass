@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net5.0</TargetFramework>
@@ -12,7 +12,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageId>WoofWare.KnuthPlass</PackageId>
-    <PackageLogo>logo.svg</PackageLogo>
+    <PackageLogo>light.svg</PackageLogo>
   </PropertyGroup>
 
   <ItemGroup>
