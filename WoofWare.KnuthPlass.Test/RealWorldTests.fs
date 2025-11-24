@@ -7,6 +7,52 @@ open WoofWare.Expect
 
 [<TestFixture>]
 module RealWorldTests =
+    type LayoutBounds =
+        {
+            LineWidth : float
+        }
+
+    let private assertLayoutWithinBounds (bounds : LayoutBounds) (text : string) =
+        let items = Items.fromEnglishString Text.defaultWordWidth Text.SPACE_WIDTH text
+        let options = LineBreakOptions.Default bounds.LineWidth
+        let lines = LineBreaker.breakLines options items
+
+        let lineFits (line : Line) =
+            let mutable width = 0.0
+            let mutable stretch = 0.0
+            let mutable shrink = 0.0
+
+            for i in line.Start .. line.End - 1 do
+                match items.[i] with
+                | Box b ->
+                    width <- width + b.Width
+                | Glue g ->
+                    width <- width + g.Width
+                    stretch <- stretch + g.Stretch
+                    shrink <- shrink + g.Shrink
+                | Penalty _ -> ()
+
+            if line.End > 0 then
+                match items.[line.End - 1] with
+                | Glue g ->
+                    width <- width - g.Width
+                    stretch <- stretch - g.Stretch
+                    shrink <- shrink - g.Shrink
+                | Penalty p -> width <- width + p.Width
+                | _ -> ()
+
+            let adjustedWidth =
+                if line.AdjustmentRatio > 0.0 then
+                    width + (line.AdjustmentRatio * stretch)
+                else
+                    width + (line.AdjustmentRatio * shrink)
+
+            adjustedWidth <= options.LineWidth + 1e-6
+
+        lines
+        |> Array.iteri (fun idx line ->
+            Assert.That(lineFits line, $"Line {idx} exceeds width {bounds.LineWidth}"))
+
     [<Test>]
     let ``Format a typical paragraph`` () =
         let text =
@@ -69,6 +115,17 @@ dog."
 
             return Text.format lineWidth wordWidth spaceWidth Hyphenation.DEFAULT_PENALTY Hyphenation.none text
         }
+
+    [<TestCase "publicdomain.jekyll_and_hyde.txt">]
+    [<TestCase "publicdomain.puck_speech.txt">]
+    let ``formatParagraph keeps text within bounds`` (testResource : string) =
+        let text =
+            Assembly.readEmbeddedResource testResource
+            |> fun s -> s.Replace("\r", "").Replace ("\n", " ")
+
+        for i = 20 to 80 do
+            assertLayoutWithinBounds { LineWidth = float i } text
+
 
     [<Test>]
     let ``formatParagraph on Jekyll and Hyde`` () =
