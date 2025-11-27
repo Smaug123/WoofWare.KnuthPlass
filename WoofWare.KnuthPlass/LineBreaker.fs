@@ -195,11 +195,7 @@ module LineBreaker =
         else if totalShrink > 0.0 then
             diff / totalShrink
         else
-            failwithf
-                "Internal error: line %d..%d is overfull (needs %.2f shrink but has 0.0 available) and should have been rejected during feasibility check"
-                startIdx
-                endIdx
-                (-diff)
+            Double.NegativeInfinity
 
     let inline private fitnessClass (ratio : float) : FitnessClass =
         if ratio < -0.5 then FitnessClass.Tight
@@ -319,6 +315,26 @@ module LineBreaker =
         else
             let n = items.Length
             let sums = computeCumulativeSums items
+
+            // Track whether there is a forced break at or after each position.
+            // This lets us preserve active nodes even when a line is overfull,
+            // because TeX keeps at least one candidate alive so a forced break
+            // can still terminate the paragraph (yielding an overfull box rather
+            // than an outright failure).
+            let forcedBreakAhead : bool[] =
+                let arr = Array.zeroCreate (n + 1)
+                let mutable seen = false
+
+                for idx = n - 1 downto 0 do
+                    let isForced =
+                        match items.[idx] with
+                        | Penalty p when p.Cost = -infinity -> true
+                        | _ -> false
+
+                    seen <- seen || isForced
+                    arr.[idx] <- seen
+
+                arr
 
             // Track the best node at each position for each fitness class.
             // A value of IntMin means "not set".
@@ -515,6 +531,8 @@ module LineBreaker =
                     let pendingNodes : PendingCandidate option array = Array.create 4 None
                     let nodesToDeactivate = System.Collections.Generic.HashSet<int> ()
                     let newlyCreatedNodes = ResizeArray<int> ()
+                    let mutable rescueCandidate : (int * bool * float * float * float) option = None
+                    let mutable anyNodeAdded = false
 
                     let mutable entryIdx = activeEntries.[activeHead].Next
                     let mutable curActiveWidth = activeWidth
@@ -535,6 +553,7 @@ module LineBreaker =
                             let overfullAmount = max 0.0 (actualWidth - options.LineWidth)
                             let totalShrinkAvailable = sums.Shrink.[n] - sums.Shrink.[prevPos]
                             let canEverFit = overfullAmount <= totalShrinkAvailable + 1e-9
+                            let forcedBreakInTail = forcedBreakAhead.[prevPos]
 
                             match ratioResult with
                             | ValueSome ratio when isForced || ratio >= -1.0 ->
@@ -569,8 +588,32 @@ module LineBreaker =
                                                 Demerits = demerits
                                             }
                             | _ ->
-                                if not canEverFit && not isForced then
+                                if not canEverFit && not isForced && not forcedBreakInTail then
                                     nodesToDeactivate.Add currentEntryIdx |> ignore
+                                else if (isForced || forcedBreakInTail) && overfullAmount > 0.0 then
+                                    let overfullRatio =
+                                        if curActiveWidth.Shrink > 0.0 then
+                                            (options.LineWidth - actualWidth) / curActiveWidth.Shrink
+                                        else
+                                            Double.NegativeInfinity
+
+                                    let shouldRescue =
+                                        match rescueCandidate with
+                                        | None -> true
+                                        | Some (_, _, existingOverfull, _, existingDemerits) ->
+                                            overfullAmount < existingOverfull - 1e-9
+                                            || (abs (overfullAmount - existingOverfull) < 1e-9
+                                                && prevNode.Demerits < existingDemerits)
+
+                                    if shouldRescue then
+                                        rescueCandidate <-
+                                            Some (
+                                                prevNodeIdx,
+                                                isFlagged,
+                                                overfullAmount,
+                                                overfullRatio,
+                                                prevNode.Demerits
+                                            )
                         | ActiveEntryKind.Sentinel -> entryIdx <- activeEntries.[entryIdx].Next
 
                     for entry in nodesToDeactivate do
@@ -615,6 +658,51 @@ module LineBreaker =
                                     newlyCreatedNodes.Add nodeIdx
                                 else
                                     appendActiveEntryForNode nodeIdx i
+
+                                anyNodeAdded <- true
+                        | None -> ()
+
+                    if not anyNodeAdded then
+                        match rescueCandidate with
+                        | Some (prevNodeIdx, flag, _, ratio, prevDemerits) ->
+                            let newNode =
+                                {
+                                    Position = i
+                                    Demerits = prevDemerits
+                                    Ratio = ratio
+                                    PreviousNode = Some prevNodeIdx
+                                    Fitness = FitnessClass.Tight
+                                    WasFlagged = flag
+                                }
+
+                            let fitness = FitnessClass.Tight
+                            let existingNodeIdx = getBestNode fitness i
+
+                            let shouldAdd =
+                                if existingNodeIdx = Int32.MinValue then
+                                    true
+                                else
+                                    newNode.Demerits < nodes.[existingNodeIdx].Demerits
+
+                            if shouldAdd then
+                                if existingNodeIdx <> Int32.MinValue then
+                                    let entry = nodeActiveEntry.[existingNodeIdx]
+
+                                    if entry <> -1 then
+                                        removeActiveEntry entry
+
+                                nodes.Add newNode
+                                let nodeIdx = nodes.Count - 1
+                                setBestNode fitness i nodeIdx
+                                ensureNodeEntry nodeIdx
+                                nodeActiveEntry.[nodeIdx] <- -1
+
+                                if isForced then
+                                    newlyCreatedNodes.Add nodeIdx
+                                else
+                                    appendActiveEntryForNode nodeIdx i
+
+                                anyNodeAdded <- true
                         | None -> ()
 
                     if isForced then

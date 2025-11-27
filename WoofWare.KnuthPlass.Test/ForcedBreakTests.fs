@@ -42,6 +42,66 @@ module ForcedBreakTests =
         lines.[0].End |> shouldEqual items.Length
 
     [<Test>]
+    let ``Forced break still ends paragraph when no shrink exists`` () =
+        // Overfull with zero shrink: TeX would emit an overfull hbox rather than fail outright.
+        let items = [| Items.box 70.0 ; Items.forcedBreak () |]
+
+        let options = LineBreakOptions.Default 50.0
+
+        let lines = LineBreaker.breakLines options items
+
+        lines.Length |> shouldEqual 1
+        lines.[0].Start |> shouldEqual 0
+        lines.[0].End |> shouldEqual items.Length
+        System.Double.IsNegativeInfinity lines.[0].AdjustmentRatio |> shouldEqual true
+
+    [<Test>]
+    let ``Forced break allows overfull line with limited shrink`` () =
+        // Overfull, but some shrink exists. Ratio should be < -1 and the break should still be accepted.
+        let items = [| Items.box 80.0 ; Items.glue 0.0 0.0 5.0 ; Items.forcedBreak () |]
+
+        let options = LineBreakOptions.Default 50.0
+
+        let lines = LineBreaker.breakLines options items
+
+        lines.Length |> shouldEqual 1
+        lines.[0].Start |> shouldEqual 0
+        lines.[0].End |> shouldEqual items.Length
+        lines.[0].AdjustmentRatio |> shouldBeSmallerThan -1.0
+
+    [<Test>]
+    let ``Overfull without forced break still fails`` () =
+        // Same geometry as the forced-break test, but no forced break: should still throw.
+        let items = [| Items.box 80.0 ; Items.glue 0.0 0.0 5.0 |]
+
+        let options = LineBreakOptions.Default 50.0
+
+        Assert.Throws<System.Exception> (fun () -> LineBreaker.breakLines options items |> ignore)
+        |> ignore
+
+    [<Test>]
+    let ``Mid-paragraph forced break survives overfull first line`` () =
+        // First line is overfull; forced break comes later. Ensure we still produce two lines.
+        let items =
+            [|
+                Items.box 80.0
+                Items.glue 0.0 0.0 5.0
+                Items.box 10.0
+                Items.forcedBreak ()
+                Items.box 10.0
+            |]
+
+        let options = LineBreakOptions.Default 50.0
+
+        let lines = LineBreaker.breakLines options items
+
+        lines.Length |> shouldEqual 2
+        lines.[0].Start |> shouldEqual 0
+        lines.[0].End |> shouldEqual 4
+        lines.[1].Start |> shouldEqual 4
+        lines.[1].End |> shouldEqual 5
+
+    [<Test>]
     let ``Multiple forced breaks create multiple lines`` () =
         let items =
             [|

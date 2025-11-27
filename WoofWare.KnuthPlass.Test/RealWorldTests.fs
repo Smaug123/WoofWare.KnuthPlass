@@ -24,8 +24,7 @@ module RealWorldTests =
 
             for i in line.Start .. line.End - 1 do
                 match items.[i] with
-                | Box b ->
-                    width <- width + b.Width
+                | Box b -> width <- width + b.Width
                 | Glue g ->
                     width <- width + g.Width
                     stretch <- stretch + g.Stretch
@@ -50,8 +49,7 @@ module RealWorldTests =
             adjustedWidth <= options.LineWidth + 1e-6
 
         lines
-        |> Array.iteri (fun idx line ->
-            Assert.That(lineFits line, $"Line {idx} exceeds width {bounds.LineWidth}"))
+        |> Array.iteri (fun idx line -> Assert.That (lineFits line, $"Line {idx} exceeds width {bounds.LineWidth}"))
 
     [<Test>]
     let ``Format a typical paragraph`` () =
@@ -124,7 +122,11 @@ dog."
             |> fun s -> s.Replace("\r", "").Replace ("\n", " ")
 
         for i = 20 to 80 do
-            assertLayoutWithinBounds { LineWidth = float i } text
+            assertLayoutWithinBounds
+                {
+                    LineWidth = float i
+                }
+                text
 
 
     [<Test>]
