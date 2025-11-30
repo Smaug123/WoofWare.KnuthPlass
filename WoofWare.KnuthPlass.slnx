@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="WoofWare.KnuthPlass.Test/WoofWare.KnuthPlass.Test.fsproj" />
+  <Project Path="WoofWare.KnuthPlass/WoofWare.KnuthPlass.fsproj" />
+</Solution>
