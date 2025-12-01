@@ -114,18 +114,28 @@ module PenaltyTests =
         //
         // With high FinalHyphenDemerits, strategy B should be strongly preferred.
 
+        // CORRECTED FOR PROPER TEX GLUE HANDLING AND TOLERANCE CUTOFF:
+        // Key insight: Breaking AT a glue excludes that glue (no stretch) → badness = inf_bad → rejected by TeX.
+        // Solution: Non-hyphenated break must be at a PENALTY (not glue) to preserve stretch.
+        //
+        // Setup: Box + Glue + Penalty (non-hyphen break) vs. Box + Glue + Hyphen (hyphen break)
+        // Both are viable, but FinalHyphenDemerits should determine which is chosen.
+        //
+        // TeX semantics for Line.End: When breaking at penalty index i, the penalty is consumed by the break,
+        // and End points to the first item of the next line (i+1), not the break point itself.
         let items =
             [|
-                Items.box 50.0 // word1
-                Items.glue 10.0 5.0 3.0
+                Items.box 55.0 // word1
+                Items.glue 10.0 15.0 3.0
+                Items.penalty 0.0 0.0 false // NON-FLAGGED penalty for non-hyphen break (NEW!)
                 Items.box 12.0 // "hy"
-                Items.penalty 3.0 50.0 true // optional hyphen (adds "-" width 3.0 if break here)
+                Items.penalty 3.0 50.0 true // optional hyphen (FLAGGED)
                 Items.box 13.0 // "phen"
-                Items.glue 10.0 5.0 3.0
+                Items.glue 10.0 17.0 3.0 // Increased stretch from 5.0 to 17.0 so second line is viable (ratio=1.0, badness=100)
                 Items.box 40.0 // word2
             |]
 
-        // Keep tolerance extremely high so that this test focuses solely on
+        // Keep tolerance high so that this test focuses solely on
         // the FinalHyphenDemerits behaviour rather than tolerance penalties.
         let baseOptions =
             { LineBreakOptions.Default 80.0 with
@@ -159,10 +169,10 @@ module PenaltyTests =
         // With the fix: they should differ.
         linesLowPenalty |> shouldNotEqual linesHighPenalty
 
-        // Specifically, the low penalty version should break at the hyphen (position 4)
-        // giving a near-perfect first line
-        linesLowPenalty.[0].End |> shouldEqual 4
+        // Specifically, the low penalty version should break at the hyphen (penalty at position 4).
+        // End points to the first item of the next line (after consuming the penalty), so End=5.
+        linesLowPenalty.[0].End |> shouldEqual 5
 
-        // While the high penalty version should break after the first glue (position 2)
-        // to avoid ending with a hyphen
-        linesHighPenalty.[0].End |> shouldEqual 2
+        // While the high penalty version should break at the non-flagged penalty (position 2)
+        // to avoid ending with a flagged hyphen. End points to first item of next line, so End=3.
+        linesHighPenalty.[0].End |> shouldEqual 3

@@ -51,10 +51,14 @@ module BugReproductionTests =
 
         // Target: 10.0. Tolerance: 1.0.
         // Line 1 (0 to 4): Content width 2.0. Shortfall 8.0. Stretch 1.0. Ratio 8.0. Badness 51,200.
-        let options = { LineBreakOptions.Default 10.0 with Tolerance = 1.0 }
+        let options =
+            { LineBreakOptions.Default 10.0 with
+                Tolerance = 1.0
+            }
 
         // TeX would reject the paragraph: the only candidate is beyond tolerance.
-        Assert.Throws<System.Exception> (fun () -> LineBreaker.breakLines options items |> ignore) |> ignore
+        Assert.Throws<System.Exception> (fun () -> LineBreaker.breakLines options items |> ignore)
+        |> ignore
 
     // 4. Incorrect "Flagged" Penalty Demerits
     [<Test>]
