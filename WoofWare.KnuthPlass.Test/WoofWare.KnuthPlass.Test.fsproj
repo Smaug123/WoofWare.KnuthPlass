@@ -19,6 +19,7 @@
     <Compile Include="TestPerformance.fs" />
     <Compile Include="TestSurface.fs" />
     <Compile Include="ToleranceTests.fs"/>
+    <Compile Include="TexComplianceTests.fs"/>
     <EmbeddedResource Include="publicdomain/*" />
   </ItemGroup>
 
