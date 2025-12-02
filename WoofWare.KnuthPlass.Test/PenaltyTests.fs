@@ -46,57 +46,56 @@ module PenaltyTests =
 
     [<Test>]
     let ``Negative penalties should reduce demerits and encourage breaks`` () =
-        // This test verifies that negative penalties correctly encourage breaks.
+        // This test verifies that negative penalties correctly encourage breaks per TeX semantics.
+        // TeX demerits formula (tex.web 16901-16908):
+        // - Positive penalty P ≥ 0: (L + P)²
+        // - Negative penalty P < 0: L² - P²
         //
-        // Bug context: The current implementation uses `abs penaltyCost` which
-        // incorrectly treats negative penalties (which should encourage breaks)
-        // as positive penalties (which discourage breaks).
+        // Setup: Create two competing FEASIBLE breaks where the penalty sign determines choice.
+        // - Break A (at first penalty with cost 0): Moderately loose line, no penalty cost
+        // - Break B (at second penalty with signed cost): Slightly tighter line, with signed penalty
         //
-        // Test design: Create two similar break opportunities where one has a
-        // strong negative penalty. The negative penalty should make that break
-        // more attractive, resulting in a different breaking strategy than if
-        // the penalty were absent or positive.
+        // With negative penalty, the L² - P² formula makes Break B attractive.
+        // With positive penalty, the (L + P)² formula makes Break A preferable.
 
-        let itemsWithNegativePenalty =
+        let makeItems penaltyCost =
             [|
-                Items.box 25.0
-                Items.glue 10.0 5.0 3.0
-                Items.box 25.0
-                Items.penalty 0.0 -500.0 false // Strong negative penalty: ENCOURAGES breaking
-                Items.glue 10.0 5.0 3.0
-                Items.box 25.0
-                Items.glue 10.0 5.0 3.0
-                Items.box 25.0
+                Items.box 60.0
+                Items.glue 15.0 20.0 5.0
+
+                // Break A: loose line but no penalty cost
+                Items.box 5.0
+                Items.penalty 0.0 0.0 false // Zero-cost break
+
+                // Break B: tighter line but with signed penalty cost
+                Items.box 10.0
+                Items.penalty 0.0 penaltyCost false // Signed penalty
+
+                // Second line
+                Items.box 30.0
+                Items.glue 10.0 50.0 5.0
+                Items.box 40.0
             |]
 
-        let itemsWithPositivePenalty =
-            [|
-                Items.box 25.0
-                Items.glue 10.0 5.0 3.0
-                Items.box 25.0
-                Items.penalty 0.0 500.0 false // Positive penalty: discourages breaking
-                Items.glue 10.0 5.0 3.0
-                Items.box 25.0
-                Items.glue 10.0 5.0 3.0
-                Items.box 25.0
-            |]
+        let options =
+            { LineBreakOptions.Default 100.0 with
+                Tolerance = 500.0 // High enough that both breaks are feasible
+            }
 
-        let options = LineBreakOptions.Default 70.0
+        let linesWithNegative = LineBreaker.breakLines options (makeItems -100.0)
+        let linesWithPositive = LineBreaker.breakLines options (makeItems 100.0)
 
-        let linesWithNegative = LineBreaker.breakLines options itemsWithNegativePenalty
-        let linesWithPositive = LineBreaker.breakLines options itemsWithPositivePenalty
-
-        // The negative penalty should encourage a break at that location,
-        // potentially resulting in a different number of lines or different
-        // break positions compared to the positive penalty case.
-        //
-        // At minimum, both should successfully break (not fail)
+        // Both should successfully break
         linesWithNegative.Length |> shouldBeGreaterThan 0
         linesWithPositive.Length |> shouldBeGreaterThan 0
 
-        // The key test: negative and positive penalties should produce different results
-        // If the bug exists (negative treated as positive), they might produce the same result
-        linesWithNegative |> shouldNotEqual linesWithPositive
+        // The negative penalty should encourage breaking at the second penalty (End=6)
+        // because L² - (-100)² = L² - 10000 provides strong negative demerits.
+        linesWithNegative.[0].End |> shouldEqual 6
+
+        // The positive penalty should discourage breaking at the second penalty,
+        // preferring the first zero-cost penalty (End=4) because (L + 100)² is very high.
+        linesWithPositive.[0].End |> shouldEqual 4
 
     [<Test>]
     let ``Final hyphen demerits prevents paragraph ending with hyphen`` () =
@@ -114,24 +113,25 @@ module PenaltyTests =
         //
         // With high FinalHyphenDemerits, strategy B should be strongly preferred.
 
-        // CORRECTED FOR PROPER TEX GLUE HANDLING AND TOLERANCE CUTOFF:
-        // Key insight: Breaking AT a glue excludes that glue (no stretch) → badness = inf_bad → rejected by TeX.
-        // Solution: Non-hyphenated break must be at a PENALTY (not glue) to preserve stretch.
+        // CORRECTED: Adjusted glue stretch values to create scenario where FinalHyphenDemerits affects choice.
         //
-        // Setup: Box + Glue + Penalty (non-hyphen break) vs. Box + Glue + Hyphen (hyphen break)
-        // Both are viable, but FinalHyphenDemerits should determine which is chosen.
+        // Setup: Two competing break positions:
+        // - Position 3 (non-flagged penalty): Mediocre first line (badness~100), excellent second line (badness~1.7)
+        //   Total demerits: ~10,201 + ~7 = ~10,208
+        // - Position 5 (flagged hyphen): Perfect first line (badness=0), decent second line (badness~31)
+        //   Total demerits: ~2,601 + ~1,024 + FinalHyphenDemerits
         //
-        // TeX semantics for Line.End: When breaking at penalty index i, the penalty is consumed by the break,
-        // and End points to the first item of the next line (i+1), not the break point itself.
+        // With FinalHyphenDemerits=0: Position 5 wins (~3,625 < ~10,208)
+        // With FinalHyphenDemerits=50,000,000: Position 3 wins (~10,208 < ~50,003,625)
         let items =
             [|
                 Items.box 55.0 // word1
                 Items.glue 10.0 15.0 3.0
-                Items.penalty 0.0 0.0 false // NON-FLAGGED penalty for non-hyphen break (NEW!)
+                Items.penalty 0.0 0.0 false // NON-FLAGGED penalty for non-hyphen break
                 Items.box 12.0 // "hy"
-                Items.penalty 3.0 50.0 true // optional hyphen (FLAGGED)
+                Items.penalty 3.0 50.0 true // optional hyphen (FLAGGED) - width 3 represents hyphen width
                 Items.box 13.0 // "phen"
-                Items.glue 10.0 17.0 3.0 // Increased stretch from 5.0 to 17.0 so second line is viable (ratio=1.0, badness=100)
+                Items.glue 10.0 25.0 3.0 // Increased stretch from 17 to 25 - makes second line better when breaking at hyphen
                 Items.box 40.0 // word2
             |]
 
@@ -143,7 +143,7 @@ module PenaltyTests =
             }
 
         // With low FinalHyphenDemerits, the algorithm chooses the hyphenated version
-        // since it gives a better first line (50 + 10 + 12 + 3 = 75, close to 80)
+        // since it gives a perfect first line (55 + 10 + 12 + 3 = 80) and decent second line
         let optionsLowPenalty =
             { baseOptions with
                 FinalHyphenDemerits = 0.0
@@ -152,7 +152,7 @@ module PenaltyTests =
         let linesLowPenalty = LineBreaker.breakLines optionsLowPenalty items
 
         // With high FinalHyphenDemerits, the algorithm should avoid the hyphenated version
-        // and instead break after the first glue, even though it's a worse fit
+        // and instead break at the non-flagged penalty to avoid the massive penalty
         let optionsHighPenalty =
             { baseOptions with
                 FinalHyphenDemerits = 50000000.0
@@ -164,15 +164,13 @@ module PenaltyTests =
         linesLowPenalty.Length |> shouldBeGreaterThan 0
         linesHighPenalty.Length |> shouldBeGreaterThan 0
 
-        // With the bug: both produce the same result (likely the hyphenated version)
-        // because FinalHyphenDemerits is never applied.
-        // With the fix: they should differ.
+        // The key test: FinalHyphenDemerits should determine which break is chosen
         linesLowPenalty |> shouldNotEqual linesHighPenalty
 
-        // Specifically, the low penalty version should break at the hyphen (penalty at position 4).
+        // With low penalty: break at the hyphen (position 5) for perfect first line fit
         // End points to the first item of the next line (after consuming the penalty), so End=5.
         linesLowPenalty.[0].End |> shouldEqual 5
 
-        // While the high penalty version should break at the non-flagged penalty (position 2)
-        // to avoid ending with a flagged hyphen. End points to first item of next line, so End=3.
+        // With high penalty: break at the non-flagged penalty (position 3) to avoid the hyphen penalty
+        // End points to first item of next line, so End=3.
         linesHighPenalty.[0].End |> shouldEqual 3
