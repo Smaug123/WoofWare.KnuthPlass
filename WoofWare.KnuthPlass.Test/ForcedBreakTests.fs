@@ -57,7 +57,8 @@ module ForcedBreakTests =
 
     [<Test>]
     let ``Forced break allows overfull line with limited shrink`` () =
-        // Overfull, but some shrink exists. Ratio should be < -1 and the break should still be accepted.
+        // Overfull, but some shrink exists. TeX clamps glue_set to 1.0, so ratio = -1.0.
+        // The key point is that the break is ACCEPTED (explicit forced break allows overfull).
         let items = [| Items.box 80.0 ; Items.glue 0.0 0.0 5.0 ; Items.forcedBreak () |]
 
         let options = LineBreakOptions.Default 50.0
@@ -67,7 +68,8 @@ module ForcedBreakTests =
         lines.Length |> shouldEqual 1
         lines.[0].Start |> shouldEqual 0
         lines.[0].End |> shouldEqual items.Length
-        lines.[0].AdjustmentRatio |> shouldBeSmallerThan -1.0
+        // Ratio is clamped to -1.0 for overfull lines with available shrink (tex.web:17017-17023)
+        lines.[0].AdjustmentRatio |> shouldEqual -1.0
 
     [<Test>]
     let ``Overfull without forced break still fails`` () =
