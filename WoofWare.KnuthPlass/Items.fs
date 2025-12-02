@@ -105,12 +105,26 @@ module Items =
                 yield box (wordWidth finalPart)
             ]
 
+    let defaultGlue (width : float) : Glue =
+        {
+            Width = width
+            Stretch = width * 0.5
+            Shrink = width / 3.0
+        }
+
+    let monospaceGlue : Glue =
+        {
+            Width = 1.0
+            Stretch = 0.1
+            Shrink = 0.0
+        }
+
     /// Converts a simple string into a list of items (boxes for words, glue for spaces, forced breaks for newlines).
     /// Optionally supports hyphenation by providing a function that returns valid hyphenation indices for each word.
     /// Hyphenation follows TeX conventions: penalty items are flagged and have the specified cost.
     let fromString
         (wordWidth : string -> float)
-        (spaceWidth : float)
+        (spaceWidth : Glue)
         (getHyphenationPoints : string -> int list)
         (hyphenPenalty : float)
         (text : string)
@@ -131,7 +145,7 @@ module Items =
 
                 // Add glue between words (but not after the last word in the paragraph)
                 if j < words.Length - 1 then
-                    glue spaceWidth (spaceWidth * 0.5) (spaceWidth * 0.333) |> arr.Add
+                    arr.Add (Glue spaceWidth)
 
             // End each paragraph with infinite-stretch glue and forced break
             glue 0.0 infinity 0.0 |> arr.Add
@@ -142,4 +156,4 @@ module Items =
     /// Converts a simple string into a list of items (boxes for words, glue for spaces, forced breaks for newlines).
     /// Uses simple English hyphenation rules.
     let fromEnglishString (wordWidth : string -> float) (spaceWidth : float) (text : string) : Item[] =
-        fromString wordWidth spaceWidth Hyphenation.simpleEnglish Hyphenation.DEFAULT_PENALTY text
+        fromString wordWidth (defaultGlue spaceWidth) Hyphenation.simpleEnglish Hyphenation.DEFAULT_PENALTY text

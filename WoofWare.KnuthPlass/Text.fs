@@ -24,9 +24,9 @@ module Text =
     /// This method can throw! If your constraints are impossible to satisfy (e.g. a word admits no hyphenation,
     /// and is longer than the available width), we throw.
     let format
-        (lineWidth : float)
+        (options : LineBreakOptions)
         (wordWidth : string -> float)
-        (spaceWidth : float)
+        (spaceWidth : Glue)
         (hyphenPenalty : float)
         (getHyphenationPoints : string -> int list)
         (text : string)
@@ -46,7 +46,6 @@ module Text =
             let items =
                 Items.fromString wordWidth spaceWidth getHyphenationPoints hyphenPenalty text
 
-            let options = LineBreakOptions.Default lineWidth
             let lines = LineBreaker.breakLines options items
 
             // Pre-compute word parts based on hyphenation points
@@ -156,4 +155,10 @@ module Text =
     /// This method can throw! If your constraints are impossible to satisfy (e.g. a word admits no hyphenation,
     /// and is longer than the available width), we throw.
     let formatEnglish (lineWidth : float) (text : string) : string =
-        format lineWidth defaultWordWidth SPACE_WIDTH Hyphenation.DEFAULT_PENALTY Hyphenation.simpleEnglish text
+        format
+            (LineBreakOptions.Default lineWidth)
+            defaultWordWidth
+            (Items.defaultGlue SPACE_WIDTH)
+            Hyphenation.DEFAULT_PENALTY
+            Hyphenation.simpleEnglish
+            text

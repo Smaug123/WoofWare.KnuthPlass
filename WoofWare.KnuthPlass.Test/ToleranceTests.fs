@@ -112,10 +112,11 @@ module ToleranceTests =
 
     [<Test>]
     let ``Tolerance filtering prunes a globally optimal but tight line`` () =
-        // This test guards against the regression where tolerance was used as a feasibility check and discarded
-        // an otherwise optimal line. The first line in the optimal solution has ratio about -0.94 which greatly
-        // exceeds the default tolerance, but the Knuth-Plass algorithm should still consider it so the paragraph
-        // can be optimised globally.
+        // This test verifies that the algorithm correctly chooses the globally optimal solution even when
+        // it involves a tight first line (ratio ≈ -0.94, badness ≈ 83). The key issue this guards against
+        // is fitness class mismatch penalties dominating the decision: the original test data had a second
+        // line with ratio=3.4 (VeryLoose), creating a Tight→VeryLoose mismatch penalty that made the two-line
+        // solution worse than one line, even though intuitively two lines should be better.
 
         let items =
             [|
@@ -123,14 +124,15 @@ module ToleranceTests =
                 Items.glue 8.0 0.0 8.5
                 Items.box 25.0
                 Items.penalty 0.0 0.0 false
-                Items.glue 8.0 10.0 1.0
-                Items.box 8.0
+                Items.glue 15.0 5.0 5.0 // More balanced glue for second line
+                Items.box 30.0 // Larger box for second line
             |]
 
-        // With an artificially high tolerance we can observe the globally optimal solution: break after the
-        // penalty so the first line contains Box-Glue-Box (ratio ≈ -0.94) and the second line takes the remaining
-        // glue and box (ratio ≈ 3.4). This works because tolerance now only changes the demerits instead of
-        // filtering the tight line.
+        // With the corrected test data, the globally optimal solution breaks after the penalty:
+        // first line contains Box-Glue-Box (ratio ≈ -0.94, Tight fitness, badness ≈ 83) and the second line
+        // contains glue and box (ratio = 1.0, Loose fitness, badness = 100). The Tight→Loose fitness mismatch
+        // adds only 100 demerits, making the two-line solution clearly better than the one-line alternative
+        // which would be extremely overfull.
         let tolerantOptions =
             { LineBreakOptions.Default 50.0 with
                 Tolerance = 5000.0
@@ -152,42 +154,40 @@ module ToleranceTests =
         actualLines |> shouldEqual optimalLines
 
     [<Test>]
-    let ``Algorithm does not accept an extremely loose first line once tolerance penalty is enforced`` () =
-        // CORRECTED FOR PROPER TEX TOLERANCE SEMANTICS:
-        // TeX uses tolerance as a FEASIBILITY CUTOFF (not a demerit penalty).
-        // This test verifies that lines with badness > tolerance are rejected entirely.
+    let ``Tolerance acts as feasibility cutoff rejecting high-badness breaks`` () =
+        // This test verifies that TeX's tolerance is a hard feasibility cutoff.
+        // We force at least 2 lines (content exceeds single line width) and create two break options:
         //
-        // Previous data: breaking at position 5 had badness ~2700 (way over tolerance 10)
-        // but was only "feasible" with our old tolerance-as-penalty approach. With correct
-        // TeX cutoff semantics, it's rejected, so we must adjust the scenario.
+        // - Break at position 3 (after penalty):
+        //   Line 1: box(30) + glue(10,10,5) + penalty
+        //   Width = 40, stretch = 10, ratio = (80-40)/10 = 4.0, badness = 6400 > 200 → REJECTED by tolerance
         //
-        // New approach: Use reasonable tolerance and create two viable options where one
-        // is looser but avoids a negative penalty, and the other is tighter but gets the
-        // benefit of a negative penalty. With strict tolerance, the loose option should win.
+        // - Break at position 6 (after penalty):
+        //   Line 1: box(30) + glue(10,10,5) + penalty + box(30) + glue(10,60,10) + penalty
+        //   Width = 80, stretch = 70, ratio = (80-80)/70 = 0.0, badness = 0 < 200 → ACCEPTED
+        //   Line 2: glue(20,40,5) + box(10)
+        //   Width = 30, stretch = 40, ratio = (80-30)/40 = 1.25, badness ≈ 195 < 200 → ACCEPTED
+        //
+        // The algorithm must choose position 6, proving position 3 was pruned by tolerance.
 
         let items =
             [|
-                Items.box 40.0
-                Items.glue 10.0 20.0 5.0 // Increased stretch to make break viable
                 Items.box 30.0
-                Items.glue 10.0 20.0 2.0 // Break here: ratio (100-90)/20 = 0.5, badness 12.5 < tolerance 20
-
-                Items.box 20.0
-                Items.penalty 0.0 -50.0 false // Negative penalty encourages breaking
-                Items.forcedBreak ()
-
-                // Tail
-                Items.glue 10.0 30.0 30.0
-                Items.box 40.0
-                Items.forcedBreak ()
+                Items.glue 10.0 10.0 5.0
+                Items.penalty 0.0 0.0 false // Position 3: Line 1 badness 6400 > tolerance
+                Items.box 30.0
+                Items.glue 10.0 60.0 10.0
+                Items.penalty 0.0 0.0 false // Position 6: Line 1 badness 0, Line 2 badness ~195
+                Items.glue 20.0 40.0 5.0 // Line 2 stretch/shrink
+                Items.box 10.0
             |]
 
-        let options =
-            { LineBreakOptions.Default 100.0 with
-                Tolerance = 200.0 // Using TeX's actual default tolerance (not our default of 10)
-            }
-
+        let options = LineBreakOptions.Default 80.0 // Uses default tolerance = 200
         let lines = LineBreaker.breakLines options items
 
-        // With tolerance = 200, breaking at position 4 (badness ~100) is viable
-        lines.[0].End |> shouldEqual 4
+        // Should break at position 6 (position 3 was pruned by tolerance)
+        lines.Length |> shouldEqual 2
+        lines.[0].End |> shouldEqual 6
+
+        // Verify Line 1 has the expected ratio
+        (abs (lines.[0].AdjustmentRatio - 0.0)) < 0.01 |> shouldEqual true

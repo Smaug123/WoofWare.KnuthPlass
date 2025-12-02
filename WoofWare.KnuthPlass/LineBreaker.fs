@@ -82,20 +82,11 @@ type private ActiveEntry =
 /// The module holding the heart of the Knuth-Plass algorithm.
 [<RequireQualifiedAccess>]
 module LineBreaker =
-    /// A very large adjustment ratio used when a line is underfull (too short) but has no glue
-    /// to stretch. This value ensures the line gets categorized as VeryLoose with high badness,
-    /// making it an unattractive but still feasible breaking option. This is used when we must
-    /// represent extreme looseness in the algorithm's dynamic programming calculations.
-    [<Literal>]
-    let private extremeLooseRatio = 1000.0
 
-    /// Maximum excess tolerance value to prevent overflow when computing the quadratic penalty
-    /// (excess * excess) for tolerance violations. This cap ensures that extremely bad lines
-    /// still receive severe penalties without causing numerical overflow or producing demerits
-    /// values so large they dominate all other algorithmic considerations. With this cap, the
-    /// maximum penalty contribution from tolerance violations is maxExcessTolerance^2.
-    [<Literal>]
-    let private maxExcessTolerance = 10000.0
+    /// Special sentinel ratio value indicating that a line has no glue available to stretch.
+    /// This signals to badness() that it should return infBad directly (matching TeX's behavior
+    /// when s <= 0). We use infinity as a sentinel since it's never a valid adjustment ratio.
+    let private noStretchRatio = infinity
 
     let private computeCumulativeSums (items : Item[]) : CumulativeSums =
         let n = items.Length
@@ -122,7 +113,10 @@ module LineBreaker =
             Shrink = shrink
         }
 
-    /// Compute adjustment ratio for a line from startIdx to endIdx
+    /// Compute adjustment ratio for a line from startIdx to endIdx.
+    /// This is used during the algorithm to decide which breaks are optimal.
+    /// Following TeX's approach, we exclude trailing glue but NOT leading glue here.
+    /// Leading glue is only pruned later when displaying/building actual lines.
     let private computeAdjustmentRatio
         (itemsArray : Item array)
         (sums : CumulativeSums)
@@ -135,9 +129,18 @@ module LineBreaker =
         let mutable totalStretch = sums.Stretch.[endIdx] - sums.Stretch.[startIdx]
         let mutable totalShrink = sums.Shrink.[endIdx] - sums.Shrink.[startIdx]
 
+        // Exclude trailing glue: if we're breaking right after a glue at endIdx-1,
+        // that glue should not contribute to this line's width (TeX behavior: glue
+        // is added to active_width AFTER try_break)
         if endIdx > 0 && endIdx <= itemsArray.Length then
             match itemsArray.[endIdx - 1] with
-            | Penalty p -> actualWidth <- actualWidth + p.Width
+            | Glue g ->
+                actualWidth <- actualWidth - g.Width
+                totalStretch <- totalStretch - g.Stretch
+                totalShrink <- totalShrink - g.Shrink
+            | Penalty p ->
+                // Penalty width IS included (e.g., hyphen width)
+                actualWidth <- actualWidth + p.Width
             | _ -> ()
 
         let diff = lineWidth - actualWidth
@@ -149,10 +152,9 @@ module LineBreaker =
             if totalStretch > 0.0 then
                 ValueSome (diff / totalStretch)
             else
-                // No glue to stretch, but line is underfull
-                // Return a very large ratio to indicate extreme looseness
-                // This ensures the line gets categorized as VeryLoose with high badness
-                ValueSome extremeLooseRatio
+                // No glue to stretch - return sentinel that makes badness = inf_bad
+                // (matches TeX's behavior when s <= 0 in tex.web:16110)
+                ValueSome noStretchRatio
         // Line is too long, need to compress
         else if totalShrink > 0.0 then
             ValueSome (diff / totalShrink)
@@ -161,7 +163,7 @@ module LineBreaker =
             ValueNone
 
     /// Once a layout has been chosen we display the per-line ratio as TeX would perceive it,
-    /// which means discarding any trailing glue at the breakpoint.
+    /// which means discarding any trailing glue at the breakpoint and leading glue at the start.
     let private computeDisplayedAdjustmentRatio
         (itemsArray : Item array)
         (sums : CumulativeSums)
@@ -174,6 +176,7 @@ module LineBreaker =
         let mutable totalStretch = sums.Stretch.[endIdx] - sums.Stretch.[startIdx]
         let mutable totalShrink = sums.Shrink.[endIdx] - sums.Shrink.[startIdx]
 
+        // Exclude trailing glue
         if endIdx > 0 && endIdx <= itemsArray.Length then
             match itemsArray.[endIdx - 1] with
             | Glue g ->
@@ -183,6 +186,19 @@ module LineBreaker =
             | Penalty p -> actualWidth <- actualWidth + p.Width
             | _ -> ()
 
+        // Exclude leading discardable items
+        let mutable idx = startIdx
+
+        while idx < endIdx && idx < itemsArray.Length do
+            match itemsArray.[idx] with
+            | Glue g ->
+                actualWidth <- actualWidth - g.Width
+                totalStretch <- totalStretch - g.Stretch
+                totalShrink <- totalShrink - g.Shrink
+                idx <- idx + 1
+            | Penalty _ -> idx <- idx + 1
+            | _ -> idx <- endIdx
+
         let diff = lineWidth - actualWidth
 
         if abs diff < 1e-10 then
@@ -191,7 +207,7 @@ module LineBreaker =
             if totalStretch > 0.0 then
                 diff / totalStretch
             else
-                extremeLooseRatio
+                noStretchRatio
         else if totalShrink > 0.0 then
             diff / totalShrink
         else
@@ -204,8 +220,15 @@ module LineBreaker =
         else FitnessClass.VeryLoose
 
     let inline private badness (ratio : float) : float =
-        let r = abs ratio
-        100.0 * (r ** 3.0)
+        // Following TeX's badness function (tex.web:16108-16118):
+        // - If no stretch/shrink available (signaled by noStretchRatio sentinel): return inf_bad
+        // - If ratio too extreme: cap at inf_bad
+        // - Otherwise: compute as 100 * ratio³
+        if ratio = noStretchRatio || ratio = -noStretchRatio then
+            LineBreakOptions.infBad
+        else
+            let r = abs ratio
+            min (100.0 * (r ** 3.0)) LineBreakOptions.infBad
 
     let private computeDemerits
         (options : LineBreakOptions)
@@ -225,6 +248,8 @@ module LineBreaker =
         // - Forced breaks (penalty -infinity): use L² only
         // - Positive penalties P ≥ 0: use (L + P)²
         // - Negative penalties P < 0: use L² - P² (encourages breaking)
+        // Note: Tolerance is now enforced as a feasibility cutoff (TeX behavior),
+        // not as a demerit penalty, so we don't add any tolerance-based penalty here.
         let mutable demerits =
             if penaltyCost = -infinity then
                 linePenalty * linePenalty
@@ -234,16 +259,6 @@ module LineBreaker =
             else
                 // Negative penalty reduces demerits
                 (linePenalty * linePenalty) - (penaltyCost * penaltyCost)
-
-        // Tolerance violation penalty: when badness exceeds the allowed tolerance,
-        // apply a quadratic penalty (badness - tolerance)^2 to strongly discourage
-        // extreme lines. This penalty grows rapidly with increasing violations,
-        // making grossly over/under-full lines significantly less attractive than
-        // slightly over-tolerance lines, even if other penalties would otherwise
-        // favor them.
-        if bad > options.Tolerance then
-            let excess = min (bad - options.Tolerance) maxExcessTolerance
-            demerits <- demerits + (excess * excess)
 
         // Penalty for consecutive flagged breaks (double hyphen)
         if prevWasFlagged && currIsFlagged then
@@ -290,7 +305,10 @@ module LineBreaker =
             false
 
     let private getPenaltyAt (itemsArray : Item array) (idx : int) : float * bool =
-        if idx > 0 && idx <= itemsArray.Length then
+        if idx >= itemsArray.Length then
+            // End of paragraph - implicit forced break (TeX behavior)
+            -infinity, false
+        elif idx > 0 then
             match itemsArray.[idx - 1] with
             | Penalty p -> p.Cost, p.Flagged
             | _ -> 0.0, false
@@ -323,7 +341,10 @@ module LineBreaker =
             // than an outright failure).
             let forcedBreakAhead : bool[] =
                 let arr = Array.zeroCreate (n + 1)
-                let mutable seen = false
+                // Track if there's a forced break at or after each position (including implicit paragraph end).
+                // This is used to decide whether to keep overfull nodes alive.
+                arr.[n] <- true // Implicit end-of-paragraph forced break
+                let mutable seen = true
 
                 for idx = n - 1 downto 0 do
                     let isForced =
@@ -491,32 +512,46 @@ module LineBreaker =
             // Seed the active list with the start node
             appendActiveEntryForNode 0 0
 
-            let inline computeRatioFromTriple (widthTriple : WidthTriple) (endIdx : int) =
-                let penaltyWidth =
-                    if endIdx > 0 && endIdx <= items.Length then
-                        match items.[endIdx - 1] with
-                        | Penalty p -> p.Width
-                        | _ -> 0.0
-                    else
-                        0.0
+            let inline computeRatioFromTriple (widthTriple : WidthTriple) (startIdx : int) (endIdx : int) =
+                // Start with the raw width from cumulative sums
+                let mutable adjustedWidth = widthTriple.Width
+                let mutable adjustedStretch = widthTriple.Stretch
+                let mutable adjustedShrink = widthTriple.Shrink
 
-                let actualWidth = widthTriple.Width + penaltyWidth
-                let diff = options.LineWidth - actualWidth
+                // Exclude trailing glue: if we're breaking right after a glue at endIdx-1,
+                // that glue should not contribute to this line's width (TeX behavior: glue
+                // is added to active_width AFTER try_break is called)
+                //
+                // Note: We do NOT exclude leading glue here. That only happens later when
+                // displaying/building actual lines (in post_line_break). During the algorithm,
+                // TeX uses the full cumulative width to decide which breaks are optimal.
+                if endIdx > 0 && endIdx <= items.Length then
+                    match items.[endIdx - 1] with
+                    | Glue g ->
+                        adjustedWidth <- adjustedWidth - g.Width
+                        adjustedStretch <- adjustedStretch - g.Stretch
+                        adjustedShrink <- adjustedShrink - g.Shrink
+                    | Penalty p ->
+                        // Penalty width IS included (e.g., hyphen width)
+                        adjustedWidth <- adjustedWidth + p.Width
+                    | _ -> ()
+
+                let diff = options.LineWidth - adjustedWidth
 
                 let ratio =
                     if abs diff < 1e-10 then
                         ValueSome 0.0
                     elif diff > 0.0 then
-                        if widthTriple.Stretch > 0.0 then
-                            ValueSome (diff / widthTriple.Stretch)
+                        if adjustedStretch > 0.0 then
+                            ValueSome (diff / adjustedStretch)
                         else
-                            ValueSome extremeLooseRatio
-                    elif widthTriple.Shrink > 0.0 then
-                        ValueSome (diff / widthTriple.Shrink)
+                            ValueSome noStretchRatio
+                    elif adjustedShrink > 0.0 then
+                        ValueSome (diff / adjustedShrink)
                     else
                         ValueNone
 
-                ratio, actualWidth
+                ratio, adjustedWidth
 
             // For each position, find the best predecessor
             for i in 1..n do
@@ -527,6 +562,14 @@ module LineBreaker =
                 if isValidBreakpoint items i then
                     let penaltyCost, isFlagged = getPenaltyAt items i
                     let isForced = penaltyCost = -infinity
+                    // Check if this is an explicit forced break (penalty item) vs implicit paragraph end
+                    let isExplicitForcedBreak =
+                        isForced
+                        && i > 0
+                        && i <= items.Length
+                        && match items.[i - 1] with
+                           | Penalty p -> p.Cost = -infinity
+                           | _ -> false
 
                     let pendingNodes : PendingCandidate option array = Array.create 4 None
                     let nodesToDeactivate = System.Collections.Generic.HashSet<int> ()
@@ -549,14 +592,16 @@ module LineBreaker =
                             let prevNode = nodes.[prevNodeIdx]
                             let prevPos = prevNode.Position
 
-                            let ratioResult, actualWidth = computeRatioFromTriple curActiveWidth i
+                            let ratioResult, actualWidth = computeRatioFromTriple curActiveWidth prevPos i
                             let overfullAmount = max 0.0 (actualWidth - options.LineWidth)
                             let totalShrinkAvailable = sums.Shrink.[n] - sums.Shrink.[prevPos]
                             let canEverFit = overfullAmount <= totalShrinkAvailable + 1e-9
                             let forcedBreakInTail = forcedBreakAhead.[prevPos]
 
                             match ratioResult with
-                            | ValueSome ratio when isForced || ratio >= -1.0 ->
+                            | ValueSome ratio when isForced || (ratio >= -1.0 && badness ratio <= options.Tolerance) ->
+                                // TeX feasibility check: accept if forced (explicit or implicit) OR (not overfull AND badness within tolerance)
+                                // Both explicit forced breaks and implicit paragraph end bypass tolerance to avoid paragraph failures
                                 let fitness = fitnessClass ratio
                                 let isLast = i = n
 
@@ -587,15 +632,52 @@ module LineBreaker =
                                                 Ratio = ratio
                                                 Demerits = demerits
                                             }
-                            | _ ->
+                            | ValueNone ->
+                                // No shrink available (after adjusting for trailing glue).
+                                // TeX behavior: Explicit forced breaks (penalty items with cost -infinity) override
+                                // tolerance and allow overfull boxes. But implicit end-of-paragraph should respect
+                                // normal feasibility rules and fail if the line can't fit.
+                                // Check if this is an explicit penalty item (not just the implicit paragraph end).
+                                let isExplicitForcedBreak =
+                                    isForced
+                                    && i > 0
+                                    && i <= items.Length
+                                    && match items.[i - 1] with
+                                       | Penalty p -> p.Cost = -infinity
+                                       | _ -> false
+
+                                if isExplicitForcedBreak && overfullAmount > 0.0 then
+                                    // Explicit forced break with no shrink. TeX creates an overfull box with ratio = -infinity.
+                                    let overfullRatio = -infinity
+
+                                    let shouldRescue =
+                                        match rescueCandidate with
+                                        | None -> true
+                                        | Some (_, _, existingOverfull, _, existingDemerits) ->
+                                            overfullAmount < existingOverfull - 1e-9
+                                            || (abs (overfullAmount - existingOverfull) < 1e-9
+                                                && prevNode.Demerits < existingDemerits)
+
+                                    if shouldRescue then
+                                        rescueCandidate <-
+                                            Some (
+                                                prevNodeIdx,
+                                                isFlagged,
+                                                overfullAmount,
+                                                overfullRatio,
+                                                prevNode.Demerits
+                                            )
+                                elif not canEverFit && not isExplicitForcedBreak && not forcedBreakInTail then
+                                    nodesToDeactivate.Add currentEntryIdx |> ignore
+                            | ValueSome ratio ->
+                                // Ratio doesn't meet feasibility conditions, but might be rescuable
                                 if not canEverFit && not isForced && not forcedBreakInTail then
                                     nodesToDeactivate.Add currentEntryIdx |> ignore
-                                else if (isForced || forcedBreakInTail) && overfullAmount > 0.0 then
-                                    let overfullRatio =
-                                        if curActiveWidth.Shrink > 0.0 then
-                                            (options.LineWidth - actualWidth) / curActiveWidth.Shrink
-                                        else
-                                            Double.NegativeInfinity
+                                else if (isForced || forcedBreakInTail) && ratio < 0.0 then
+                                    // Create rescue candidate for overfull lines (ratio < 0) when there's a forced break.
+                                    // Having ValueSome (vs ValueNone) means there's some shrink available.
+                                    // For underfull lines (ratio >= 0), forced breaks are handled by the feasibility check above.
+                                    let overfullRatio = ratio
 
                                     let shouldRescue =
                                         match rescueCandidate with

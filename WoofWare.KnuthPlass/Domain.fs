@@ -119,8 +119,14 @@ type LineBreakOptions =
         FitnessClassDifferencePenalty : float
     }
 
-    /// Default tolerance value: moderate setting that allows ratio up to ~0.46
-    static member DefaultTolerance = 10.0
+    /// TeX's maximum badness value (inf_bad in tex.web:109). Per TeX's badness function
+    /// (tex.web:16110-16113), this is returned directly when there's no stretch/shrink
+    /// available (s <= 0) or when the ratio would be too extreme (r > 297 in TeX's units).
+    static member internal infBad = 10000.0
+
+    /// Default tolerance value: matches TeX's default (200) which allows ratio up to ~1.26.
+    /// TeX uses tolerance as a feasibility cutoff - lines with badness > tolerance are rejected.
+    static member DefaultTolerance = 200.0
     /// Default penalty for consecutive lines of very different tightness
     static member DefaultAdjacentLooseTightDemerits = 10000.0
     /// Default penalty for consecutive hyphenated lines
@@ -135,6 +141,19 @@ type LineBreakOptions =
         {
             LineWidth = lineWidth
             Tolerance = LineBreakOptions.DefaultTolerance
+            AdjacentLooseTightDemerits = LineBreakOptions.DefaultAdjacentLooseTightDemerits
+            DoubleHyphenDemerits = LineBreakOptions.DefaultDoubleHyphenDemerits
+            FinalHyphenDemerits = LineBreakOptions.DefaultFinalHyphenDemerits
+            FitnessClassDifferencePenalty = LineBreakOptions.DefaultFitnessClassDifferencePenalty
+        }
+
+    /// Creates default options with standard TeX-like values, tuned for monospace layouts like a console where
+    /// spaces can't really stretch.
+    static member DefaultMonospace (lineWidth : float) =
+        {
+            LineWidth = lineWidth
+            // Large tolerance so that we accept underfull lines.
+            Tolerance = LineBreakOptions.infBad + 0.1
             AdjacentLooseTightDemerits = LineBreakOptions.DefaultAdjacentLooseTightDemerits
             DoubleHyphenDemerits = LineBreakOptions.DefaultDoubleHyphenDemerits
             FinalHyphenDemerits = LineBreakOptions.DefaultFinalHyphenDemerits

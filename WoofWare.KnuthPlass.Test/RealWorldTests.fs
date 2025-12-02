@@ -79,39 +79,48 @@ module RealWorldTests =
         narrowLines.Length |> shouldBeGreaterThan wideLines.Length
 
     [<Test>]
-    let ``formatParagraph' produces formatted text`` () =
+    let ``format produces formatted text, tuned for monospace`` () =
         let text = "The quick brown fox jumps over the lazy dog."
-        let wordWidth (s : string) = float s.Length * 8.0
-        let spaceWidth = 4.0
-        let lineWidth = 80.0
+        // Use a modest width so lines can stay within TeX tolerance without extreme shrink
+        let wordWidth (s : string) = float s.Length
+        let lineWidth = 20.0
 
         expect {
             snapshot
-                @"The quick
-brown fox
-jumps over
-the lazy
+                @"The quick brown fox
+jumps over the lazy
 dog."
 
-            return Text.format lineWidth wordWidth spaceWidth Hyphenation.DEFAULT_PENALTY Hyphenation.none text
+            return
+                Text.format
+                    (LineBreakOptions.DefaultMonospace lineWidth)
+                    wordWidth
+                    Items.monospaceGlue
+                    Hyphenation.DEFAULT_PENALTY
+                    Hyphenation.none
+                    text
         }
 
     [<Test>]
-    let ``formatParagraph produces formatted text`` () =
+    let ``format produces formatted text`` () =
         let text = "The quick brown fox jumps over the lazy dog."
-        let wordWidth (s : string) = float s.Length * 8.0
-        let spaceWidth = 4.0
+        // Use a modest width so lines can stay within TeX tolerance without extreme shrink
+        let wordWidth (s : string) = float s.Length * 4.0
         let lineWidth = 80.0
 
         expect {
             snapshot
-                @"The quick
-brown fox
-jumps over
-the lazy
-dog."
+                @"The quick brown fox jumps
+over the lazy dog."
 
-            return Text.format lineWidth wordWidth spaceWidth Hyphenation.DEFAULT_PENALTY Hyphenation.none text
+            return
+                Text.format
+                    (LineBreakOptions.Default lineWidth)
+                    wordWidth
+                    (Items.defaultGlue 4.0)
+                    Hyphenation.DEFAULT_PENALTY
+                    Hyphenation.none
+                    text
         }
 
     [<TestCase "publicdomain.jekyll_and_hyde.txt">]
@@ -137,22 +146,22 @@ dog."
 
         expect {
             snapshot
-                @"Mr. Utterson the lawyer was a man of a rugged countenance that was never lighted
-by a smile; cold, scanty and embarrassed in discourse; backward in sentiment;
-lean, long, dusty, dreary and yet somehow lovable. At friendly meetings, and
-when the wine was to his taste, something eminently human beaconed from his eye;
-something indeed which never found its way into his talk, but which spoke not
-only in these silent symbols of the after-dinner face, but more often and loudly
-in the acts of his life. He was austere with himself; drank gin when he was
-alone, to mortify a taste for vintages; and though he enjoyed the theatre, had not
-crossed the doors of one for twenty years. But he had an approved tolerance for
-others; sometimes wondering, almost with envy, at the high pressure of spirits
-involved in their misdeeds; and in any extremity inclined to help rather than
-to reprove. “I incline to Cain’s heresy,” he used to say quaintly: “I let my
-brother go to the devil in his own way.” In this character, it was frequently
-his fortune to be the last reputable acquaintance and the last good influence in
-the lives of downgoing men. And to such as these, so long as they came about his
-chambers, he never marked a shade of change in his demeanour."
+                @"Mr. Utterson the lawyer was a man of a rugged countenance that was never lighted by
+a smile; cold, scanty and embarrassed in discourse; backward in sentiment; lean,
+long, dusty, dreary and yet somehow lovable. At friendly meetings, and when the
+wine was to his taste, something eminently human beaconed from his eye; something
+indeed which never found its way into his talk, but which spoke not only in these
+silent symbols of the after-dinner face, but more often and loudly in the acts of
+his life. He was austere with himself; drank gin when he was alone, to mortify a
+taste for vintages; and though he enjoyed the theatre, had not crossed the doors
+of one for twenty years. But he had an approved tolerance for others; sometimes
+wondering, almost with envy, at the high pressure of spirits involved in their
+misdeeds; and in any extremity inclined to help rather than to reprove. “I incline
+to Cain’s heresy,” he used to say quaintly: “I let my brother go to the devil
+in his own way.” In this character, it was frequently his fortune to be the last
+reputable acquaintance and the last good influence in the lives of downgoing men.
+And to such as these, so long as they came about his chambers, he never marked a
+shade of change in his demeanour."
 
             return Text.formatEnglish 80.0 text
         }
@@ -165,22 +174,29 @@ chambers, he never marked a shade of change in his demeanour."
 
         expect {
             snapshot
-                @"Mr. Utterson the lawyer was a man of a rugged countenance that was never lighted
-by a smile; cold, scanty and embarrassed in discourse; backward in sentiment;
-lean, long, dusty, dreary and yet somehow lovable. At friendly meetings, and when
-the wine was to his taste, something eminently human beaconed from his eye; some-
-thing indeed which never found its way into his talk, but which spoke not only in
-these silent symbols of the after-dinner face, but more often and loudly in the
-acts of his life. He was austere with himself; drank gin when he was alone, to
-mortify a taste for vintages; and though he enjoyed the theatre, had not crossed
-the doors of one for twenty years. But he had an approved tolerance for others;
-sometimes wondering, almost with envy, at the high pressure of spirits involved
-in their misdeeds; and in any extremity inclined to help rather than to reprove.
-“I incline to Cain’s heresy,” he used to say quaintly: “I let my brother go to
-the devil in his own way.” In this character, it was frequently his fortune to
-be the last reputable acquaintance and the last good influence in the lives of
-downgoing men. And to such as these, so long as they came about his chambers, he
-never marked a shade of change in his demeanour."
+                @"Mr. Utterson the lawyer was a man of a rugged countenance that was never li-
+ghted by a smile; cold, scanty and embarrassed in discourse; backward in senti-
+ment; lean, long, dusty, dreary and yet somehow lovable. At friendly meetings,
+and when the wine was to his taste, something eminently human beaconed from his
+eye; something indeed which never found its way into his talk, but which spoke
+not only in these silent symbols of the after-dinner face, but more often and
+loudly in the acts of his life. He was austere with himself; drank gin when he
+was alone, to mortify a taste for vintages; and though he enjoyed the theatre,
+had not crossed the doors of one for twenty years. But he had an approved tole-
+rance for others; sometimes wondering, almost with envy, at the high pressure of
+spirits involved in their misdeeds; and in any extremity inclined to help rather
+than to reprove. “I incline to Cain’s heresy,” he used to say quaintly: “I let
+my brother go to the devil in his own way.” In this character, it was frequently
+his fortune to be the last reputable acquaintance and the last good influence in
+the lives of downgoing men. And to such as these, so long as they came about his
+chambers, he never marked a shade of change in his demeanour."
 
-            return Text.format 80.0 Text.defaultWordWidth Text.SPACE_WIDTH 5.0 Hyphenation.simpleEnglish text
+            return
+                Text.format
+                    (LineBreakOptions.DefaultMonospace 80.0)
+                    Text.defaultWordWidth
+                    Items.monospaceGlue
+                    5.0
+                    Hyphenation.simpleEnglish
+                    text
         }

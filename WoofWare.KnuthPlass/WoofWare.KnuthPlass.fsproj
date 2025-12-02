@@ -31,6 +31,7 @@
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
     </None>
+    <None Include="..\tex.web" />
   </ItemGroup>
 
 </Project>

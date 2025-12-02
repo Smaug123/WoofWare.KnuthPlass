@@ -138,29 +138,43 @@ module LineBreakingTests =
         lines.[0].End |> shouldEqual 4
 
     [<Test>]
-    let ``Line can require waiting for later glue shrink`` () =
-        // CORRECTED FOR PROPER TEX GLUE HANDLING:
-        // Previous test data relied on trailing glue's shrink being incorrectly included in lines.
-        // With correct TeX behavior (trailing glue excluded), that test data made position 4 overfull.
+    let ``Trailing glue is excluded and cannot provide shrink`` () =
+        // This test verifies that trailing glue is excluded from lines (TeX behavior).
+        // Content is too wide to fit in one line even with all shrink (makes 2 lines optimal).
         //
-        // This test verifies that the algorithm doesn't prematurely drop active nodes when a line
-        // is temporarily overfull, because additional shrink from later glue might make it feasible.
-        // Adjusted data: the first glue now has MORE shrink (not less), so when we reach position 4,
-        // we have enough shrink WITHOUT needing the trailing glue's shrink.
+        // - Break at position 2 (after glue):
+        //   Line: box(55) + glue [TRAILING, excluded]
+        //   Width = 55, shrink = 0, overfull for target 50 → REJECTED
+        //
+        // - Break at position 4 (after glue):
+        //   Line 1: box(55) + glue(5,0,40) + box(15) + glue [TRAILING, excluded]
+        //   Width = 75, shrink = 40 (glue[1] is NOT trailing now!)
+        //   ratio = (50-75)/40 = -0.625, badness ≈ 24 < 200 → ACCEPTED
+        //   Line 2: box(20) + glue(10,30,10) + box(5)
+        //   Width = 35, stretch = 30, ratio = 0.5, badness = 12.5 → ACCEPTED
+        //
+        // - One-line alternative: width 110, shrink 50, ratio = -1.3, badness ≈ 220
+        //   Much worse demerits than the two-line solution.
+        //
+        // The key: glue[1] provides shrink at position 4 but NOT at position 2 (trailing exclusion).
+
         let items =
             [|
-                Items.box 14.430629179148562
-                Items.glue 3.6283746540396093 1.3821153460269547 8.0 // Increased shrink from 0.57 to 8.0
-                Items.box 3.902224130560937
-                Items.glue 0.435279093053825 2.521040834521651 1.0 // Reduced shrink (was 11.99)
-                Items.box 7.492267507792638
+                Items.box 55.0
+                Items.glue 5.0 0.0 40.0 // At pos 2: trailing (no shrink). At pos 4: NOT trailing (provides shrink)
+                Items.box 15.0
+                Items.glue 5.0 10.0 0.0 // Trailing at position 4
+                Items.box 20.0
+                Items.glue 10.0 30.0 10.0 // Stretch/shrink for the second line
+                Items.box 5.0
             |]
 
-        let options = LineBreakOptions.Default 16.176080639849094
+        let options = LineBreakOptions.Default 50.0
         let lines = LineBreaker.breakLines options items
 
+        // Should break at position 4 (position 2 is overfull due to trailing glue exclusion)
         lines.Length |> shouldEqual 2
-        lines.[0].Start |> shouldEqual 0
         lines.[0].End |> shouldEqual 4
-        lines.[1].Start |> shouldEqual 4
-        lines.[1].End |> shouldEqual 5
+
+        // Verify Line 1 uses the non-trailing glue's shrink
+        (abs (lines.[0].AdjustmentRatio - (-0.625))) < 0.02 |> shouldEqual true

@@ -51,10 +51,13 @@ WoofWare.KnuthPlass.Item.NewPenalty [static method]: WoofWare.KnuthPlass.Penalty
 WoofWare.KnuthPlass.Item.Tag [property]: [read-only] int
 WoofWare.KnuthPlass.Items inherit obj
 WoofWare.KnuthPlass.Items.box [static method]: float -> WoofWare.KnuthPlass.Item
+WoofWare.KnuthPlass.Items.defaultGlue [static method]: float -> WoofWare.KnuthPlass.Glue
 WoofWare.KnuthPlass.Items.forcedBreak [static method]: unit -> WoofWare.KnuthPlass.Item
 WoofWare.KnuthPlass.Items.fromEnglishString [static method]: (string -> float) -> float -> string -> WoofWare.KnuthPlass.Item []
-WoofWare.KnuthPlass.Items.fromString [static method]: (string -> float) -> float -> (string -> int list) -> float -> string -> WoofWare.KnuthPlass.Item []
+WoofWare.KnuthPlass.Items.fromString [static method]: (string -> float) -> WoofWare.KnuthPlass.Glue -> (string -> int list) -> float -> string -> WoofWare.KnuthPlass.Item []
+WoofWare.KnuthPlass.Items.get_monospaceGlue [static method]: unit -> WoofWare.KnuthPlass.Glue
 WoofWare.KnuthPlass.Items.glue [static method]: float -> float -> float -> WoofWare.KnuthPlass.Item
+WoofWare.KnuthPlass.Items.monospaceGlue [static property]: [read-only] WoofWare.KnuthPlass.Glue
 WoofWare.KnuthPlass.Items.penalty [static method]: float -> float -> bool -> WoofWare.KnuthPlass.Item
 WoofWare.KnuthPlass.Line inherit obj, implements WoofWare.KnuthPlass.Line System.IEquatable, System.Collections.IStructuralEquatable, WoofWare.KnuthPlass.Line System.IComparable, System.IComparable, System.Collections.IStructuralComparable
 WoofWare.KnuthPlass.Line..ctor [constructor]: (int, int, float)
@@ -75,6 +78,7 @@ WoofWare.KnuthPlass.LineBreakOptions.DefaultAdjacentLooseTightDemerits [static p
 WoofWare.KnuthPlass.LineBreakOptions.DefaultDoubleHyphenDemerits [static property]: [read-only] float
 WoofWare.KnuthPlass.LineBreakOptions.DefaultFinalHyphenDemerits [static property]: [read-only] float
 WoofWare.KnuthPlass.LineBreakOptions.DefaultFitnessClassDifferencePenalty [static property]: [read-only] float
+WoofWare.KnuthPlass.LineBreakOptions.DefaultMonospace [static method]: float -> WoofWare.KnuthPlass.LineBreakOptions
 WoofWare.KnuthPlass.LineBreakOptions.DefaultTolerance [static property]: [read-only] float
 WoofWare.KnuthPlass.LineBreakOptions.DoubleHyphenDemerits [property]: [read-only] float
 WoofWare.KnuthPlass.LineBreakOptions.Equals [method]: (WoofWare.KnuthPlass.LineBreakOptions, System.Collections.IEqualityComparer) -> bool
@@ -93,11 +97,6 @@ WoofWare.KnuthPlass.LineBreakOptions.get_LineWidth [method]: unit -> float
 WoofWare.KnuthPlass.LineBreakOptions.get_Tolerance [method]: unit -> float
 WoofWare.KnuthPlass.LineBreakOptions.LineWidth [property]: [read-only] float
 WoofWare.KnuthPlass.LineBreakOptions.Tolerance [property]: [read-only] float
-WoofWare.KnuthPlass.Text inherit obj
-WoofWare.KnuthPlass.Text.defaultWordWidth [static method]: string -> float
-WoofWare.KnuthPlass.Text.format [static method]: float -> (string -> float) -> float -> float -> (string -> int list) -> string -> string
-WoofWare.KnuthPlass.Text.formatEnglish [static method]: float -> string -> string
-WoofWare.KnuthPlass.Text.SPACE_WIDTH [static field]: float = 1
 WoofWare.KnuthPlass.Penalty inherit obj, implements WoofWare.KnuthPlass.Penalty System.IEquatable, System.Collections.IStructuralEquatable, WoofWare.KnuthPlass.Penalty System.IComparable, System.IComparable, System.Collections.IStructuralComparable
 WoofWare.KnuthPlass.Penalty..ctor [constructor]: (float, float, bool)
 WoofWare.KnuthPlass.Penalty.Cost [property]: [read-only] float
@@ -107,3 +106,8 @@ WoofWare.KnuthPlass.Penalty.get_Cost [method]: unit -> float
 WoofWare.KnuthPlass.Penalty.get_Flagged [method]: unit -> bool
 WoofWare.KnuthPlass.Penalty.get_Width [method]: unit -> float
 WoofWare.KnuthPlass.Penalty.Width [property]: [read-only] float
+WoofWare.KnuthPlass.Text inherit obj
+WoofWare.KnuthPlass.Text.defaultWordWidth [static method]: string -> float
+WoofWare.KnuthPlass.Text.format [static method]: WoofWare.KnuthPlass.LineBreakOptions -> (string -> float) -> WoofWare.KnuthPlass.Glue -> float -> (string -> int list) -> string -> string
+WoofWare.KnuthPlass.Text.formatEnglish [static method]: float -> string -> string
+WoofWare.KnuthPlass.Text.SPACE_WIDTH [static field]: float = 1
