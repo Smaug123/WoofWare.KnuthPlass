@@ -1,0 +1,10 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="WoofWare.KnuthPlass.Benchmarks/WoofWare.KnuthPlass.Benchmarks.fsproj" />
+  <Project Path="WoofWare.KnuthPlass.Test/WoofWare.KnuthPlass.Test.fsproj" />
+  <Project Path="WoofWare.KnuthPlass/WoofWare.KnuthPlass.fsproj" />
+</Solution>
