@@ -7,7 +7,8 @@ type private BreakNode =
         Position : int
         Demerits : float
         Ratio : float
-        PreviousNode : int option
+        /// -1 for a sentinel None
+        PreviousNode : int
         Fitness : FitnessClass
         WasFlagged : bool
     }
@@ -397,7 +398,7 @@ module LineBreaker =
                     Position = 0
                     Demerits = 0.0
                     Ratio = 0.0
-                    PreviousNode = None
+                    PreviousNode = -1
                     Fitness = FitnessClass.Normal
                     WasFlagged = false
                 }
@@ -833,7 +834,7 @@ module LineBreaker =
                                         Position = i
                                         Demerits = pending.Demerits
                                         Ratio = pending.Ratio
-                                        PreviousNode = Some pending.PrevNodeIdx
+                                        PreviousNode = pending.PrevNodeIdx
                                         Fitness = fitness
                                         WasFlagged = isFlagged
                                     }
@@ -860,7 +861,7 @@ module LineBreaker =
                                     Position = i
                                     Demerits = prevDemerits
                                     Ratio = ratio
-                                    PreviousNode = Some prevNodeIdx
+                                    PreviousNode = prevNodeIdx
                                     Fitness = FitnessClass.Tight
                                     WasFlagged = flag
                                 }
@@ -905,43 +906,50 @@ module LineBreaker =
 
             // Find best ending node
             let bestEndIdx =
-                nodes
-                |> Seq.indexed
-                |> Seq.filter (fun (_, node) -> node.Position = n)
-                |> Seq.tryMinBy (fun (_, node) -> node.Demerits)
-                |> Option.map fst
+                if nodes.Count = 0 then
+                    failwithf
+                        "No valid line breaking found for paragraph with %d items and line width %.2f. Try: (1) increasing line width, (2) increasing tolerance, or (3) allowing hyphenation"
+                        items.Length
+                        options.LineWidth
+                else
 
-            match bestEndIdx with
-            | None ->
-                failwithf
-                    "No valid line breaking found for paragraph with %d items and line width %.2f. Try: (1) increasing line width, (2) increasing tolerance, or (3) allowing hyphenation"
-                    items.Length
-                    options.LineWidth
-            | Some bestEndIdx ->
-                // Backtrack to recover the solution
-                let result = ResizeArray ()
+                let mutable minV = Double.MaxValue
+                let mutable best = Unchecked.defaultof<_>
 
-                let rec backtrack nodeIdx =
-                    let node = nodes.[nodeIdx]
+                for i = 0 to nodes.Count - 1 do
+                    let node = nodes.[i]
 
-                    match node.PreviousNode with
-                    | None ->
-                        result.Reverse ()
-                        result.ToArray ()
-                    | Some prevIdx ->
-                        let prevNode = nodes.[prevIdx]
+                    if node.Position = n then
+                        if node.Demerits < minV then
+                            minV <- node.Demerits
+                            best <- i
 
-                        let displayRatio =
-                            computeDisplayedAdjustmentRatio items sums options.LineWidth prevNode.Position node.Position
+                best
 
-                        let line =
-                            {
-                                Start = prevNode.Position
-                                End = node.Position
-                                AdjustmentRatio = displayRatio
-                            }
+            // Backtrack to recover the solution
+            let result = ResizeArray ()
 
-                        result.Add line
-                        backtrack prevIdx
+            let rec backtrack nodeIdx =
+                let node = nodes.[nodeIdx]
 
-                backtrack bestEndIdx
+                match node.PreviousNode with
+                | -1 ->
+                    result.Reverse ()
+                    result.ToArray ()
+                | prevIdx ->
+                    let prevNode = nodes.[prevIdx]
+
+                    let displayRatio =
+                        computeDisplayedAdjustmentRatio items sums options.LineWidth prevNode.Position node.Position
+
+                    let line =
+                        {
+                            Start = prevNode.Position
+                            End = node.Position
+                            AdjustmentRatio = displayRatio
+                        }
+
+                    result.Add line
+                    backtrack prevIdx
+
+            backtrack bestEndIdx
