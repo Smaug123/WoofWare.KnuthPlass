@@ -343,20 +343,13 @@ module LineBreaker =
             let n = items.Length
             let sums = computeCumulativeSums items
 
-            // Track whether there is a forced break at or after each position.
-            // This lets us preserve active nodes even when a line is overfull,
-            // because a forced break (including implicit paragraph end) can still
-            // terminate the paragraph with an overfull box (yielding an overfull
-            // hbox rather than an outright failure).
-            //
-            // Note: The implicit paragraph end IS counted here for keeping nodes alive,
-            // because overfull lines with SOME shrink are accepted at the paragraph end.
-            // However, lines with NO shrink at all (ValueNone) are only rescued at
-            // EXPLICIT forced breaks, not the implicit paragraph end.
+            // Track whether there is an explicit forced break at or after each position.
+            // This lets us preserve active nodes when an upcoming -infinity penalty could
+            // rescue an overfull line. The implicit paragraph end is handled separately
+            // (arr.[n] is set to true so the final line is still treated as forced).
             let forcedBreakAhead : bool[] =
                 let arr = Array.zeroCreate (n + 1)
-                arr.[n] <- true // Implicit end-of-paragraph is a forced break
-                let mutable seen = true
+                let mutable seen = false
 
                 for idx = n - 1 downto 0 do
                     let isForced =
@@ -367,6 +360,7 @@ module LineBreaker =
                     seen <- seen || isForced
                     arr.[idx] <- seen
 
+                arr.[n] <- true // Implicit end-of-paragraph is a forced break
                 arr
 
             // Track the best node at each position for each fitness class.
@@ -569,10 +563,14 @@ module LineBreaker =
             let pendingNodes : PendingCandidate option array = Array.create 4 None
             let nodesToDeactivate = System.Collections.Generic.HashSet<int> ()
             let newlyCreatedNodes = ResizeArray<int> ()
+            // Nodes that can't ever fit (overfull even with all remaining shrink) when there's
+            // no explicit forced break ahead. We revisit them only at the final forced break.
+            let deferredForFinalBreak = System.Collections.Generic.HashSet<int> ()
 
             for i in 1..n do
                 newlyCreatedNodes.Clear ()
                 nodesToDeactivate.Clear ()
+
                 for j = 0 to pendingNodes.Length - 1 do
                     pendingNodes.[j] <- None
 
@@ -685,10 +683,12 @@ module LineBreaker =
                                             )
                                 elif not canEverFit && not isForced && not forcedBreakInTail then
                                     nodesToDeactivate.Add currentEntryIdx |> ignore
+                                    deferredForFinalBreak.Add prevNodeIdx |> ignore
                             | ValueSome ratio ->
                                 // Ratio doesn't meet feasibility conditions, but might be rescuable
                                 if not canEverFit && not isForced && not forcedBreakInTail then
                                     nodesToDeactivate.Add currentEntryIdx |> ignore
+                                    deferredForFinalBreak.Add prevNodeIdx |> ignore
                                 // Create rescue candidate for overfull lines (ratio < 0) when there's a forced break
                                 // (explicit or implicit paragraph end). Having ValueSome (vs ValueNone) means
                                 // there's some shrink available but it's not enough.
@@ -717,6 +717,77 @@ module LineBreaker =
                                                 prevNode.Demerits
                                             )
                         | ActiveEntryKind.Sentinel -> entryIdx <- activeEntries.[entryIdx].Next
+
+                    if isImplicitParagraphEnd && deferredForFinalBreak.Count > 0 then
+                        for deferredNodeIdx in deferredForFinalBreak do
+                            let prevNode = nodes.[deferredNodeIdx]
+                            let prevPos = prevNode.Position
+
+                            let widthTriple =
+                                {
+                                    Width = sums.Width.[i] - sums.Width.[prevPos]
+                                    Stretch = sums.Stretch.[i] - sums.Stretch.[prevPos]
+                                    Shrink = sums.Shrink.[i] - sums.Shrink.[prevPos]
+                                }
+
+                            let ratioResult, actualWidth = computeRatioFromTriple widthTriple prevPos i
+                            let overfullAmount = max 0.0 (actualWidth - options.LineWidth)
+
+                            match ratioResult with
+                            | ValueSome ratio ->
+                                let fitness = fitnessClass ratio
+                                let fitnessIdx = int<FitnessClass> fitness
+                                let isLast = true
+
+                                let demerits =
+                                    prevNode.Demerits
+                                    + computeDemerits
+                                        options
+                                        ratio
+                                        penaltyCost
+                                        prevNode.Fitness
+                                        fitness
+                                        prevNode.WasFlagged
+                                        isFlagged
+                                        isLast
+
+                                let shouldUpdate =
+                                    match pendingNodes.[fitnessIdx] with
+                                    | None -> true
+                                    | Some existing -> demerits < existing.Demerits
+
+                                if shouldUpdate then
+                                    pendingNodes.[fitnessIdx] <-
+                                        Some
+                                            {
+                                                PrevNodeIdx = deferredNodeIdx
+                                                Ratio = ratio
+                                                Demerits = demerits
+                                            }
+
+                                anyNodeAdded <- true
+                            | ValueNone ->
+                                // Forced break with no shrink: rescue with an overfull box.
+                                if overfullAmount > 0.0 then
+                                    let overfullRatio = -infinity
+
+                                    let shouldRescue =
+                                        match rescueCandidate with
+                                        | None -> true
+                                        | Some (_, _, existingOverfull, _, existingDemerits) ->
+                                            overfullAmount < existingOverfull - 1e-9
+                                            || (abs (overfullAmount - existingOverfull) < 1e-9
+                                                && prevNode.Demerits < existingDemerits)
+
+                                    if shouldRescue then
+                                        rescueCandidate <-
+                                            Some (
+                                                deferredNodeIdx,
+                                                isFlagged,
+                                                overfullAmount,
+                                                overfullRatio,
+                                                prevNode.Demerits
+                                            )
 
                     for entry in nodesToDeactivate do
                         removeActiveEntry entry
