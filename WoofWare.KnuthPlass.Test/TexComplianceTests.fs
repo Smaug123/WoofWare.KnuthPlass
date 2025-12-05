@@ -19,58 +19,62 @@ module TexComplianceTests =
     /// When breaking after a glue, that glue is trailing and excluded from the line (tex.web:16517-16540).
     [<Test>]
     let ``High line penalty favours fewer lines`` () =
-        // For this to be a valid TeX property test, BOTH layouts must be feasible:
-        // - One-line layout: all content on one line with moderate stretching/shrinking
-        // - Two-line layout: content split across two lines with moderate adjustments
+        // For this to be a valid test, BOTH layouts must be feasible and their demerits
+        // must be comparable enough that LinePenalty can swing the decision.
         //
-        // We need to ensure badness is within tolerance for both options.
+        // Geometry: Line width = 100.
+        //
+        // Items: Box(35) - Glue(10, stretch=100, shrink=50) - Box(35) - Penalty - Box(35) - Glue(10, stretch=100, shrink=50) - Box(35)
+        //
+        // One-line: natural width = 35+10+35+35+10+35 = 160, shrink = 100
+        //   ratio = (100-160)/100 = -0.6, badness = 100 * 0.6³ ≈ 21.6
+        //
+        // Two-line (break at position 4, the penalty):
+        //   Line 1: 35+10+35 = 80, stretch = 100, ratio = (100-80)/100 = 0.2, badness ≈ 0.8
+        //   Line 2: 35+10+35 = 80, stretch = 100, ratio = (100-80)/100 = 0.2, badness ≈ 0.8
+        //
+        // Demerits comparison:
+        //   One-line:  (LP + 21.6)²
+        //   Two-line:  2 * (LP + 0.8)²
+        //
+        // Crossover when (LP + 21.6)² = 2*(LP + 0.8)²
+        // Solving: LP ≈ 49.4
+        //
+        // So: LP < 50 → two-line wins; LP > 50 → one-line wins.
         let items =
             [|
-                Items.box 25.0
-                Items.glue 10.0 15.0 10.0 // Provides stretch and shrink
-                Items.penalty 0.0 0.0 false // Explicit break point (position 3)
-                Items.box 25.0
-                Items.glue 10.0 15.0 10.0
-                Items.box 25.0
+                Items.box 35.0
+                Items.glue 10.0 100.0 50.0 // High stretch and shrink
+                Items.box 35.0
+                Items.penalty 0.0 0.0 false // Break point at position 4
+                Items.box 35.0
+                Items.glue 10.0 100.0 50.0
+                Items.box 35.0
             |]
 
-        // Line width 60.
-        // One-line layout: 25 + 10 + 25 + 10 + 25 = 95 width, needs shrink = 35, shrink avail = 20
-        //   Too overfull for one line at this width.
-        //
-        // Let's use line width 100 to make one-line feasible:
-        // One-line: 25 + 10 + 25 + 10 + 25 = 95, stretch = 30, ratio = (100-95)/30 = 0.17, badness ≈ 0.5
-        // Two-line:
-        //   Line 1: 25 + 10 = 35, stretch = 15, ratio = (100-35)/15 = 4.33, badness ≈ 8100
-        //   This is over default tolerance (200), so two-line won't be chosen unless tolerance is raised.
-
-        // Use tolerance high enough for both layouts:
         let lowPenalty =
             { LineBreakOptions.Default 100.0 with
-                Tolerance = 10000.0
+                LinePenalty = 10.0 // Well below crossover (~49)
+                Tolerance = 1000.0
+            }
+
+        let highPenalty =
+            { LineBreakOptions.Default 100.0 with
+                LinePenalty = 100.0 // Well above crossover (~49)
+                Tolerance = 1000.0
             }
 
         let linesLow = LineBreaker.breakLines lowPenalty items
-
-        // With default line_penalty (10) and both layouts feasible, two lines may be chosen
-        // if total demerits are lower than one line's demerits.
-        // Actually with the geometry above, one line is near-perfect (badness ~0.5), so
-        // it should win even with default penalty.
-
-        // Test the property: with VERY high line_penalty, the algorithm strongly prefers fewer lines.
-        let highPenalty =
-            { LineBreakOptions.Default 100.0 with
-                LinePenalty = 50000.0
-                Tolerance = 10000.0
-            }
-
         let linesHigh = LineBreaker.breakLines highPenalty items
 
-        // With high line_penalty, one line should be strongly preferred
+        // With low LinePenalty, two-line solution wins (lower total badness outweighs extra line cost)
+        linesLow.Length |> shouldEqual 2
+
+        // With high LinePenalty, one-line solution wins (extra line penalty dominates)
         linesHigh.Length |> shouldEqual 1
 
-        // The one-line layout should have a small positive ratio (stretching)
-        (linesHigh.[0].AdjustmentRatio > 0.0 && linesHigh.[0].AdjustmentRatio < 1.0)
+        // Verify the one-line solution has the expected negative ratio (shrinking)
+        (linesHigh.[0].AdjustmentRatio < 0.0 && linesHigh.[0].AdjustmentRatio > -1.0)
         |> shouldEqual true
 
     /// AdjacentLooseTightDemerits applies only when |fitness diff| > 1 (tex.web:16909).
