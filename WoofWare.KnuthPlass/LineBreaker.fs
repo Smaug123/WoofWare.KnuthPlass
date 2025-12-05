@@ -342,6 +342,21 @@ module LineBreaker =
         else
             let n = items.Length
             let sums = computeCumulativeSums items
+            // Precompute width-minus-shrink to cheaply bound how small a line can ever be
+            // if we keep extending it. This lets us drop hopeless active nodes early.
+            let widthMinusShrink : float array = Array.zeroCreate (n + 1)
+
+            for i = 0 to n do
+                widthMinusShrink.[i] <- sums.Width.[i] - sums.Shrink.[i]
+
+            let suffixMinWidthMinusShrink : float array = Array.zeroCreate (n + 1)
+
+            let mutable runningMin = Double.PositiveInfinity
+
+            for i = n downto 0 do
+                let candidate = widthMinusShrink.[i]
+                runningMin <- min runningMin candidate
+                suffixMinWidthMinusShrink.[i] <- runningMin
 
             // Track whether there is an explicit forced break at or after each position.
             // This lets us preserve active nodes when an upcoming -infinity penalty could
@@ -617,9 +632,10 @@ module LineBreaker =
                             let ratioResult, actualWidth, _ = computeRatioFromTriple curActiveWidth i
 
                             let overfullAmount = max 0.0 (actualWidth - options.LineWidth)
-                            let totalShrinkAvailable = sums.Shrink.[n] - sums.Shrink.[prevPos]
-                            let canEverFit = overfullAmount <= totalShrinkAvailable + 1e-9
+                            let minPossibleWidth = suffixMinWidthMinusShrink.[i] - widthMinusShrink.[prevPos]
+
                             let forcedBreakInTail = forcedBreakAhead.[prevPos]
+                            let noFutureFit = minPossibleWidth > options.LineWidth + 1e-9
 
                             match ratioResult with
                             | ValueSome ratio when isForced || (ratio >= -1.0 && badness ratio <= options.Tolerance) ->
@@ -682,12 +698,12 @@ module LineBreaker =
                                                 overfullRatio,
                                                 prevNode.Demerits
                                             )
-                                elif not canEverFit && not isForced && not forcedBreakInTail then
+                                elif noFutureFit && not isForced && not forcedBreakInTail then
                                     nodesToDeactivate.Add currentEntryIdx |> ignore
                                     deferredForFinalBreak.Add prevNodeIdx |> ignore
                             | ValueSome ratio ->
                                 // Ratio doesn't meet feasibility conditions, but might be rescuable
-                                if not canEverFit && not isForced && not forcedBreakInTail then
+                                if noFutureFit && not isForced && not forcedBreakInTail then
                                     nodesToDeactivate.Add currentEntryIdx |> ignore
                                     deferredForFinalBreak.Add prevNodeIdx |> ignore
                                 // Create rescue candidate for overfull lines (ratio < 0) when there's a forced break
