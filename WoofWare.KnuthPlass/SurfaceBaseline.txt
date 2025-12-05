@@ -71,13 +71,14 @@ WoofWare.KnuthPlass.Line.Start [property]: [read-only] int
 WoofWare.KnuthPlass.LineBreaker inherit obj
 WoofWare.KnuthPlass.LineBreaker.breakLines [static method]: WoofWare.KnuthPlass.LineBreakOptions -> WoofWare.KnuthPlass.Item [] -> WoofWare.KnuthPlass.Line []
 WoofWare.KnuthPlass.LineBreakOptions inherit obj, implements WoofWare.KnuthPlass.LineBreakOptions System.IEquatable, System.Collections.IStructuralEquatable, WoofWare.KnuthPlass.LineBreakOptions System.IComparable, System.IComparable, System.Collections.IStructuralComparable
-WoofWare.KnuthPlass.LineBreakOptions..ctor [constructor]: (float, float, float, float, float, float)
+WoofWare.KnuthPlass.LineBreakOptions..ctor [constructor]: (float, float, float, float, float, float, float)
 WoofWare.KnuthPlass.LineBreakOptions.AdjacentLooseTightDemerits [property]: [read-only] float
 WoofWare.KnuthPlass.LineBreakOptions.Default [static method]: float -> WoofWare.KnuthPlass.LineBreakOptions
 WoofWare.KnuthPlass.LineBreakOptions.DefaultAdjacentLooseTightDemerits [static property]: [read-only] float
 WoofWare.KnuthPlass.LineBreakOptions.DefaultDoubleHyphenDemerits [static property]: [read-only] float
 WoofWare.KnuthPlass.LineBreakOptions.DefaultFinalHyphenDemerits [static property]: [read-only] float
 WoofWare.KnuthPlass.LineBreakOptions.DefaultFitnessClassDifferencePenalty [static property]: [read-only] float
+WoofWare.KnuthPlass.LineBreakOptions.DefaultLinePenalty [static property]: [read-only] float
 WoofWare.KnuthPlass.LineBreakOptions.DefaultMonospace [static method]: float -> WoofWare.KnuthPlass.LineBreakOptions
 WoofWare.KnuthPlass.LineBreakOptions.DefaultTolerance [static property]: [read-only] float
 WoofWare.KnuthPlass.LineBreakOptions.DoubleHyphenDemerits [property]: [read-only] float
@@ -89,12 +90,15 @@ WoofWare.KnuthPlass.LineBreakOptions.get_DefaultAdjacentLooseTightDemerits [stat
 WoofWare.KnuthPlass.LineBreakOptions.get_DefaultDoubleHyphenDemerits [static method]: unit -> float
 WoofWare.KnuthPlass.LineBreakOptions.get_DefaultFinalHyphenDemerits [static method]: unit -> float
 WoofWare.KnuthPlass.LineBreakOptions.get_DefaultFitnessClassDifferencePenalty [static method]: unit -> float
+WoofWare.KnuthPlass.LineBreakOptions.get_DefaultLinePenalty [static method]: unit -> float
 WoofWare.KnuthPlass.LineBreakOptions.get_DefaultTolerance [static method]: unit -> float
 WoofWare.KnuthPlass.LineBreakOptions.get_DoubleHyphenDemerits [method]: unit -> float
 WoofWare.KnuthPlass.LineBreakOptions.get_FinalHyphenDemerits [method]: unit -> float
 WoofWare.KnuthPlass.LineBreakOptions.get_FitnessClassDifferencePenalty [method]: unit -> float
+WoofWare.KnuthPlass.LineBreakOptions.get_LinePenalty [method]: unit -> float
 WoofWare.KnuthPlass.LineBreakOptions.get_LineWidth [method]: unit -> float
 WoofWare.KnuthPlass.LineBreakOptions.get_Tolerance [method]: unit -> float
+WoofWare.KnuthPlass.LineBreakOptions.LinePenalty [property]: [read-only] float
 WoofWare.KnuthPlass.LineBreakOptions.LineWidth [property]: [read-only] float
 WoofWare.KnuthPlass.LineBreakOptions.Tolerance [property]: [read-only] float
 WoofWare.KnuthPlass.Penalty inherit obj, implements WoofWare.KnuthPlass.Penalty System.IEquatable, System.Collections.IStructuralEquatable, WoofWare.KnuthPlass.Penalty System.IComparable, System.IComparable, System.Collections.IStructuralComparable

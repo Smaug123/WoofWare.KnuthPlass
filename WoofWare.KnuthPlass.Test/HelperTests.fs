@@ -156,6 +156,34 @@ module HelperTests =
         }
 
     [<Test>]
+    let ``Paragraph ends with TeX-compliant finishing glue and forced break`` () =
+        // Per Knuth-Plass paper: "At the very end of a paragraph, two items are appended
+        // so that the final line will be treated properly. First comes a glue item that
+        // specifies the white space allowable at the right of the last line; then a penalty
+        // item with penalty -infinity to force a break."
+        // TeX uses finishing glue with width=0, stretch=infinity (fil), shrink=0.
+        let text = "word"
+        let items = Items.fromEnglishString (fun s -> float s.Length) 1.0 text
+
+        // Last two items should be the finishing glue and forced break
+        let finishingGlue = items.[items.Length - 2]
+        let forcedBreak = items.[items.Length - 1]
+
+        match finishingGlue with
+        | Glue g ->
+            g.Width |> shouldEqual 0.0
+            System.Double.IsPositiveInfinity g.Stretch |> shouldEqual true
+            g.Shrink |> shouldEqual 0.0
+        | _ -> failwith "Second-to-last item should be finishing glue"
+
+        match forcedBreak with
+        | Penalty p ->
+            p.Width |> shouldEqual 0.0
+            System.Double.IsNegativeInfinity p.Cost |> shouldEqual true
+            p.Flagged |> shouldEqual false
+        | _ -> failwith "Last item should be forced break penalty"
+
+    [<Test>]
     let ``fromString treats newlines as hard breaks`` () =
         let text = "hello\nworld"
         let wordWidth (s : string) = float s.Length * 10.0

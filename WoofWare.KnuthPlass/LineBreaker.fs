@@ -209,7 +209,10 @@ module LineBreaker =
             else
                 noStretchRatio
         else if totalShrink > 0.0 then
-            diff / totalShrink
+            // TeX clamps glue_set to 1.0 for overfull lines (tex.web:17017-17023).
+            // This means the displayed ratio is clamped to -1.0 even if the actual
+            // overfull amount exceeds the available shrink.
+            max -1.0 (diff / totalShrink)
         else
             Double.NegativeInfinity
 
@@ -242,36 +245,38 @@ module LineBreaker =
         : float
         =
         let bad = badness ratio
-        let linePenalty = 1.0 + bad
+        // TeX formula (tex.web:16901): d := line_penalty + badness
+        let linePenalty = options.LinePenalty + bad
 
-        // Compute base demerits according to Knuth-Plass formula:
-        // - Forced breaks (penalty -infinity): use L² only
-        // - Positive penalties P ≥ 0: use (L + P)²
-        // - Negative penalties P < 0: use L² - P² (encourages breaking)
-        // Note: Tolerance is now enforced as a feasibility cutoff (TeX behavior),
-        // not as a demerit penalty, so we don't add any tolerance-based penalty here.
+        // Compute base demerits according to TeX formula (tex.web:16901-16905):
+        // - d := (line_penalty + badness)²
+        // - if penalty > 0 then d := d + penalty²
+        // - else if penalty > eject_penalty then d := d - penalty² (encourages breaking)
+        // - Forced breaks (penalty = eject_penalty = -10000): no penalty term added
         let mutable demerits =
+            let baseDemerits = linePenalty * linePenalty
+
             if penaltyCost = -infinity then
-                linePenalty * linePenalty
+                // Forced break (eject_penalty): no penalty term
+                baseDemerits
             elif penaltyCost >= 0.0 then
-                let totalPenalty = linePenalty + penaltyCost
-                totalPenalty * totalPenalty
+                // Positive penalty: add penalty² (tex.web:16904)
+                baseDemerits + (penaltyCost * penaltyCost)
             else
-                // Negative penalty reduces demerits
-                (linePenalty * linePenalty) - (penaltyCost * penaltyCost)
+                // Negative penalty reduces demerits (tex.web:16905)
+                baseDemerits - (penaltyCost * penaltyCost)
 
         // Penalty for consecutive flagged breaks (double hyphen)
         if prevWasFlagged && currIsFlagged then
             demerits <- demerits + options.DoubleHyphenDemerits
 
-        // Penalty for fitness class mismatch
-        if prevFitness <> currFitness then
-            let fitnessDiff = abs (int prevFitness - int currFitness)
-            // Large penalty for non-adjacent fitness classes (e.g., Tight to Loose)
-            if fitnessDiff > 1 then
-                demerits <- demerits + options.AdjacentLooseTightDemerits
-            else
-                demerits <- demerits + options.FitnessClassDifferencePenalty
+        // Penalty for fitness class mismatch (tex.web:16909)
+        // TeX only adds adj_demerits when |fit_class - fitness(r)| > 1
+        // Adjacent classes (diff = 1) do NOT incur a penalty in TeX
+        let fitnessDiff = abs (int prevFitness - int currFitness)
+
+        if fitnessDiff > 1 then
+            demerits <- demerits + options.AdjacentLooseTightDemerits
 
         // Penalty for ending with a flagged break
         if isLastLine && prevWasFlagged then
@@ -336,14 +341,17 @@ module LineBreaker =
 
             // Track whether there is a forced break at or after each position.
             // This lets us preserve active nodes even when a line is overfull,
-            // because TeX keeps at least one candidate alive so a forced break
-            // can still terminate the paragraph (yielding an overfull box rather
-            // than an outright failure).
+            // because a forced break (including implicit paragraph end) can still
+            // terminate the paragraph with an overfull box (yielding an overfull
+            // hbox rather than an outright failure).
+            //
+            // Note: The implicit paragraph end IS counted here for keeping nodes alive,
+            // because overfull lines with SOME shrink are accepted at the paragraph end.
+            // However, lines with NO shrink at all (ValueNone) are only rescued at
+            // EXPLICIT forced breaks, not the implicit paragraph end.
             let forcedBreakAhead : bool[] =
                 let arr = Array.zeroCreate (n + 1)
-                // Track if there's a forced break at or after each position (including implicit paragraph end).
-                // This is used to decide whether to keep overfull nodes alive.
-                arr.[n] <- true // Implicit end-of-paragraph forced break
+                arr.[n] <- true // Implicit end-of-paragraph is a forced break
                 let mutable seen = true
 
                 for idx = n - 1 downto 0 do
@@ -634,20 +642,12 @@ module LineBreaker =
                                             }
                             | ValueNone ->
                                 // No shrink available (after adjusting for trailing glue).
-                                // TeX behavior: Explicit forced breaks (penalty items with cost -infinity) override
-                                // tolerance and allow overfull boxes. But implicit end-of-paragraph should respect
-                                // normal feasibility rules and fail if the line can't fit.
-                                // Check if this is an explicit penalty item (not just the implicit paragraph end).
-                                let isExplicitForcedBreak =
-                                    isForced
-                                    && i > 0
-                                    && i <= items.Length
-                                    && match items.[i - 1] with
-                                       | Penalty p -> p.Cost = -infinity
-                                       | _ -> false
+                                // Only EXPLICIT forced breaks (user-specified penalty with -infinity) allow
+                                // overfull boxes. The implicit paragraph end does NOT allow overfull rescue;
+                                // this design choice means infeasible paragraphs throw exceptions.
 
                                 if isExplicitForcedBreak && overfullAmount > 0.0 then
-                                    // Explicit forced break with no shrink. TeX creates an overfull box with ratio = -infinity.
+                                    // Forced break with no shrink. TeX creates an overfull box with ratio = -infinity.
                                     let overfullRatio = -infinity
 
                                     let shouldRescue =
@@ -667,14 +667,14 @@ module LineBreaker =
                                                 overfullRatio,
                                                 prevNode.Demerits
                                             )
-                                elif not canEverFit && not isExplicitForcedBreak && not forcedBreakInTail then
+                                elif not canEverFit && not isForced && not forcedBreakInTail then
                                     nodesToDeactivate.Add currentEntryIdx |> ignore
                             | ValueSome ratio ->
                                 // Ratio doesn't meet feasibility conditions, but might be rescuable
                                 if not canEverFit && not isForced && not forcedBreakInTail then
                                     nodesToDeactivate.Add currentEntryIdx |> ignore
-                                else if (isForced || forcedBreakInTail) && ratio < 0.0 then
-                                    // Create rescue candidate for overfull lines (ratio < 0) when there's a forced break.
+                                else if (isExplicitForcedBreak || forcedBreakInTail) && ratio < 0.0 then
+                                    // Create rescue candidate for overfull lines (ratio < 0) when there's an EXPLICIT forced break.
                                     // Having ValueSome (vs ValueNone) means there's some shrink available.
                                     // For underfull lines (ratio >= 0), forced breaks are handled by the feasibility check above.
                                     let overfullRatio = ratio

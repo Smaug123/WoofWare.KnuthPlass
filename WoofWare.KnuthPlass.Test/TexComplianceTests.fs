@@ -57,24 +57,43 @@ module TexComplianceTests =
         linesHigh.Length |> shouldEqual 1
 
     /// AdjacentLooseTightDemerits applies only when |fitness diff| > 1 (tex.web:16909).
-    /// Here there are two feasible breaks:
-    /// - Break at the penalty (diff=2): chosen when no adj_demerits are applied.
-    /// - Break at the earlier glue (diff=0): chosen when adj_demerits are large.
+    /// We create a scenario with two competing breaks:
+    /// - Break A: Creates Loose→VeryLoose (from Start Normal → Loose diff=1, then Loose→VeryLoose diff=1) → NO penalty
+    /// - Break B: Creates Normal→VeryLoose transition (from Start Normal → Normal diff=0, then Normal→VeryLoose diff=2) → penalty applies
+    /// Without adj_demerits, Break B wins (lower base demerits).
+    /// With huge adj_demerits, Break A wins (avoids the diff=2 penalty).
     [<Test>]
     let ``Fitness diff over 1 is penalised, diff of 1 is not`` () =
+        // Parameters found by systematic search ensuring:
+        // 1. 1-line solution is infeasible (total width exceeds line width with no shrink)
+        // 2. Break A has fitness diff <= 1 for all transitions
+        // 3. Break B has fitness diff > 1 for at least one transition
+        // 4. Without adj_demerits: B wins
+        // 5. With adj_demerits: A wins
+        //
+        // Line width 60.
+        //
+        // Break at position 3:
+        //   Line 1: box(10) + glue(20) = 30 width, 30 stretch, ratio = (60-30)/30 = 1.0 → Loose (fit=2)
+        //   Line 2: box(20) + glue(5) + box(10) = 35 width, 5 stretch, ratio = (60-35)/5 = 5.0 → VeryLoose (fit=3)
+        //   Transitions: Start(Normal=1) → Loose(2) diff=1, Loose(2) → VeryLoose(3) diff=1 → NO adj_demerits
+        //
+        // Break at position 5:
+        //   Line 1: box(10) + glue(20) + box(20) = 50 width, 30 stretch, ratio = (60-50)/30 = 0.33 → Normal (fit=1)
+        //   Line 2: glue(5) + box(10) = 15 width, 5 stretch, ratio = (60-15)/5 = 9.0 → VeryLoose (fit=3)
+        //   Transitions: Start(Normal=1) → Normal(1) diff=0, Normal(1) → VeryLoose(3) diff=2 → adj_demerits APPLIES
+
         let items =
             [|
-                Items.box 30.0
-                Items.glue 10.0 20.0 0.0
                 Items.box 10.0
-                Items.penalty 0.0 0.0 false
-                Items.glue 5.0 1.0 0.0
-                Items.box 5.0
-                Items.glue 5.0 1.0 0.0
-                Items.box 5.0
+                Items.glue 20.0 30.0 0.0
+                Items.penalty 0.0 0.0 false // Break A: position 3
+                Items.box 20.0
+                Items.penalty 0.0 0.0 false // Break B: position 5
+                Items.glue 5.0 5.0 0.0
+                Items.box 10.0
             |]
 
-        // Allow very loose lines so both candidates are feasible.
         let noPenalty =
             { LineBreakOptions.Default 60.0 with
                 Tolerance = 20000.0
@@ -84,20 +103,22 @@ module TexComplianceTests =
         let withPenalty =
             { LineBreakOptions.Default 60.0 with
                 Tolerance = 20000.0
-                AdjacentLooseTightDemerits = 1_000_000.0
+                AdjacentLooseTightDemerits = 10_000_000.0
             }
 
         let linesNoPenalty = LineBreaker.breakLines noPenalty items
         let linesWithPenalty = LineBreaker.breakLines withPenalty items
 
-        // Without the penalty, the cheaper (but diff=2) break at the penalty is chosen.
+        // Both should produce 2 lines
         linesNoPenalty.Length |> shouldEqual 2
-        linesNoPenalty.[0].End |> shouldEqual 4
-
-        // With a huge adj_demerits, the algorithm should avoid the diff=2 transition
-        // and instead break at the earlier glue (diff=1).
         linesWithPenalty.Length |> shouldEqual 2
-        linesWithPenalty.[0].End |> shouldEqual 2
+
+        // Without penalty, Break B (position 5) wins: lower base demerits
+        linesNoPenalty.[0].End |> shouldEqual 5
+
+        // With huge adj_demerits (10M), Break A (position 3) wins:
+        // Avoids the Normal→VeryLoose (diff=2) penalty that Break B incurs
+        linesWithPenalty.[0].End |> shouldEqual 3
 
     /// When shrink is insufficient, TeX clamps glue_set to 1.0 (ratio = -1) instead of throwing.
     [<Test>]

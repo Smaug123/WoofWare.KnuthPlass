@@ -48,15 +48,17 @@ module PenaltyTests =
     let ``Negative penalties should reduce demerits and encourage breaks`` () =
         // This test verifies that negative penalties correctly encourage breaks per TeX semantics.
         // TeX demerits formula (tex.web 16901-16908):
-        // - Positive penalty P ≥ 0: (L + P)²
-        // - Negative penalty P < 0: L² - P²
+        // - Base: (line_penalty + badness)²
+        // - Positive penalty P ≥ 0: base + P²
+        // - Negative penalty P < 0: base - P²
         //
         // Setup: Create two competing FEASIBLE breaks where the penalty sign determines choice.
-        // - Break A (at first penalty with cost 0): Moderately loose line, no penalty cost
-        // - Break B (at second penalty with signed cost): Slightly tighter line, with signed penalty
+        // - Break A (at first penalty with cost 0): Looser line (higher badness), no penalty cost
+        // - Break B (at second penalty with signed cost): Tighter line (lower badness), with signed penalty
         //
-        // With negative penalty, the L² - P² formula makes Break B attractive.
-        // With positive penalty, the (L + P)² formula makes Break A preferable.
+        // For Break A: demerits = (10 + 100)² = 12100
+        // For Break B with negative penalty: (10 + 12.5)² - 150² = 506.25 - 22500 = -21994 → wins!
+        // For Break B with positive penalty: (10 + 12.5)² + 150² = 506.25 + 22500 = 23006 → Break A wins!
 
         let makeItems penaltyCost =
             [|
@@ -82,19 +84,22 @@ module PenaltyTests =
                 Tolerance = 500.0 // High enough that both breaks are feasible
             }
 
-        let linesWithNegative = LineBreaker.breakLines options (makeItems -100.0)
-        let linesWithPositive = LineBreaker.breakLines options (makeItems 100.0)
+        // Use penalty 150 which is high enough to flip the choice
+        // For positive penalty, Break A (12100) < Break B (23006), so Break A wins
+        // For negative penalty, Break B (-21994) < Break A (12100), so Break B wins
+        let linesWithNegative = LineBreaker.breakLines options (makeItems -150.0)
+        let linesWithPositive = LineBreaker.breakLines options (makeItems 150.0)
 
         // Both should successfully break
         linesWithNegative.Length |> shouldBeGreaterThan 0
         linesWithPositive.Length |> shouldBeGreaterThan 0
 
         // The negative penalty should encourage breaking at the second penalty (End=6)
-        // because L² - (-100)² = L² - 10000 provides strong negative demerits.
+        // because base - 150² provides strongly negative demerits.
         linesWithNegative.[0].End |> shouldEqual 6
 
         // The positive penalty should discourage breaking at the second penalty,
-        // preferring the first zero-cost penalty (End=4) because (L + 100)² is very high.
+        // preferring the first zero-cost penalty (End=4) because base + 150² is very high.
         linesWithPositive.[0].End |> shouldEqual 4
 
     [<Test>]

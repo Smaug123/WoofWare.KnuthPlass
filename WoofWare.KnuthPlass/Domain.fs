@@ -108,14 +108,18 @@ type LineBreakOptions =
         /// Badness threshold for applying the quadratic tolerance penalty (badness = 100 * |ratio|^3).
         /// Typical values: 1-3 for strict, 10 for moderate. Higher values delay the penalty and let looser lines survive.
         Tolerance : float
-        /// Penalty for consecutive lines of very different tightness
+        /// <summary>Added to badness in demerits calculation (tex.web:16901).</summary>
+        /// <remarks>TeX's default is 10. The demerits formula is: (LinePenalty + badness)² + penalty²</remarks>
+        LinePenalty : float
+        /// Penalty for consecutive lines of very different tightness (fitness diff > 1)
         AdjacentLooseTightDemerits : float
         /// Penalty for consecutive hyphenated lines
         DoubleHyphenDemerits : float
         /// Penalty for ending a paragraph with a hyphen
         FinalHyphenDemerits : float
         /// <summary>Multiplier by which to penalise consecutive lines having different fitness classes.</summary>
-        /// <remarks>See the <see cref="FitnessClass"/> type for what a fitness class is.</remarks>
+        /// <remarks>See the <see cref="FitnessClass"/> type for what a fitness class is.
+        /// Note: TeX only applies adj_demerits when fitness diff > 1, not for adjacent classes (diff=1).</remarks>
         FitnessClassDifferencePenalty : float
     }
 
@@ -127,6 +131,8 @@ type LineBreakOptions =
     /// Default tolerance value: matches TeX's default (200) which allows ratio up to ~1.26.
     /// TeX uses tolerance as a feasibility cutoff - lines with badness > tolerance are rejected.
     static member DefaultTolerance = 200.0
+    /// Default line penalty value: matches TeX's default (10).
+    static member DefaultLinePenalty = 10.0
     /// Default penalty for consecutive lines of very different tightness
     static member DefaultAdjacentLooseTightDemerits = 10000.0
     /// Default penalty for consecutive hyphenated lines
@@ -141,6 +147,7 @@ type LineBreakOptions =
         {
             LineWidth = lineWidth
             Tolerance = LineBreakOptions.DefaultTolerance
+            LinePenalty = LineBreakOptions.DefaultLinePenalty
             AdjacentLooseTightDemerits = LineBreakOptions.DefaultAdjacentLooseTightDemerits
             DoubleHyphenDemerits = LineBreakOptions.DefaultDoubleHyphenDemerits
             FinalHyphenDemerits = LineBreakOptions.DefaultFinalHyphenDemerits
@@ -154,6 +161,7 @@ type LineBreakOptions =
             LineWidth = lineWidth
             // Large tolerance so that we accept underfull lines.
             Tolerance = LineBreakOptions.infBad + 0.1
+            LinePenalty = LineBreakOptions.DefaultLinePenalty
             AdjacentLooseTightDemerits = LineBreakOptions.DefaultAdjacentLooseTightDemerits
             DoubleHyphenDemerits = LineBreakOptions.DefaultDoubleHyphenDemerits
             FinalHyphenDemerits = LineBreakOptions.DefaultFinalHyphenDemerits
