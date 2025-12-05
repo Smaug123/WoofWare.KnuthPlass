@@ -55,53 +55,67 @@ module PenaltyTests =
         // abstraction for the same concept.
         //
         // Setup: Three lines with two break options per line boundary:
-        // - Unflagged penalty (like a regular word boundary)
-        // - Flagged penalty (like a hyphen, with width representing the hyphen character)
+        // - Unflagged penalty (cost 0, width 0)
+        // - Flagged penalty (cost 0, width 5 = hyphen width gives better geometry)
         //
-        // Glue is placed BEFORE the penalty options to provide stretch (breaking after
-        // glue excludes that glue's stretch, but breaking at a penalty keeps it).
+        // Key geometry:
+        // - Line 1 at flagged (idx 3): width=50, ratio=0.5, demerits≈506
+        // - Line 2 at unflagged (idx 7): width=50, ratio=0.25, demerits≈134
+        // - Line 2 at flagged (idx 8): width=55 (perfect fit!), ratio=0, demerits=100+DoubleHyphenDemerits
         //
-        // The flagged option has slightly better geometry (adds hyphen width, reducing
-        // the stretch needed). With low DoubleHyphenDemerits, flagged-flagged is optimal.
-        // With high DoubleHyphenDemerits, the algorithm avoids consecutive flagged breaks.
+        // Path comparison (both have identical Line 3 demerits of ~12,100):
+        // - flagged→unflagged→end: 506 + 134 + 12100 = 12,740
+        // - flagged→flagged→end: 506 + (100+DHD) + 12100 = 12,706 + DHD
+        //
+        // With DoubleHyphenDemerits < 34: flagged-flagged wins
+        // With DoubleHyphenDemerits > 34: flagged-unflagged wins
+        //
+        // IMPORTANT: FinalHyphenDemerits must be 0 to isolate DoubleHyphenDemerits,
+        // otherwise FinalHyphenDemerits penalizes the flagged-flagged path since
+        // the second flagged break is on the penultimate line.
         let items =
             [|
-                Items.box 25.0 // idx 0
-                Items.glue 10.0 20.0 5.0 // idx 1: provides stretch
-                Items.penalty 0.0 10.0 false // idx 2: unflagged option A
-                Items.penalty 3.0 10.0 true // idx 3: flagged option A (width 3 = hyphen)
-                Items.glue 10.0 10.0 3.0 // idx 4
-                Items.box 25.0 // idx 5
-                Items.glue 10.0 20.0 5.0 // idx 6: provides stretch
-                Items.penalty 0.0 10.0 false // idx 7: unflagged option B
-                Items.penalty 3.0 10.0 true // idx 8: flagged option B (width 3 = hyphen)
-                Items.glue 10.0 10.0 3.0 // idx 9
-                Items.box 25.0 // idx 10
+                Items.box 40.0 // idx 0
+                Items.glue 5.0 10.0 3.0 // idx 1: stretch for line 1
+                Items.penalty 0.0 0.0 false // idx 2: unflagged option A
+                Items.penalty 5.0 0.0 true // idx 3: flagged option A (width 5 gives better geometry)
+                Items.glue 5.0 10.0 3.0 // idx 4: stretch for line 2
+                Items.box 40.0 // idx 5
+                Items.glue 5.0 10.0 3.0 // idx 6
+                Items.penalty 0.0 0.0 false // idx 7: unflagged option B
+                Items.penalty 5.0 0.0 true // idx 8: flagged option B (width 5 gives perfect fit at line width 55)
+                Items.glue 5.0 10.0 3.0 // idx 9: stretch for line 3
+                Items.box 40.0 // idx 10
             |]
 
         let lowPenalty =
             { LineBreakOptions.Default 55.0 with
                 DoubleHyphenDemerits = 0.0
-                Tolerance = 5000.0
+                FinalHyphenDemerits = 0.0 // Must be 0 to isolate DoubleHyphenDemerits
+                Tolerance = 200.0
             }
 
         let highPenalty =
             { LineBreakOptions.Default 55.0 with
-                DoubleHyphenDemerits = 10_000_000.0
-                Tolerance = 5000.0
+                DoubleHyphenDemerits = 50_000.0 // Well above the 34 threshold
+                FinalHyphenDemerits = 0.0 // Must be 0 to isolate DoubleHyphenDemerits
+                Tolerance = 200.0
             }
 
         let linesLow = LineBreaker.breakLines lowPenalty items
         let linesHigh = LineBreaker.breakLines highPenalty items
 
-        // Both should produce lines
-        linesLow.Length |> shouldBeGreaterThan 0
-        linesHigh.Length |> shouldBeGreaterThan 0
+        // Both should produce 3 lines
+        linesLow.Length |> shouldEqual 3
+        linesHigh.Length |> shouldEqual 3
 
-        // With high DoubleHyphenDemerits, at least one break should differ to avoid
-        // consecutive flagged breaks. The specific positions depend on the geometry,
-        // but the layouts should differ.
-        linesLow |> shouldNotEqual linesHigh
+        // With low DoubleHyphenDemerits, the algorithm chooses flagged-flagged
+        // because Line 2 at flagged (idx 8) has perfect fit (demerits 100 < 134)
+        linesLow.[1].End |> shouldEqual 9 // Break at flagged penalty idx 8
+
+        // With high DoubleHyphenDemerits, the algorithm avoids consecutive flagged breaks
+        // choosing flagged-unflagged to avoid the 50,000 penalty
+        linesHigh.[1].End |> shouldEqual 8 // Break at unflagged penalty idx 7
 
     [<Test>]
     let ``Negative penalties should reduce demerits and encourage breaks`` () =
