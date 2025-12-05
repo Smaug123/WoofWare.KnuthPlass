@@ -163,7 +163,7 @@ reputable acquaintance and the last good influence in the lives of downgoing men
 And to such as these, so long as they came about his chambers, he never marked a
 shade of change in his demeanour."
 
-            return Text.formatEnglish 80.0 text
+            return Text.formatEnglishFixedWidth 80.0 text
         }
 
     [<Test>]

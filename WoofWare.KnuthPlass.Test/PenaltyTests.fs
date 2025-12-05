@@ -8,41 +8,87 @@ open FsUnitTyped
 module PenaltyTests =
     [<Test>]
     let ``Penalty affects break choice`` () =
+        // TeX's demerits formula includes the penalty cost (tex.web:16901-16908).
+        // A high penalty at one break point should cause the algorithm to prefer
+        // a different break point, even if the alternative has slightly worse geometry.
+        //
+        // Setup: Two potential break points with different penalty costs.
+        // - Position 2 (after glue): No explicit penalty, geometry slightly worse
+        // - Position 4 (high penalty): Very expensive penalty = 1000
+        //
+        // With line width 55, breaking at position 2 gives a loose line (needs stretching),
+        // while breaking at position 4 gives a tighter line but incurs the penalty.
+        // The algorithm should avoid the high-penalty break despite better geometry.
         let items =
             [|
                 Items.box 30.0
+                Items.glue 10.0 20.0 3.0 // Position 2: break after glue, no explicit penalty
+                Items.box 20.0
+                Items.penalty 0.0 5000.0 false // Position 4: high penalty
                 Items.glue 10.0 5.0 3.0
                 Items.box 30.0
-                Items.penalty 0.0 1000.0 false
-                Items.glue 10.0 5.0 3.0
-                Items.box 30.0
-            |]
-
-        let options = LineBreakOptions.Default 60.0
-        let lines = LineBreaker.breakLines options items
-
-        lines.Length |> shouldBeGreaterThan 0
-
-    [<Test>]
-    let ``Flagged penalties incur double hyphen demerits`` () =
-        let items =
-            [|
-                Items.box 40.0
-                Items.penalty 5.0 50.0 true
-                Items.glue 10.0 5.0 3.0
-                Items.box 40.0
-                Items.penalty 5.0 50.0 true
-                Items.glue 10.0 5.0 3.0
-                Items.box 40.0
             |]
 
         let options =
-            { LineBreakOptions.Default 60.0 with
-                DoubleHyphenDemerits = 10000.0
+            { LineBreakOptions.Default 55.0 with
+                Tolerance = 5000.0
             }
 
         let lines = LineBreaker.breakLines options items
-        lines.Length |> shouldBeGreaterThan 0
+
+        lines.Length |> shouldEqual 2
+        // The algorithm should avoid the high-penalty break at position 4,
+        // preferring to break at position 2 despite looser geometry
+        lines.[0].End |> shouldEqual 2
+
+    [<Test>]
+    let ``Flagged penalties incur double hyphen demerits`` () =
+        // DoubleHyphenDemerits (tex.web:16915-16918) adds extra cost when two consecutive
+        // lines both end at flagged penalties (like hyphens). This discourages having
+        // multiple hyphenated lines in a row, which looks poor typographically.
+        //
+        // Setup: Three lines with two break options per position:
+        // - Flagged penalty (like a hyphen)
+        // - Unflagged penalty (like a regular word boundary)
+        //
+        // With low DoubleHyphenDemerits, consecutive flagged breaks may be chosen.
+        // With high DoubleHyphenDemerits, the algorithm avoids consecutive flagged breaks.
+        let items =
+            [|
+                Items.box 35.0
+                Items.penalty 0.0 0.0 false // Unflagged option A
+                Items.penalty 5.0 50.0 true // Flagged option A
+                Items.glue 10.0 10.0 3.0
+                Items.box 35.0
+                Items.penalty 0.0 0.0 false // Unflagged option B
+                Items.penalty 5.0 50.0 true // Flagged option B
+                Items.glue 10.0 10.0 3.0
+                Items.box 35.0
+            |]
+
+        let lowPenalty =
+            { LineBreakOptions.Default 55.0 with
+                DoubleHyphenDemerits = 0.0
+                Tolerance = 5000.0
+            }
+
+        let highPenalty =
+            { LineBreakOptions.Default 55.0 with
+                DoubleHyphenDemerits = 10_000_000.0
+                Tolerance = 5000.0
+            }
+
+        let linesLow = LineBreaker.breakLines lowPenalty items
+        let linesHigh = LineBreaker.breakLines highPenalty items
+
+        // Both should produce lines
+        linesLow.Length |> shouldBeGreaterThan 0
+        linesHigh.Length |> shouldBeGreaterThan 0
+
+        // With high DoubleHyphenDemerits, at least one break should differ to avoid
+        // consecutive flagged breaks. The specific positions depend on the geometry,
+        // but the layouts should differ.
+        linesLow |> shouldNotEqual linesHigh
 
     [<Test>]
     let ``Negative penalties should reduce demerits and encourage breaks`` () =

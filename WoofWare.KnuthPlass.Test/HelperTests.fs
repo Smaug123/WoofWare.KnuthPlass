@@ -127,18 +127,15 @@ module HelperTests =
         | _ -> failwith "Should create a Penalty item"
 
     [<Test>]
-    let ``Text.format handles grapheme clusters correctly`` () =
-        // This string has 3 grapheme clusters but 11 UTF-16 chars
-        // 👨‍👩‍👧‍👦 is a family emoji (1 grapheme cluster, 7 chars)
-        // 👍🏽 is thumbs up with skin tone (1 grapheme cluster, 4 chars)
+    let ``Text.format processes emoji text without crashing`` () =
+        // This is a basic smoke test for emoji/Unicode handling.
+        // The actual grapheme cluster counting is tested in ``fromString counts grapheme clusters not chars``.
         let text = "👨‍👩‍👧‍👦 👍🏽"
 
-        // Using default width function which should count grapheme clusters
+        // Using default width function
         let result = Text.formatEnglishFixedWidth 10.0 text
 
         // Should successfully format without crashing
-        // The text should be split since we have 2 grapheme clusters (plus space)
-        // and line width is 10.0
         result |> shouldNotEqual ""
 
     [<Test>]
@@ -156,12 +153,17 @@ module HelperTests =
         }
 
     [<Test>]
-    let ``Paragraph ends with TeX-compliant finishing glue and forced break`` () =
-        // Per Knuth-Plass paper: "At the very end of a paragraph, two items are appended
-        // so that the final line will be treated properly. First comes a glue item that
-        // specifies the white space allowable at the right of the last line; then a penalty
-        // item with penalty -infinity to force a break."
-        // TeX uses finishing glue with width=0, stretch=infinity (fil), shrink=0.
+    let ``Paragraph ends with finishing glue and forced break`` () =
+        // Per Knuth-Plass paper: paragraphs end with finishing glue and a forced break.
+        //
+        // Note: In TeX proper, the paragraph tail uses par_fill_skip preceded by an
+        // infinite positive penalty (so it's not a breakpoint), and the forced final
+        // break is injected by the line-breaker via try_break(eject_penalty) rather
+        // than appearing as a node in the item list (tex.web:16070, 17197).
+        //
+        // This library's Items.fromEnglishString uses a simpler representation:
+        // finishing glue (width=0, stretch=∞) followed by an explicit forced break
+        // penalty (cost=-∞). This achieves the same effect for our algorithm.
         let text = "word"
         let items = Items.fromEnglishString (fun s -> float s.Length) 1.0 text
 
@@ -184,7 +186,14 @@ module HelperTests =
         | _ -> failwith "Last item should be forced break penalty"
 
     [<Test>]
-    let ``fromString treats newlines as hard breaks`` () =
+    let ``fromString treats newlines as paragraph boundaries`` () =
+        // Note: This is a library design choice, NOT TeX behavior.
+        // In TeX, a single newline is converted to a space; only a blank line
+        // or explicit \par creates a paragraph break.
+        //
+        // This library's Items.fromEnglishString treats each newline as a
+        // paragraph boundary, producing separate paragraph items for each line.
+        // This is convenient for plain-text input where newlines are meaningful.
         let text = "hello\nworld"
         let wordWidth (s : string) = float s.Length * 10.0
         let spaceWidth = 5.0

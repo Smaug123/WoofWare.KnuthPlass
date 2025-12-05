@@ -11,25 +11,34 @@ module ToleranceTests =
     let private badness (ratio : float) : float = 100.0 * (abs ratio ** 3.0)
 
     [<Test>]
-    let ``Tolerance cannot rescue an infeasible overfull line`` () =
-        // Tolerance only affects the demerits assigned to a feasible line. If a break would
-        // require shrinking more than the glue allows, it must remain invalid regardless of tolerance.
+    let ``Overfull line with no shrink is rescued on final pass`` () =
+        // TeX rescues overfull lines on the final pass. At the paragraph end (pi=eject_penalty),
+        // the final pass keeps an active node even when badness exceeds tolerance, producing an
+        // overfull box instead of failing (tex.web:16760-16779, 16824-16829).
+        //
+        // The ratio is clamped to -1.0 for overfull lines (tex.web:13104-13115).
         let items = [| Items.box 60.0 |]
 
         // Box is 60 wide, line width is 50
-        // This is overfull with no glue to shrink - should always fail even with huge tolerance
+        // This is overfull with no glue, but TeX's final pass rescues it.
         let options =
             { LineBreakOptions.Default 50.0 with
                 Tolerance = 5000.0
             }
 
-        Assert.Throws<System.Exception> (fun () -> LineBreaker.breakLines options items |> ignore)
-        |> ignore
+        let lines = LineBreaker.breakLines options items
+
+        lines.Length |> shouldEqual 1
+        lines.[0].AdjustmentRatio |> shouldEqual -1.0
 
     [<Test>]
-    let ``Underfull lines are always accepted regardless of badness`` () =
-        // Underfull lines (ratio >= 0) can always be achieved by stretching.
-        // They should be accepted even with very high badness; tolerance just compounds their demerits relative to other plans.
+    let ``Underfull lines exceeding tolerance are pruned mid-paragraph`` () =
+        // TeX uses tolerance as a feasibility cutoff (tex.web:16320-16333, 16769-16775).
+        // Non-forced lines with badness > tolerance are skipped, not merely expensive.
+        // Only the forced final line can be rescued on the final pass.
+        //
+        // This test verifies that a high-badness underfull break is pruned when there
+        // are better alternatives, but the final pass still rescues if needed.
 
         let items =
             [|
@@ -47,17 +56,22 @@ module ToleranceTests =
         // Target: 80
         // Need to stretch by 15, max stretch is 5
         // Ratio = 15/5 = 3.0
-        // Badness = 100 * 3^3 = 2700 (way over tolerance)
-        // The quadratic penalty makes this line extremely expensive, but it must still be considered because the adjustment is feasible.
+        // Badness = 100 * 3^3 = 2700 >> tolerance
+        //
+        // In TeX, this break would be pruned on early passes because badness > tolerance.
+        // On the final pass, the paragraph-end forced break is kept even with high badness.
+        // The paragraph succeeds with a single underfull line.
 
         let lines = LineBreaker.breakLines options items
         lines.Length |> shouldEqual 1
         lines.[0].AdjustmentRatio |> shouldEqual 3.0
 
     [<Test>]
-    let ``Overfull lines within tolerance are accepted`` () =
-        // Lines with -1 <= ratio < 0 should be accepted if the shrinkage is feasible.
-        // Being within tolerance simply means no extra quadratic penalty is added.
+    let ``Overfull lines within shrink limits are accepted`` () =
+        // Lines with -1 <= ratio < 0 are feasible if the shrinkage is within glue limits.
+        // TeX's tolerance is a feasibility cutoff for badness, not for the ratio.
+        // A ratio of -1.0 corresponds to using all available shrink, and
+        // badness = 100 * |ratio|³ = 100 for ratio = -1.0.
 
         let items =
             [|
@@ -68,21 +82,26 @@ module ToleranceTests =
 
         let options =
             { LineBreakOptions.Default 105.0 with
-                Tolerance = 100.0 // Allow badness up to 100
+                Tolerance = 100.0 // Badness cutoff
             }
 
         // Natural width: 50 + 10 + 50 = 110
         // Target: 105
         // Need to shrink by 5, max shrink is 5
         // Ratio = -5/5 = -1.0
-        // Badness = 100 * 1^3 = 100 (exactly at tolerance) so the penalty adds nothing.
+        // Badness = 100 * 1³ = 100 (at tolerance cutoff, so break is feasible)
 
         let lines = LineBreaker.breakLines options items
         lines.Length |> shouldEqual 1
         lines.[0].AdjustmentRatio |> shouldEqual -1.0
 
     [<Test>]
-    let ``Higher tolerance allows looser lines`` () =
+    let ``Higher tolerance allows looser lines to be feasible`` () =
+        // TeX's tolerance is a hard feasibility filter (tex.web:16320-16333):
+        // breakpoints with badness > tolerance are pruned, not merely penalized.
+        // With a very low tolerance, most breakpoints are infeasible and the
+        // algorithm falls back to the final-pass rescue (single overfull line).
+        // With higher tolerance, more breakpoints become feasible.
         let items =
             [|
                 Items.box 50.0
@@ -94,16 +113,17 @@ module ToleranceTests =
 
         let strictOptions =
             { LineBreakOptions.Default 100.0 with
-                Tolerance = 0.5
+                Tolerance = 0.5 // Very strict: most breaks are infeasible
             }
 
         let looseOptions =
             { LineBreakOptions.Default 100.0 with
-                Tolerance = 3.0
+                Tolerance = 5000.0 // Permissive: more breaks are feasible
             }
 
-        // Both settings should find solutions; the difference is that the stricter tolerance will heavily penalise
-        // the looser plan, while the relaxed tolerance lets it compete.
+        // With strict tolerance, mid-paragraph breaks are likely pruned as infeasible,
+        // resulting in a final-pass rescue. With loose tolerance, multiple layouts
+        // become feasible and the algorithm can optimize.
         let strictLines = LineBreaker.breakLines strictOptions items
         let looseLines = LineBreaker.breakLines looseOptions items
 
@@ -111,12 +131,13 @@ module ToleranceTests =
         looseLines.Length |> shouldBeGreaterThan 0
 
     [<Test>]
-    let ``Tolerance filtering prunes a globally optimal but tight line`` () =
-        // This test verifies that the algorithm correctly chooses the globally optimal solution even when
-        // it involves a tight first line (ratio ≈ -0.94, badness ≈ 83). The key issue this guards against
-        // is fitness class mismatch penalties dominating the decision: the original test data had a second
-        // line with ratio=3.4 (VeryLoose), creating a Tight→VeryLoose mismatch penalty that made the two-line
-        // solution worse than one line, even though intuitively two lines should be better.
+    let ``Tight line within tolerance is not pruned`` () =
+        // This test verifies that a tight line with badness within tolerance is kept as feasible.
+        // The algorithm correctly chooses the globally optimal solution even when it involves
+        // a tight first line (ratio ≈ -0.94, badness ≈ 83).
+        //
+        // The key issue this guards against is incorrect tolerance handling that would prune
+        // tight-but-feasible breaks, forcing the algorithm to choose worse alternatives.
 
         let items =
             [|
@@ -128,11 +149,13 @@ module ToleranceTests =
                 Items.box 30.0 // Larger box for second line
             |]
 
-        // With the corrected test data, the globally optimal solution breaks after the penalty:
-        // first line contains Box-Glue-Box (ratio ≈ -0.94, Tight fitness, badness ≈ 83) and the second line
-        // contains glue and box (ratio = 1.0, Loose fitness, badness = 100). The Tight→Loose fitness mismatch
-        // adds only 100 demerits, making the two-line solution clearly better than the one-line alternative
-        // which would be extremely overfull.
+        // Two-line solution:
+        //   Line 1: Box-Glue-Box = 25+8+25=58, shrink=8.5, ratio = (50-58)/8.5 ≈ -0.94
+        //   Badness ≈ 83 < 200 (default tolerance) → FEASIBLE
+        //   Line 2: glue + box = 15+30=45, stretch=5, ratio = (50-45)/5 = 1.0
+        //   Badness = 100 < 200 → FEASIBLE
+        //
+        // The tight line should NOT be pruned; both lines are within tolerance.
         let tolerantOptions =
             { LineBreakOptions.Default 50.0 with
                 Tolerance = 5000.0
@@ -145,9 +168,8 @@ module ToleranceTests =
         (abs (optimalLines.[0].AdjustmentRatio + 0.9411764705882353)) < 1e-6
         |> shouldEqual true
 
-        // Historically the default tolerance incorrectly pruned this tight line, forcing the algorithm to pick a
-        // much worse break earlier in the paragraph. This assertion ensures the default options now behave like
-        // the tolerant ones above.
+        // With default tolerance (200), the tight line (badness 83) is still feasible
+        // and should be chosen as the optimal solution.
         let defaultOptions = LineBreakOptions.Default 50.0
         let actualLines = LineBreaker.breakLines defaultOptions items
 

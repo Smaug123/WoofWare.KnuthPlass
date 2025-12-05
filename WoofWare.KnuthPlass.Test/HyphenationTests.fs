@@ -57,9 +57,17 @@ module HyphenationTests =
 
     [<Test>]
     let ``simpleEnglish respects minimum constraints`` () =
-        // For "beautiful" (9 chars), vowels at positions 1(e), 2(a), 5(i), 7(u)
-        // Valid breaks after vowels: positions 2,3,6,8 (all within 2..6 range)
-        // Buggy code would use 2..5, missing position 6
+        // For "beautiful" (9 chars, positions 0-8):
+        //   b-e-a-u-t-i-f-u-l
+        //   0-1-2-3-4-5-6-7-8
+        // Vowels at positions: 1(e), 2(a), 3(u), 5(i), 7(u)
+        // Breaks are placed after vowels, so potential breaks at: 2, 3, 4, 6, 8
+        //
+        // Constraints:
+        //   lefthyphenmin=2: break position must be >= 2
+        //   righthyphenmin=3: break must leave >= 3 chars, so position <= 6
+        // Valid range: 2..6
+        // Valid breaks after vowels within range: 2, 3, 4, 6
         let points = Hyphenation.simpleEnglish "beautiful"
 
         // All points should be >= 2 (lefthyphenmin)

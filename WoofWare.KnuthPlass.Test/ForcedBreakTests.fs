@@ -43,7 +43,8 @@ module ForcedBreakTests =
 
     [<Test>]
     let ``Forced break still ends paragraph when no shrink exists`` () =
-        // Overfull with zero shrink: TeX would emit an overfull hbox rather than fail outright.
+        // Overfull with zero shrink: TeX emits an overfull hbox and clamps glue_set to 1.0
+        // (tex.web:13104-13115). The ratio is clamped to -1.0, not -∞.
         let items = [| Items.box 70.0 ; Items.forcedBreak () |]
 
         let options = LineBreakOptions.Default 50.0
@@ -53,7 +54,8 @@ module ForcedBreakTests =
         lines.Length |> shouldEqual 1
         lines.[0].Start |> shouldEqual 0
         lines.[0].End |> shouldEqual items.Length
-        System.Double.IsNegativeInfinity lines.[0].AdjustmentRatio |> shouldEqual true
+        // Ratio is clamped to -1.0 for overfull lines, not -∞
+        lines.[0].AdjustmentRatio |> shouldEqual -1.0
 
     [<Test>]
     let ``Forced break allows overfull line with limited shrink`` () =
@@ -68,18 +70,26 @@ module ForcedBreakTests =
         lines.Length |> shouldEqual 1
         lines.[0].Start |> shouldEqual 0
         lines.[0].End |> shouldEqual items.Length
-        // Ratio is clamped to -1.0 for overfull lines with available shrink (tex.web:17017-17023)
+        // Ratio is clamped to -1.0 for overfull lines (tex.web:13104-13115)
         lines.[0].AdjustmentRatio |> shouldEqual -1.0
 
     [<Test>]
-    let ``Overfull without forced break still fails`` () =
-        // Same geometry as the forced-break test, but no forced break: should still throw.
+    let ``Overfull without explicit forced break uses final-pass fallback`` () =
+        // Same geometry as the forced-break test, but no explicit forced break.
+        // TeX's final pass keeps an active node even for overfull lines at the paragraph end
+        // (tex.web:16815-16829), producing an overfull hbox rather than failing.
+        // The implicit paragraph-end forced break (eject_penalty) rescues the paragraph.
         let items = [| Items.box 80.0 ; Items.glue 0.0 0.0 5.0 |]
 
         let options = LineBreakOptions.Default 50.0
 
-        Assert.Throws<System.Exception> (fun () -> LineBreaker.breakLines options items |> ignore)
-        |> ignore
+        let lines = LineBreaker.breakLines options items
+
+        lines.Length |> shouldEqual 1
+        lines.[0].Start |> shouldEqual 0
+        lines.[0].End |> shouldEqual items.Length
+        // Ratio is clamped to -1.0 for overfull lines (tex.web:13104-13115)
+        lines.[0].AdjustmentRatio |> shouldEqual -1.0
 
     [<Test>]
     let ``Mid-paragraph forced break survives overfull first line`` () =
@@ -120,48 +130,48 @@ module ForcedBreakTests =
         lines.Length |> shouldEqual 3
 
     [<Test>]
-    let ``Flagged penalty at paragraph end affects FinalHyphenDemerits correctly`` () =
-        // Bug: getPenaltyAt doesn't inspect items[n-1] when idx = n
-        // This means a flagged penalty at items[n-1] isn't stored in the node's WasFlagged field
-        // When that node becomes prevNode in a future calculation, prevWasFlagged will be wrong
-
-        // However, for the absolute final break, there's no future calculation
-        // The bug would manifest if we had TWO paragraphs and the first ends with a flagged break
-        // But since we're testing a single paragraph, we need a different approach
-
-        // Actually, let's test the scenario where the PENULTIMATE line ends with a flagged break
-        // and the final line is short. The FinalHyphenDemerits should apply.
-        // Then we create an alternative where the penultimate line is NOT flagged
-        // and see if the algorithm makes different choices based on FinalHyphenDemerits
-
-        let itemsWithFlaggedPenultimate =
+    let ``FinalHyphenDemerits penalises hyphen on penultimate line`` () =
+        // FinalHyphenDemerits adds extra cost when the second-to-last line ends at a flagged
+        // penalty (tex.web:16911-16913). This test verifies that a sufficiently large
+        // FinalHyphenDemerits value can change which break the algorithm chooses.
+        //
+        // Setup: Two competing break options where both produce 2 lines:
+        // - Break at position 3 (flagged): line 1 = box(45) + glue(10) + penalty (flagged)
+        // - Break at position 5 (unflagged): line 1 = box(45) + glue(10) + penalty + box(10) + penalty (unflagged)
+        //
+        // With low FinalHyphenDemerits, the tighter line (flagged break) wins.
+        // With high FinalHyphenDemerits, the looser line (unflagged break) wins.
+        let items =
             [|
-                Items.box 40.0
-                Items.glue 10.0 5.0 3.0
-                Items.box 40.0
-                Items.penalty 5.0 50.0 true // Flagged (like a hyphen)
-                Items.box 10.0 // Very short final line
+                Items.box 45.0
+                Items.glue 10.0 20.0 5.0
+                Items.penalty 0.0 0.0 true // Position 3: flagged
+                Items.box 10.0
+                Items.penalty 0.0 0.0 false // Position 5: not flagged
+                Items.glue 10.0 20.0 5.0
+                Items.box 20.0
             |]
 
-        let itemsWithoutFlaggedPenultimate =
-            [|
-                Items.box 40.0
-                Items.glue 10.0 5.0 3.0
-                Items.box 40.0
-                Items.penalty 5.0 50.0 false // NOT flagged
-                Items.box 10.0 // Very short final line
-            |]
-
-        let options =
-            { LineBreakOptions.Default 100.0 with
-                FinalHyphenDemerits = 50000.0 // Very high penalty for hyphen before final line
-                Tolerance = 1000.0
+        let lowPenalty =
+            { LineBreakOptions.Default 70.0 with
+                FinalHyphenDemerits = 0.0
+                Tolerance = 5000.0
             }
 
-        let linesFlagged = LineBreaker.breakLines options itemsWithFlaggedPenultimate
-        let linesUnflagged = LineBreaker.breakLines options itemsWithoutFlaggedPenultimate
+        let highPenalty =
+            { LineBreakOptions.Default 70.0 with
+                FinalHyphenDemerits = 10_000_000.0
+                Tolerance = 5000.0
+            }
 
-        // Both should succeed but with flagged version potentially making different choices
-        // This test is weak but at least verifies the code runs
-        linesFlagged.Length |> shouldBeGreaterThan 0
-        linesUnflagged.Length |> shouldBeGreaterThan 0
+        let linesLow = LineBreaker.breakLines lowPenalty items
+        let linesHigh = LineBreaker.breakLines highPenalty items
+
+        // Both should produce 2 lines
+        linesLow.Length |> shouldEqual 2
+        linesHigh.Length |> shouldEqual 2
+
+        // With low penalty, the flagged break (position 3) may be chosen
+        // With high penalty, the unflagged break (position 5) should be preferred
+        linesLow.[0].End |> shouldEqual 3
+        linesHigh.[0].End |> shouldEqual 5

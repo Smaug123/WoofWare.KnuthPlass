@@ -33,42 +33,50 @@ module BugReproductionTests =
         lines.Length |> shouldEqual 2
         lines.[0].End |> shouldEqual 2 // Break after the first glue (index 2 is the start of next line)
 
-    // 2. Misunderstanding of Tolerance (Critical)
+    // 2. Tolerance as a feasibility filter (but final pass rescues)
     [<Test>]
-    let ``Tolerance acts as a hard limit for feasible breaks`` () =
-        // The only possible break (at index 4) results in a line with Badness 51,200.
-        // Tolerance is set to 1.0.
-        // TeX treats tolerance as a feasibility cutoff: a candidate whose badness exceeds tolerance is simply not admissible.
-        // With no other breakpoints available, the paragraph should be rejected.
+    let ``Tolerance filters mid-paragraph breaks but final pass rescues`` () =
+        // TeX treats tolerance as a feasibility cutoff (tex.web:16320-16333): candidates whose
+        // badness exceeds tolerance are pruned. However, on the final pass, TeX keeps a breakpoint
+        // even when over threshold at the paragraph end (tex.web:16815-16829), producing an overfull
+        // box rather than failing.
+        //
+        // This test creates a scenario where the mid-paragraph break exceeds tolerance,
+        // so it gets pruned. TeX then falls back to a single overfull line.
         let items =
             [|
                 Items.box 1.0
                 Items.glue 0.0 1.0 0.0 // Stretch 1.0
                 Items.box 1.0
-                Items.glue 0.0 1.0 0.0 // Break point
-                Items.box 100.0 // Force remaining content to be too long for one line (requires a break)
+                Items.glue 0.0 1.0 0.0 // Potential break point (badness 51200 at this position)
+                Items.box 100.0 // Force remaining content to be too long for one line
             |]
 
         // Target: 10.0. Tolerance: 1.0.
-        // Line 1 (0 to 4): Content width 2.0. Shortfall 8.0. Stretch 1.0. Ratio 8.0. Badness 51,200.
+        // Break at position 4: Content width 2.0. Shortfall 8.0. Stretch 2.0. Ratio 4.0. Badness 6400 > 1.
+        // This break is pruned by tolerance.
+        // TeX falls back to final-pass rescue: single overfull line.
         let options =
             { LineBreakOptions.Default 10.0 with
                 Tolerance = 1.0
             }
 
-        // TeX would reject the paragraph: the only candidate is beyond tolerance.
-        Assert.Throws<System.Exception> (fun () -> LineBreaker.breakLines options items |> ignore)
-        |> ignore
+        // TeX does NOT reject - it produces an overfull line on the final pass.
+        let lines = LineBreaker.breakLines options items
+        lines.Length |> shouldEqual 1
+        // The line is overfull (content > line width), ratio clamped to -1.0
+        lines.[0].AdjustmentRatio |> shouldEqual -1.0
 
-    // 4. Incorrect "Flagged" Penalty Demerits
+    // 4. Penalty contributes to demerits
     [<Test>]
-    let ``Demerits formula correctly separates penalty cost from badness`` () =
-        // TeX includes a positive penalty inside the squared term: (line_penalty + badness + penalty)^2.
-        // This test verifies that penalty cost is added BEFORE squaring, not after.
+    let ``Demerits formula adds penalty squared after base demerits`` () =
+        // TeX's demerits formula (tex.web:16901-16905) for positive penalties is:
+        //   demerits = (line_penalty + badness)² + penalty²
+        // The penalty is added AFTER squaring the base, not inside the square.
         //
         // Setup: Two competing breaks where BOTH are feasible (badness < tolerance).
-        // The penalty cost should be included in the squared demerits term, making the
-        // high-penalty break less attractive even though both lines fit acceptably.
+        // The higher penalty increases demerits via the + penalty² term, making the
+        // high-penalty break less attractive.
 
         let items =
             [|
@@ -96,8 +104,8 @@ module BugReproductionTests =
 
         let lines = LineBreaker.breakLines options items
 
-        // With penalty inside the square: (line_penalty + badness + 10)² vs (line_penalty + badness + 100)²
-        // The low-penalty break (End=4) should win despite being slightly looser.
+        // With penalty after square: (l+b)² + 10² vs (l+b)² + 100²
+        // The low-penalty break (End=4) wins because 100² >> 10².
         lines.[0].End |> shouldEqual 4
 
     // 6. Invalid Breakpoint Logic (Consecutive Glues)

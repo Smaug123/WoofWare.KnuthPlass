@@ -7,7 +7,11 @@ open FsUnitTyped
 [<TestFixture>]
 module LineBreakingTests =
     [<Test>]
-    let ``Long paragraph breaks into multiple lines`` () =
+    let ``Long paragraph breaks into multiple lines with sufficient tolerance`` () =
+        // With LineBreakOptions.Default (tolerance=200), TeX considers no breakpoint feasible
+        // before the paragraph end: breaks at early positions have badness > tolerance.
+        // TeX's final pass would keep only the paragraph-end forced break, yielding a single
+        // overfull line. To actually get multiple lines, we need higher tolerance.
         let items =
             [|
                 Items.box 30.0
@@ -21,7 +25,12 @@ module LineBreakingTests =
                 Items.box 20.0
             |]
 
-        let options = LineBreakOptions.Default 80.0
+        // Raise tolerance to allow looser lines to be feasible
+        let options =
+            { LineBreakOptions.Default 80.0 with
+                Tolerance = 5000.0
+            }
+
         let lines = LineBreaker.breakLines options items
 
         lines.Length |> shouldBeGreaterThan 1
@@ -32,20 +41,19 @@ module LineBreakingTests =
 
     [<Test>]
     let ``Breaking prefers balanced lines over greedy breaks`` () =
-        // This tests the key feature of Knuth-Plass: it finds globally optimal breaks
+        // This tests the key feature of Knuth-Plass: it finds globally optimal breaks.
         //
-        // We have 6 boxes of width 8, separated by glue of width 2
-        // With line width 30:
-        // - Greedy break: fills first line to ~36 (needs shrinking), leaves second line at ~18 (needs huge stretching)
-        // - Balanced break: splits evenly at 28 each (moderate stretching on both)
+        // We have 6 boxes of width 8, separated by 5 glues of width 2 (stretch 1, shrink 1).
+        // Total natural width = 6×8 + 5×2 = 58. With line width 30, we need 2 lines.
         //
-        // Greedy: Line 1 width 36 → ratio (30-36)/4 = -1.5
-        //         Line 2 width 18 → ratio (30-18)/1 = 12.0
-        //         Total badness: 1.5² + 12² = 146.25
+        // Balanced break after item 5 (3 boxes + 2 glues):
+        //   Line 1: 3×8 + 2×2 = 28, stretch = 2, ratio = (30-28)/2 = 1.0
+        //   Line 2: 3×8 + 2×2 = 28, stretch = 2, ratio = (30-28)/2 = 1.0
         //
-        // Balanced: Line 1 width 28 → ratio (30-28)/2 = 1.0
-        //           Line 2 width 28 → ratio (30-28)/2 = 1.0
-        //           Total badness: 1² + 1² = 2.0
+        // A greedy algorithm might try to fit 4 boxes on line 1:
+        //   Line 1: 4×8 + 3×2 = 38, shrink = 3, ratio = (30-38)/3 = -2.67 (overfull!)
+        //
+        // Knuth-Plass correctly finds the balanced solution with lower total demerits.
 
         let items =
             [|
@@ -68,33 +76,32 @@ module LineBreakingTests =
         lines.Length |> shouldEqual 2
 
         // The algorithm should prefer balanced lines (both around ratio 1.0)
-        // over greedy breaking (ratios around -1.5 and 12.0)
         for line in lines do
             (abs line.AdjustmentRatio < 2.0) |> shouldEqual true
 
-        // More specifically, both lines should have similar adjustment ratios
+        // Both lines should have similar adjustment ratios
         let ratios = lines |> Array.map (fun l -> l.AdjustmentRatio)
         let maxRatio = ratios |> Array.max
         let minRatio = ratios |> Array.min
-        (maxRatio - minRatio < 1.0) |> shouldEqual true // Lines should be similarly adjusted
+        (maxRatio - minRatio < 1.0) |> shouldEqual true
 
     [<Test>]
-    let ``Underfull line without glue is heavily penalized`` () =
-        // This test demonstrates the bug where an underfull line with no glue
-        // gets a perfect adjustment ratio (0.0) instead of being heavily penalized.
+    let ``Underfull line without glue is infeasible`` () =
+        // An underfull line with no glue to stretch is infeasible: there is no way to
+        // adjust the glue to fill the line width. TeX would assign ratio = infinity (inf_bad)
+        // making such a break infeasible under normal tolerance (tex.web:2337-2342).
         //
         // Scenario: Three boxes that could break in two ways:
         // 1. Break after "word1 word2", leaving just "word3" alone on second line
         //    - Line 2 would be just Box(40) = 40 units on a 70-unit line with NO glue
-        //    - This should be heavily penalized (ratio=1000.0, badness=1e11)
+        //    - Shortfall = 30, stretch = 0, ratio = infinity → INFEASIBLE
         // 2. Keep "word1 word2 word3" together on one line
         //    - Total: 15 + 10 + 15 + 10 + 40 = 90 units on 70-unit line
         //    - Need to shrink by 20, total shrink = 20
-        //    - Ratio = -20/20 = -1.0, badness = 100
+        //    - Ratio = -20/20 = -1.0, badness = 100 → FEASIBLE
         //
-        // With the bug, option 1 looks perfect (ratio=0.0, badness=0)
-        // With the fix, option 1 is heavily penalized (ratio=1000.0, badness=1e11)
-        // so the algorithm prefers option 2 despite it being tight
+        // Option 1 is rejected because the second line is infeasible (infinite badness),
+        // not because of high demerits. The algorithm chooses option 2.
         let items =
             [|
                 Items.box 15.0 // "word1"
@@ -107,8 +114,8 @@ module LineBreakingTests =
         let options = LineBreakOptions.Default 70.0
         let lines = LineBreaker.breakLines options items
 
-        // Should choose to keep everything on one line (tight but within tolerance)
-        // rather than creating an underfull second line with no glue
+        // Should choose to keep everything on one line (tight but feasible)
+        // rather than creating an infeasible second line with no glue
         lines.Length |> shouldEqual 1
 
     [<Test>]
