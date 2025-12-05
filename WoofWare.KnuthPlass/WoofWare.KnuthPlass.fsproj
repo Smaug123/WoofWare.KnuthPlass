@@ -13,6 +13,7 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageId>WoofWare.KnuthPlass</PackageId>
     <PackageLogo>light.svg</PackageLogo>
+    <OtherFlags>--reflectionfree $(OtherFlags)</OtherFlags>
   </PropertyGroup>
 
   <ItemGroup>

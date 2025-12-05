@@ -55,8 +55,9 @@ shade of change in his demeanour."
 
 ## Status
 
-This appears to work, although my own understanding of Knuth-Plass is pretty shaky.
-It's not seen any prod use yet.
+This appears to work, although my own understanding of Knuth-Plass is pretty shaky; the paper is very interesting but
+also quite long and I'm still working through it.
+The library has not seen any prod use yet.
 Bug reports are welcome.
 
 ## Design goals

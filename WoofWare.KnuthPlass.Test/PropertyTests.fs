@@ -2,7 +2,6 @@ namespace WoofWare.KnuthPlass.Test
 
 open FsCheck
 open FsCheck.FSharp
-open FsUnitTyped
 open NUnit.Framework
 open WoofWare.KnuthPlass
 
@@ -89,11 +88,7 @@ module PropertyTests =
                                 None
 
                         failwithf
-                            "Illegal breakpoint at position %d (items.Length=%d). Item before: %A, Item two before: %A"
-                            line.End
-                            items.Length
-                            itemBefore
-                            itemTwoBefore
+                            $"Illegal breakpoint at position %d{line.End} (items.Length=%d{items.Length}). Item before: %A{itemBefore}, Item two before: %A{itemTwoBefore}"
 
                     isLegal
                 )

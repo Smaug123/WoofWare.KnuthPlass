@@ -6,13 +6,8 @@ open FsUnitTyped
 
 [<TestFixture>]
 module TestPerformance =
-    [<Test ; Explicit>]
-    let ``Performance: Should handle large paragraphs linearly`` () =
-        // Generate a very long paragraph (e.g., 2000 words)
-        // With N=2000, N^2 = 4,000,000 iterations.
-        // In a complex logic loop, this might take 500ms-1s.
-        // With N=5000, N^2 = 25,000,000. This will definitely hang a slow implementation.
-
+    [<Test>]
+    let ``Performance: Should handle large paragraphs`` () =
         let word = Items.box 5.0f
         let space = Items.glue 1.0f 0.5f 0.2f
 
@@ -27,11 +22,8 @@ module TestPerformance =
 
         stopwatch.Stop ()
 
-        printfn "Time taken: %d ms" stopwatch.ElapsedMilliseconds
-
-        // An O(N^2) implementation usually chokes on 10,000 items (taking several seconds).
-        // An O(N) implementation should do this in under 200ms easily.
-        // Adjust threshold based on your machine, but 1000ms is a very generous upper bound for O(N).
+        // An O(N^2) implementation should choke on 10_000 items.
+        // On my laptop this takes 41ms; surely a GitHub free runner can't take more than 20x the time.
         stopwatch.ElapsedMilliseconds |> shouldBeSmallerThan 1000L
 
-        lines.Length |> shouldBeGreaterThan 0
+        lines.Length |> shouldBeGreaterThan 1
