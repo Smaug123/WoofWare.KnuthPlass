@@ -2,6 +2,7 @@ namespace WoofWare.KnuthPlass
 
 open System
 
+[<Struct>]
 type private BreakNode =
     {
         Position : int
