@@ -132,7 +132,7 @@ module ForcedBreakTests =
     [<Test>]
     let ``FinalHyphenDemerits penalises hyphen on penultimate line`` () =
         // FinalHyphenDemerits adds extra cost when the second-to-last line ends at a flagged
-        // penalty (tex.web:16911-16913). This test verifies that a sufficiently large
+        // penalty (tex.web:16906-16908). This test verifies that a sufficiently large
         // FinalHyphenDemerits value can change which break the algorithm chooses.
         //
         // Setup: Two competing break options where both produce 2 lines:

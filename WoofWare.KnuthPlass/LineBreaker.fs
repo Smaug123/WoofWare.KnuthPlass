@@ -208,10 +208,10 @@ module LineBreaker =
                 diff / totalStretch
             else
                 noStretchRatio
+        // TeX clamps glue_set to 1.0 for overfull lines (tex.web:17017-17023).
+        // This means the displayed ratio is clamped to -1.0 even if the actual
+        // overfull amount exceeds the available shrink.
         else if totalShrink > 0.0 then
-            // TeX clamps glue_set to 1.0 for overfull lines (tex.web:17017-17023).
-            // This means the displayed ratio is clamped to -1.0 even if the actual
-            // overfull amount exceeds the available shrink.
             max -1.0 (diff / totalShrink)
         else
             // No shrink available but line is overfull: clamp to -1.0
@@ -682,14 +682,14 @@ module LineBreaker =
                                 // Ratio doesn't meet feasibility conditions, but might be rescuable
                                 if not canEverFit && not isForced && not forcedBreakInTail then
                                     nodesToDeactivate.Add currentEntryIdx |> ignore
+                                // Create rescue candidate for overfull lines (ratio < 0) when there's a forced break
+                                // (explicit or implicit paragraph end). Having ValueSome (vs ValueNone) means
+                                // there's some shrink available but it's not enough.
+                                // For underfull lines (ratio >= 0), forced breaks are handled by the feasibility check above.
                                 else if
                                     (isExplicitForcedBreak || isImplicitParagraphEnd || forcedBreakInTail)
                                     && ratio < 0.0
                                 then
-                                    // Create rescue candidate for overfull lines (ratio < 0) when there's a forced break
-                                    // (explicit or implicit paragraph end). Having ValueSome (vs ValueNone) means
-                                    // there's some shrink available but it's not enough.
-                                    // For underfull lines (ratio >= 0), forced breaks are handled by the feasibility check above.
                                     let overfullRatio = ratio
 
                                     let shouldRescue =

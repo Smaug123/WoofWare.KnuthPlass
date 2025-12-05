@@ -43,7 +43,7 @@ module PenaltyTests =
 
     [<Test>]
     let ``Flagged penalties incur double hyphen demerits`` () =
-        // DoubleHyphenDemerits (tex.web:16915-16918) adds extra cost when two consecutive
+        // DoubleHyphenDemerits (tex.web:16906-16908) adds extra cost when two consecutive
         // lines both end at flagged penalties (like hyphens). This discourages having
         // multiple hyphenated lines in a row, which looks poor typographically.
         //
