@@ -43,8 +43,9 @@ module ForcedBreakTests =
 
     [<Test>]
     let ``Forced break still ends paragraph when no shrink exists`` () =
-        // Overfull with zero shrink: TeX emits an overfull hbox and clamps glue_set to 1.0
-        // (tex.web:13104-13115). The ratio is clamped to -1.0, not -∞.
+        // Overfull with zero shrink: we return -1.0 as our convention for "maximally compressed".
+        // Note: TeX's hpack sets glue_sign to "normal" when there's no shrink, so it doesn't
+        // actually produce a -1.0 ratio internally, but we need a usable value for our API.
         let items = [| Items.box 70.0 ; Items.forcedBreak () |]
 
         let options = LineBreakOptions.Default 50.0
@@ -54,12 +55,12 @@ module ForcedBreakTests =
         lines.Length |> shouldEqual 1
         lines.[0].Start |> shouldEqual 0
         lines.[0].End |> shouldEqual items.Length
-        // Ratio is clamped to -1.0 for overfull lines, not -∞
+        // Our convention: -1.0 for overfull lines (maximally compressed)
         lines.[0].AdjustmentRatio |> shouldEqual -1.0
 
     [<Test>]
     let ``Forced break allows overfull line with limited shrink`` () =
-        // Overfull, but some shrink exists. TeX clamps glue_set to 1.0, so ratio = -1.0.
+        // Overfull, but some shrink exists. Ratio is clamped to -1.0 (maximally compressed).
         // The key point is that the break is ACCEPTED (explicit forced break allows overfull).
         let items = [| Items.box 80.0 ; Items.glue 0.0 0.0 5.0 ; Items.forcedBreak () |]
 
@@ -70,7 +71,7 @@ module ForcedBreakTests =
         lines.Length |> shouldEqual 1
         lines.[0].Start |> shouldEqual 0
         lines.[0].End |> shouldEqual items.Length
-        // Ratio is clamped to -1.0 for overfull lines (tex.web:13104-13115)
+        // Ratio clamped to -1.0 for overfull lines (our convention for maximally compressed)
         lines.[0].AdjustmentRatio |> shouldEqual -1.0
 
     [<Test>]
@@ -88,7 +89,7 @@ module ForcedBreakTests =
         lines.Length |> shouldEqual 1
         lines.[0].Start |> shouldEqual 0
         lines.[0].End |> shouldEqual items.Length
-        // Ratio is clamped to -1.0 for overfull lines (tex.web:13104-13115)
+        // Ratio clamped to -1.0 for overfull lines (our convention for maximally compressed)
         lines.[0].AdjustmentRatio |> shouldEqual -1.0
 
     [<Test>]

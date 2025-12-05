@@ -16,7 +16,7 @@ module ToleranceTests =
         // the final pass keeps an active node even when badness exceeds tolerance, producing an
         // overfull box instead of failing (tex.web:16760-16779, 16824-16829).
         //
-        // The ratio is clamped to -1.0 for overfull lines (tex.web:13104-13115).
+        // We return -1.0 as our convention for overfull lines (maximally compressed).
         let items = [| Items.box 60.0 |]
 
         // Box is 60 wide, line width is 50

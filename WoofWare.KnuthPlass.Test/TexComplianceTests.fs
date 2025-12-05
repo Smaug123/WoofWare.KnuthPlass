@@ -137,7 +137,7 @@ module TexComplianceTests =
         // Avoids the Normal→VeryLoose (diff=2) penalty that Break B incurs
         linesWithPenalty.[0].End |> shouldEqual 3
 
-    /// When shrink is insufficient, TeX clamps glue_set to 1.0 (ratio = -1) instead of throwing.
+    /// When shrink is insufficient, we clamp ratio to -1.0 (our convention for maximally compressed).
     [<Test>]
     let ``Overfull line with limited shrink clamps ratio to minus one`` () =
         let items = [| Items.box 80.0 ; Items.glue 10.0 0.0 5.0 ; Items.box 30.0 |]

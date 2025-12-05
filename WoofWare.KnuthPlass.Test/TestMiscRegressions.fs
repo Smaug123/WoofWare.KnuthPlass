@@ -64,7 +64,7 @@ module BugReproductionTests =
         // TeX does NOT reject - it produces an overfull line on the final pass.
         let lines = LineBreaker.breakLines options items
         lines.Length |> shouldEqual 1
-        // The line is overfull (content > line width), ratio clamped to -1.0
+        // The line is overfull (content > line width); we return -1.0 (our convention)
         lines.[0].AdjustmentRatio |> shouldEqual -1.0
 
     // 4. Penalty contributes to demerits

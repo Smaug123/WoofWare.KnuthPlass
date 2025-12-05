@@ -208,15 +208,16 @@ module LineBreaker =
                 diff / totalStretch
             else
                 noStretchRatio
-        // TeX clamps glue_set to 1.0 for overfull lines (tex.web:17017-17023).
-        // This means the displayed ratio is clamped to -1.0 even if the actual
-        // overfull amount exceeds the available shrink.
+        // Clamp overfull lines to ratio -1.0.
+        // Note: TeX's hpack (tex.web:13104-13115) sets glue_sign to "normal" (not "shrinking")
+        // when there's no shrink available, so TeX doesn't actually produce a meaningful -1.0
+        // ratio in that case. However, we need to return a usable value for our API, and -1.0
+        // is a sensible convention meaning "maximally compressed / overfull".
         else if totalShrink > 0.0 then
             max -1.0 (diff / totalShrink)
         else
-            // No shrink available but line is overfull: clamp to -1.0
-            // This matches TeX's behavior where overfull boxes always have ratio = -1.0
-            // (the maximum shrink ratio), regardless of how much the line exceeds the width.
+            // No shrink available but line is overfull: return -1.0 as our convention
+            // for "maximally compressed". This provides a usable value rather than NaN/infinity.
             -1.0
 
     let inline private fitnessClass (ratio : float) : FitnessClass =

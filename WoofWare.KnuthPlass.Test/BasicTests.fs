@@ -38,7 +38,7 @@ module BasicTests =
     let ``Single box wider than line width produces overfull line`` () =
         // TeX does not fail on an overfull box. On the final pass it keeps an active node
         // and allows an overfull box rather than aborting (tex.web:16815-16829).
-        // The paragraph succeeds with an overfull line (ratio clamped to -1.0).
+        // The paragraph succeeds with an overfull line.
         let items = [| Items.box 150.0 |]
         let options = LineBreakOptions.Default 100.0
 
@@ -47,5 +47,5 @@ module BasicTests =
         lines.Length |> shouldEqual 1
         lines.[0].Start |> shouldEqual 0
         lines.[0].End |> shouldEqual 1
-        // Overfull with no shrink: ratio is clamped to -1.0 (tex.web:13104-13115)
+        // Overfull with no shrink: we return -1.0 as our convention (maximally compressed)
         lines.[0].AdjustmentRatio |> shouldEqual -1.0
