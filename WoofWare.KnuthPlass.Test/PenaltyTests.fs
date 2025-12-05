@@ -12,21 +12,24 @@ module PenaltyTests =
         // A high penalty at one break point should cause the algorithm to prefer
         // a different break point, even if the alternative has slightly worse geometry.
         //
-        // Setup: Two potential break points with different penalty costs.
-        // - Position 2 (after glue): No explicit penalty, geometry slightly worse
-        // - Position 4 (high penalty): Very expensive penalty = 1000
+        // Setup: Two potential break points at penalties with different costs.
+        // Both breaks are at penalty items (not after glue), so the preceding glue
+        // provides stretch/shrink for the line.
         //
-        // With line width 55, breaking at position 2 gives a loose line (needs stretching),
-        // while breaking at position 4 gives a tighter line but incurs the penalty.
-        // The algorithm should avoid the high-penalty break despite better geometry.
+        // - Position 3 (zero-cost penalty): Looser line (ratio ~1.0, badness ~100)
+        // - Position 5 (high penalty = 5000): Tighter line (ratio ~0.25, badness ~1.6)
+        //
+        // Despite position 5 having much better geometry, the algorithm should choose
+        // position 3 because 5000² = 25,000,000 added to demerits is massive.
         let items =
             [|
-                Items.box 30.0
-                Items.glue 10.0 20.0 3.0 // Position 2: break after glue, no explicit penalty
-                Items.box 20.0
-                Items.penalty 0.0 5000.0 false // Position 4: high penalty
-                Items.glue 10.0 5.0 3.0
-                Items.box 30.0
+                Items.box 25.0 // idx 0
+                Items.glue 10.0 20.0 5.0 // idx 1: provides stretch for first line
+                Items.penalty 0.0 0.0 false // idx 2: zero-cost break (position 3)
+                Items.box 15.0 // idx 3
+                Items.penalty 0.0 5000.0 false // idx 4: high penalty break (position 5)
+                Items.glue 10.0 10.0 5.0 // idx 5
+                Items.box 25.0 // idx 6
             |]
 
         let options =
@@ -37,9 +40,9 @@ module PenaltyTests =
         let lines = LineBreaker.breakLines options items
 
         lines.Length |> shouldEqual 2
-        // The algorithm should avoid the high-penalty break at position 4,
-        // preferring to break at position 2 despite looser geometry
-        lines.[0].End |> shouldEqual 2
+        // The algorithm should avoid the high-penalty break at position 5,
+        // preferring to break at position 3 despite looser geometry
+        lines.[0].End |> shouldEqual 3
 
     [<Test>]
     let ``Flagged penalties incur double hyphen demerits`` () =
@@ -47,23 +50,33 @@ module PenaltyTests =
         // lines both end at flagged penalties (like hyphens). This discourages having
         // multiple hyphenated lines in a row, which looks poor typographically.
         //
-        // Setup: Three lines with two break options per position:
-        // - Flagged penalty (like a hyphen)
-        // - Unflagged penalty (like a regular word boundary)
+        // Note on TeX semantics: In TeX, this applies to consecutive breaks at disc_nodes
+        // (discretionary hyphens). This implementation uses "flagged penalties" as an
+        // abstraction for the same concept.
         //
-        // With low DoubleHyphenDemerits, consecutive flagged breaks may be chosen.
+        // Setup: Three lines with two break options per line boundary:
+        // - Unflagged penalty (like a regular word boundary)
+        // - Flagged penalty (like a hyphen, with width representing the hyphen character)
+        //
+        // Glue is placed BEFORE the penalty options to provide stretch (breaking after
+        // glue excludes that glue's stretch, but breaking at a penalty keeps it).
+        //
+        // The flagged option has slightly better geometry (adds hyphen width, reducing
+        // the stretch needed). With low DoubleHyphenDemerits, flagged-flagged is optimal.
         // With high DoubleHyphenDemerits, the algorithm avoids consecutive flagged breaks.
         let items =
             [|
-                Items.box 35.0
-                Items.penalty 0.0 0.0 false // Unflagged option A
-                Items.penalty 5.0 50.0 true // Flagged option A
-                Items.glue 10.0 10.0 3.0
-                Items.box 35.0
-                Items.penalty 0.0 0.0 false // Unflagged option B
-                Items.penalty 5.0 50.0 true // Flagged option B
-                Items.glue 10.0 10.0 3.0
-                Items.box 35.0
+                Items.box 25.0 // idx 0
+                Items.glue 10.0 20.0 5.0 // idx 1: provides stretch
+                Items.penalty 0.0 10.0 false // idx 2: unflagged option A
+                Items.penalty 3.0 10.0 true // idx 3: flagged option A (width 3 = hyphen)
+                Items.glue 10.0 10.0 3.0 // idx 4
+                Items.box 25.0 // idx 5
+                Items.glue 10.0 20.0 5.0 // idx 6: provides stretch
+                Items.penalty 0.0 10.0 false // idx 7: unflagged option B
+                Items.penalty 3.0 10.0 true // idx 8: flagged option B (width 3 = hyphen)
+                Items.glue 10.0 10.0 3.0 // idx 9
+                Items.box 25.0 // idx 10
             |]
 
         let lowPenalty =
