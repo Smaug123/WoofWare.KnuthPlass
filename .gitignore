@@ -15,3 +15,7 @@ result
 *.sarif
 .analyzerpackages/
 .DS_Store
+
+BenchmarkDotNet.Artifacts/
+
+tex.web
