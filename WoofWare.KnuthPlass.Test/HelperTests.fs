@@ -134,7 +134,7 @@ module HelperTests =
         let text = "👨‍👩‍👧‍👦 👍🏽"
 
         // Using default width function which should count grapheme clusters
-        let result = Text.formatEnglish 10.0 text
+        let result = Text.formatEnglishFixedWidth 10.0 text
 
         // Should successfully format without crashing
         // The text should be split since we have 2 grapheme clusters (plus space)

@@ -102,11 +102,28 @@ type Item =
 /// Represents a line in the output
 type Line =
     {
-        /// Index of first item in this line
+        /// Index in the input items array of the first item that is set on this line
         Start : int
-        /// Index of last item before the break (exclusive)
+        /// Index-plus-one in the input items array of the last item that is set on this line.
+        /// (That is, it's the endpoint of an exclusive interval.)
         End : int
-        /// Adjustment ratio: how much glue was stretched (positive) or compressed (negative)
+        /// <summary>How much the glue in this line was stretched (positive) or compressed (negative).</summary>
+        /// <remarks>
+        /// An adjustment ratio is 0 if the line fit perfectly: glue didn't need to stretch or shrink.
+        ///
+        /// The adjustment ratio is positive, equal to (desired length - actual length) / (total glue stretchability),
+        /// if the line was too short so we needed to stretch the glues.
+        ///
+        /// The adjustment ratio is negative, equal to (desired length - actual length) / (total glue shrinkability),
+        /// if the line was too long so we needed to shrink the glues.
+        ///
+        /// Both total-stretchability and total-shrinkability must be strictly positive for this ratio to have any
+        /// meaning; the paper does not define the adjustment ratio if stretching (resp. shrinking) was required and
+        /// the total stretchability (resp. shrinkability) was nonpositive.
+        ///
+        /// The Knuth-Plass algorithm adjusts the width of all glues proportionally by adding to the glue
+        /// a width of "adjustment ratio for line * stretch/shrinkability of that glue".
+        /// </remarks>
         AdjustmentRatio : float
     }
 
