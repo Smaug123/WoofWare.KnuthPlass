@@ -9,7 +9,7 @@ open System.Text
 /// information.
 [<RequireQualifiedAccess>]
 module Text =
-    /// Compute the display width of a string.
+    /// Compute the display width of a string, in a fixed-width font.
     let defaultWordWidth (s : string) : float =
         float (StringInfo(s).LengthInTextElements)
 
@@ -21,8 +21,13 @@ module Text =
     /// Returns the text with line breaks inserted at 'optimal' positions.
     /// Newlines in the input are preserved as paragraph breaks (hard breaks).
     ///
-    /// This method can throw! If your constraints are impossible to satisfy (e.g. a word admits no hyphenation,
-    /// and is longer than the available width), we throw.
+    /// By specifying `wordWidth`, `spaceWidth`, and `hyphenPenalty` appropriately, you can get the string in a form
+    /// that would render in any font.
+    ///
+    /// Note that the resulting text may contain "overfull" lines: lines which don't fit into the line width.
+    /// It's up to you to deal with this appropriately.
+    /// (For example, if the line width is 4 according to `options`, and you try to typeset a string of `wordWidth` 5,
+    /// and `getHyphenationPoints` doesn't let that 5-length string hyphenate, you will get an overfull line.)
     let format
         (options : LineBreakOptions)
         (wordWidth : string -> float)
@@ -152,9 +157,13 @@ module Text =
     /// Returns the text with line breaks inserted at 'optimal' positions.
     /// Newlines in the input are preserved as paragraph breaks (hard breaks).
     ///
-    /// This method can throw! If your constraints are impossible to satisfy (e.g. a word admits no hyphenation,
-    /// and is longer than the available width), we throw.
-    let formatEnglish (lineWidth : float) (text : string) : string =
+    /// We lay out the text for a fixed-width font, using hyphenation for English-language plain text.
+    ///
+    /// Note that the resulting text may contain "overfull" lines: lines which don't fit into the line width.
+    /// It's up to you to deal with this appropriately.
+    /// (For example, if the line length is 4 and you try to typeset the string "xxxxx" which can't hyphenate,
+    /// you will get an overfull line containing the string "xxxxx".)
+    let formatEnglishFixedWidth (lineWidth : float) (text : string) : string =
         format
             (LineBreakOptions.Default lineWidth)
             defaultWordWidth

@@ -1,14 +1,17 @@
 namespace WoofWare.KnuthPlass
 
-/// Represents a fixed-width item (word, character, etc.)
+/// Represents a fixed-width item (word, character, etc) for display.
 type Box =
     {
         /// <summary>
         /// The width of this box.
         /// </summary>
         /// <remarks>
-        /// All widths in the system are relative, but the motivating example is text layout; if this Box were a single
+        /// The unit is arbitrary, but the motivating example is text layout; if this Box were a single
         /// word of text, then this Width would be "the sum of the display widths of the grapheme clusters in the word".
+        ///
+        /// The width may be zero or negative, but these "must be used with care and understanding",
+        /// according to Knuth and Plass.
         /// </remarks>
         Width : float
     }
@@ -16,14 +19,31 @@ type Box =
     /// Terse but human-readable non-round-trip string representation.
     override this.ToString () : string = $"box[%0.02f{this.Width}]"
 
-/// Represents stretchable/shrinkable whitespace.
+/// Represents whitespace to be displayed between boxes.
+/// This can stretch or shrink as necessary within defined bounds to make the layout of the boxes pleasing.
 type Glue =
     {
         /// <summary>The natural width of this glue when neither stretched nor compressed.</summary>
+        /// <remarks>
+        /// This can be negative, e.g. in the case of a backspace, indicating that the subsequent box
+        /// should display *on top of* a previous box.
+        ///
+        /// The unit is arbitrary; it only matters that it's the same across all boxes, glues, and penalties.
+        /// </remarks>
         Width : float
         /// <summary>Maximum amount this glue can be stretched beyond its natural width.</summary>
+        /// <remarks>
+        /// The unit is arbitrary; it only matters that it's the same across all boxes, glues, and penalties.
+        ///
+        /// This can be negative; TODO explain the semantics
+        /// </remarks>
         Stretch : float
         /// <summary>Maximum amount this glue can be compressed below its natural width.</summary>
+        /// <remarks>
+        /// The unit is arbitrary; it only matters that it's the same across all boxes, glues, and penalties.
+        ///
+        /// This can be negative; TODO explain the semantics
+        /// </remarks>
         Shrink : float
     }
 
@@ -31,15 +51,30 @@ type Glue =
     override this.ToString () =
         $"glue[%0.02f{this.Width} / %0.02f{this.Stretch} / %0.02f{this.Shrink}]"
 
-/// Represents a potential break point in the text.
+/// Represents a potential break point in the text, where we can end a line to begin a new line.
 type Penalty =
     {
+        /// <summary>
         /// Additional width added to the line just before the break if the penalty occurs (e.g. the width of a hyphen).
+        /// </summary>
+        /// <remarks>
+        /// The unit is arbitrary; it only matters that it's the same across all boxes, glues, and penalties.
+        /// </remarks>
         Width : float
+        /// <summary>
         /// Cost of breaking at this point. Negative values encourage breaks, positive values discourage them.
+        /// </summary>
+        /// <remarks>
+        /// The unit is arbitrary; it only matters that it's the same across all boxes, glues, and penalties.
+        /// </remarks>
         Cost : float
+        /// <summary>
         /// The algorithm tries to prevent two consecutive breaks at flagged penalties (e.g. to prevent two hyphenations
         /// in a row in the same word).
+        /// </summary>
+        /// <remarks>
+        /// The unit is arbitrary; it only matters that it's the same across all boxes, glues, and penalties.
+        /// </remarks>
         Flagged : bool
     }
 
