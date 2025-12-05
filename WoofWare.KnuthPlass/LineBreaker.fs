@@ -6,8 +6,8 @@ open System
 type private BreakNode =
     {
         Position : int
-        Demerits : float
-        Ratio : float
+        Demerits : float32
+        Ratio : float32
         /// -1 for a sentinel None
         PreviousNode : int
         Fitness : FitnessClass
@@ -17,26 +17,26 @@ type private BreakNode =
 /// Precomputed cumulative sums for efficient line computation
 type private CumulativeSums =
     {
-        Width : float[]
-        Stretch : float[]
-        Shrink : float[]
+        Width : float32[]
+        Stretch : float32[]
+        Shrink : float32[]
     }
 
 [<Struct>]
 type internal WidthTriple =
     {
-        Width : float
-        Stretch : float
-        Shrink : float
+        Width : float32
+        Stretch : float32
+        Shrink : float32
     }
 
 [<RequireQualifiedAccess>]
 module internal WidthTriple =
     let zero : WidthTriple =
         {
-            Width = 0.0
-            Stretch = 0.0
-            Shrink = 0.0
+            Width = 0.0f
+            Stretch = 0.0f
+            Shrink = 0.0f
         }
 
     let inline add (a : WidthTriple) (b : WidthTriple) : WidthTriple =
@@ -58,8 +58,8 @@ module internal WidthTriple =
         | Box box ->
             {
                 Width = box.Width
-                Stretch = 0.0
-                Shrink = 0.0
+                Stretch = 0.0f
+                Shrink = 0.0f
             }
         | Glue glue ->
             {
@@ -88,7 +88,7 @@ module LineBreaker =
     /// Special sentinel ratio value indicating that a line has no glue available to stretch.
     /// This signals to badness() that it should return infBad directly (matching TeX's behavior
     /// when s <= 0). We use infinity as a sentinel since it's never a valid adjustment ratio.
-    let private noStretchRatio = infinity
+    let private noStretchRatio = Single.PositiveInfinity
 
     let private computeCumulativeSums (items : Item[]) : CumulativeSums =
         let n = items.Length
@@ -122,10 +122,10 @@ module LineBreaker =
     let private computeAdjustmentRatio
         (itemsArray : Item array)
         (sums : CumulativeSums)
-        (lineWidth : float)
+        (lineWidth : float32)
         (startIdx : int)
         (endIdx : int)
-        : float voption
+        : float32 voption
         =
         let mutable actualWidth = sums.Width.[endIdx] - sums.Width.[startIdx]
         let mutable totalStretch = sums.Stretch.[endIdx] - sums.Stretch.[startIdx]
@@ -147,18 +147,18 @@ module LineBreaker =
 
         let diff = lineWidth - actualWidth
 
-        if abs diff < 1e-10 then
-            ValueSome 0.0
-        elif diff > 0.0 then
+        if abs diff < 1e-10f then
+            ValueSome 0.0f
+        elif diff > 0.0f then
             // Line is too short, need to stretch
-            if totalStretch > 0.0 then
+            if totalStretch > 0.0f then
                 ValueSome (diff / totalStretch)
             else
                 // No glue to stretch - return sentinel that makes badness = inf_bad
                 // (matches TeX's behavior when s <= 0 in tex.web:16110)
                 ValueSome noStretchRatio
         // Line is too long, need to compress
-        else if totalShrink > 0.0 then
+        else if totalShrink > 0.0f then
             ValueSome (diff / totalShrink)
         else
             // No glue to shrink and line is overfull - cannot fit
@@ -169,10 +169,10 @@ module LineBreaker =
     let private computeDisplayedAdjustmentRatio
         (itemsArray : Item array)
         (sums : CumulativeSums)
-        (lineWidth : float)
+        (lineWidth : float32)
         (startIdx : int)
         (endIdx : int)
-        : float
+        : float32
         =
         let mutable actualWidth = sums.Width.[endIdx] - sums.Width.[startIdx]
         let mutable totalStretch = sums.Stretch.[endIdx] - sums.Stretch.[startIdx]
@@ -203,10 +203,10 @@ module LineBreaker =
 
         let diff = lineWidth - actualWidth
 
-        if abs diff < 1e-10 then
-            0.0
-        elif diff > 0.0 then
-            if totalStretch > 0.0 then
+        if abs diff < 1e-10f then
+            0.0f
+        elif diff > 0.0f then
+            if totalStretch > 0.0f then
                 diff / totalStretch
             else
                 noStretchRatio
@@ -215,20 +215,20 @@ module LineBreaker =
         // when there's no shrink available, so TeX doesn't actually produce a meaningful -1.0
         // ratio in that case. However, we need to return a usable value for our API, and -1.0
         // is a sensible convention meaning "maximally compressed / overfull".
-        else if totalShrink > 0.0 then
-            max -1.0 (diff / totalShrink)
+        else if totalShrink > 0.0f then
+            max -1.0f (diff / totalShrink)
         else
             // No shrink available but line is overfull: return -1.0 as our convention
             // for "maximally compressed". This provides a usable value rather than NaN/infinity.
-            -1.0
+            -1.0f
 
-    let inline private fitnessClass (ratio : float) : FitnessClass =
-        if ratio < -0.5 then FitnessClass.Tight
-        elif ratio <= 0.5 then FitnessClass.Normal
-        elif ratio <= 1.0 then FitnessClass.Loose
+    let inline private fitnessClass (ratio : float32) : FitnessClass =
+        if ratio < -0.5f then FitnessClass.Tight
+        elif ratio <= 0.5f then FitnessClass.Normal
+        elif ratio <= 1.0f then FitnessClass.Loose
         else FitnessClass.VeryLoose
 
-    let inline private badness (ratio : float) : float =
+    let inline private badness (ratio : float32) : float32 =
         // Following TeX's badness function (tex.web:16108-16118):
         // - If no stretch/shrink available (signaled by noStretchRatio sentinel): return inf_bad
         // - If ratio too extreme: cap at inf_bad
@@ -237,18 +237,18 @@ module LineBreaker =
             LineBreakOptions.infBad
         else
             let r = abs ratio
-            min (100.0 * (r ** 3.0)) LineBreakOptions.infBad
+            min (100.0f * (r ** 3.0f)) LineBreakOptions.infBad
 
     let private computeDemerits
         (options : LineBreakOptions)
-        (ratio : float)
-        (penaltyCost : float)
+        (ratio : float32)
+        (penaltyCost : float32)
         (prevFitness : FitnessClass)
         (currFitness : FitnessClass)
         (prevWasFlagged : bool)
         (currIsFlagged : bool)
         (isLastLine : bool)
-        : float
+        : float32
         =
         let bad = badness ratio
         // TeX formula (tex.web:16901): d := line_penalty + badness
@@ -262,10 +262,10 @@ module LineBreaker =
         let mutable demerits =
             let baseDemerits = linePenalty * linePenalty
 
-            if penaltyCost = -infinity then
+            if penaltyCost = Single.NegativeInfinity then
                 // Forced break (eject_penalty): no penalty term
                 baseDemerits
-            elif penaltyCost >= 0.0 then
+            elif penaltyCost >= 0.0f then
                 // Positive penalty: add penalty² (tex.web:16904)
                 baseDemerits + (penaltyCost * penaltyCost)
             else
@@ -315,22 +315,22 @@ module LineBreaker =
         else
             false
 
-    let private getPenaltyAt (itemsArray : Item array) (idx : int) : float * bool =
+    let private getPenaltyAt (itemsArray : Item array) (idx : int) : float32 * bool =
         if idx >= itemsArray.Length then
             // End of paragraph - implicit forced break (TeX behavior)
-            -infinity, false
+            Single.NegativeInfinity, false
         elif idx > 0 then
             match itemsArray.[idx - 1] with
             | Penalty p -> p.Cost, p.Flagged
-            | _ -> 0.0, false
+            | _ -> 0.0f, false
         else
-            0.0, false
+            0.0f, false
 
     type private PendingCandidate =
         {
             PrevNodeIdx : int
-            Ratio : float
-            Demerits : float
+            Ratio : float32
+            Demerits : float32
         }
 
     /// Break a paragraph into lines using the Knuth-Plass algorithm.
@@ -346,14 +346,14 @@ module LineBreaker =
             let sums = computeCumulativeSums items
             // Precompute width-minus-shrink to cheaply bound how small a line can ever be
             // if we keep extending it. This lets us drop hopeless active nodes early.
-            let widthMinusShrink : float array = Array.zeroCreate (n + 1)
+            let widthMinusShrink = Array.zeroCreate (n + 1)
 
             for i = 0 to n do
                 widthMinusShrink.[i] <- sums.Width.[i] - sums.Shrink.[i]
 
-            let suffixMinWidthMinusShrink : float array = Array.zeroCreate (n + 1)
+            let suffixMinWidthMinusShrink = Array.zeroCreate (n + 1)
 
-            let mutable runningMin = Double.PositiveInfinity
+            let mutable runningMin = Single.PositiveInfinity
 
             for i = n downto 0 do
                 let candidate = widthMinusShrink.[i]
@@ -371,7 +371,7 @@ module LineBreaker =
                 for idx = n - 1 downto 0 do
                     let isForced =
                         match items.[idx] with
-                        | Penalty p when p.Cost = -infinity -> true
+                        | Penalty p when p.Cost = Single.NegativeInfinity -> true
                         | _ -> false
 
                     seen <- seen || isForced
@@ -397,8 +397,8 @@ module LineBreaker =
             nodes.Add
                 {
                     Position = 0
-                    Demerits = 0.0
-                    Ratio = 0.0
+                    Demerits = 0.0f
+                    Ratio = 0.0f
                     PreviousNode = -1
                     Fitness = FitnessClass.Normal
                     WasFlagged = false
@@ -562,14 +562,14 @@ module LineBreaker =
                 let diff = options.LineWidth - adjustedWidth
 
                 let ratio =
-                    if abs diff < 1e-10 then
-                        ValueSome 0.0
-                    elif diff > 0.0 then
-                        if adjustedStretch > 0.0 then
+                    if abs diff < 1e-10f then
+                        ValueSome 0.0f
+                    elif diff > 0.0f then
+                        if adjustedStretch > 0.0f then
                             ValueSome (diff / adjustedStretch)
                         else
                             ValueSome noStretchRatio
-                    elif adjustedShrink > 0.0 then
+                    elif adjustedShrink > 0.0f then
                         ValueSome (diff / adjustedShrink)
                     else
                         ValueNone
@@ -597,14 +597,14 @@ module LineBreaker =
 
                 if isValidBreakpoint items i then
                     let penaltyCost, isFlagged = getPenaltyAt items i
-                    let isForced = penaltyCost = -infinity
+                    let isForced = penaltyCost = Single.NegativeInfinity
                     // Check if this is an explicit forced break (penalty item) vs implicit paragraph end
                     let isExplicitForcedBreak =
                         isForced
                         && i > 0
                         && i <= items.Length
                         && match items.[i - 1] with
-                           | Penalty p -> p.Cost = -infinity
+                           | Penalty p -> p.Cost = Single.NegativeInfinity
                            | _ -> false
 
                     // TeX's final-pass rescue (tex.web:16815-16831): at the implicit paragraph end,
@@ -613,7 +613,9 @@ module LineBreaker =
                     // where it "dare not lose all active nodes" during the final pass.
                     let isImplicitParagraphEnd = i = n
 
-                    let mutable rescueCandidate : (int * bool * float * float * float) option = None
+                    let mutable rescueCandidate : (int * bool * float32 * float32 * float32) option =
+                        None
+
                     let mutable anyNodeAdded = false
 
                     let mutable entryIdx = activeEntries.[activeHead].Next
@@ -633,14 +635,14 @@ module LineBreaker =
 
                             let ratioResult, actualWidth, _ = computeRatioFromTriple curActiveWidth i
 
-                            let overfullAmount = max 0.0 (actualWidth - options.LineWidth)
+                            let overfullAmount = max 0.0f (actualWidth - options.LineWidth)
                             let minPossibleWidth = suffixMinWidthMinusShrink.[i] - widthMinusShrink.[prevPos]
 
                             let forcedBreakInTail = forcedBreakAhead.[prevPos]
-                            let noFutureFit = minPossibleWidth > options.LineWidth + 1e-9
+                            let noFutureFit = minPossibleWidth > options.LineWidth + 1e-9f
 
                             match ratioResult with
-                            | ValueSome ratio when isForced || (ratio >= -1.0 && badness ratio <= options.Tolerance) ->
+                            | ValueSome ratio when isForced || (ratio >= -1.0f && badness ratio <= options.Tolerance) ->
                                 // TeX feasibility check: accept if forced (explicit or implicit) OR (not overfull AND badness within tolerance)
                                 // Both explicit forced breaks and implicit paragraph end bypass tolerance to avoid paragraph failures
                                 let fitness = fitnessClass ratio
@@ -679,16 +681,16 @@ module LineBreaker =
                                 // OR the implicit paragraph end, we create overfull boxes rather than fail.
                                 // This ensures paragraphs always produce output.
 
-                                if (isExplicitForcedBreak || isImplicitParagraphEnd) && overfullAmount > 0.0 then
+                                if (isExplicitForcedBreak || isImplicitParagraphEnd) && overfullAmount > 0.0f then
                                     // Forced break with no shrink. TeX creates an overfull box with ratio = -infinity.
-                                    let overfullRatio = -infinity
+                                    let overfullRatio = Single.NegativeInfinity
 
                                     let shouldRescue =
                                         match rescueCandidate with
                                         | None -> true
                                         | Some (_, _, existingOverfull, _, existingDemerits) ->
-                                            overfullAmount < existingOverfull - 1e-9
-                                            || (abs (overfullAmount - existingOverfull) < 1e-9
+                                            overfullAmount < existingOverfull - 1e-9f
+                                            || (abs (overfullAmount - existingOverfull) < 1e-9f
                                                 && prevNode.Demerits < existingDemerits)
 
                                     if shouldRescue then
@@ -714,7 +716,7 @@ module LineBreaker =
                                 // For underfull lines (ratio >= 0), forced breaks are handled by the feasibility check above.
                                 else if
                                     (isExplicitForcedBreak || isImplicitParagraphEnd || forcedBreakInTail)
-                                    && ratio < 0.0
+                                    && ratio < 0.0f
                                 then
                                     let overfullRatio = ratio
 
@@ -722,8 +724,8 @@ module LineBreaker =
                                         match rescueCandidate with
                                         | None -> true
                                         | Some (_, _, existingOverfull, _, existingDemerits) ->
-                                            overfullAmount < existingOverfull - 1e-9
-                                            || (abs (overfullAmount - existingOverfull) < 1e-9
+                                            overfullAmount < existingOverfull - 1e-9f
+                                            || (abs (overfullAmount - existingOverfull) < 1e-9f
                                                 && prevNode.Demerits < existingDemerits)
 
                                     if shouldRescue then
@@ -750,7 +752,7 @@ module LineBreaker =
                                 }
 
                             let ratioResult, actualWidth, _ = computeRatioFromTriple widthTriple i
-                            let overfullAmount = max 0.0 (actualWidth - options.LineWidth)
+                            let overfullAmount = max 0.0f (actualWidth - options.LineWidth)
 
                             match ratioResult with
                             | ValueSome ratio ->
@@ -787,15 +789,15 @@ module LineBreaker =
                                 anyNodeAdded <- true
                             | ValueNone ->
                                 // Forced break with no shrink: rescue with an overfull box.
-                                if overfullAmount > 0.0 then
-                                    let overfullRatio = -infinity
+                                if overfullAmount > 0.0f then
+                                    let overfullRatio = Single.NegativeInfinity
 
                                     let shouldRescue =
                                         match rescueCandidate with
                                         | None -> true
                                         | Some (_, _, existingOverfull, _, existingDemerits) ->
-                                            overfullAmount < existingOverfull - 1e-9
-                                            || (abs (overfullAmount - existingOverfull) < 1e-9
+                                            overfullAmount < existingOverfull - 1e-9f
+                                            || (abs (overfullAmount - existingOverfull) < 1e-9f
                                                 && prevNode.Demerits < existingDemerits)
 
                                     if shouldRescue then
@@ -914,7 +916,7 @@ module LineBreaker =
                         options.LineWidth
                 else
 
-                let mutable minV = Double.MaxValue
+                let mutable minV = Single.PositiveInfinity
                 let mutable best = Unchecked.defaultof<_>
 
                 for i = 0 to nodes.Count - 1 do

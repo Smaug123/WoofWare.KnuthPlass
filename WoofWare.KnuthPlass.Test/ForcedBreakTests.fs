@@ -10,14 +10,14 @@ module ForcedBreakTests =
     let ``Forced break splits lines`` () =
         let items =
             [|
-                Items.box 30.0
-                Items.glue 10.0 5.0 3.0
-                Items.box 20.0
+                Items.box 30.0f
+                Items.glue 10.0f 5.0f 3.0f
+                Items.box 20.0f
                 Items.forcedBreak ()
-                Items.box 40.0
+                Items.box 40.0f
             |]
 
-        let options = LineBreakOptions.Default 100.0
+        let options = LineBreakOptions.Default 100.0f
         let lines = LineBreaker.breakLines options items
 
         lines.Length |> shouldEqual 2
@@ -31,9 +31,10 @@ module ForcedBreakTests =
         // The last line requires significantly more shrink than is available.
         // A forced break must override tolerance checks and still allow the
         // paragraph to finish, otherwise we throw "No valid line breaking found".
-        let items = [| Items.box 70.0 ; Items.glue 0.0 0.0 10.0 ; Items.forcedBreak () |]
+        let items =
+            [| Items.box 70.0f ; Items.glue 0.0f 0.0f 10.0f ; Items.forcedBreak () |]
 
-        let options = LineBreakOptions.Default 50.0
+        let options = LineBreakOptions.Default 50.0f
 
         let lines = LineBreaker.breakLines options items
 
@@ -43,36 +44,36 @@ module ForcedBreakTests =
 
     [<Test>]
     let ``Forced break still ends paragraph when no shrink exists`` () =
-        // Overfull with zero shrink: we return -1.0 as our convention for "maximally compressed".
+        // Overfull with zero shrink: we return -1.0f as our convention for "maximally compressed".
         // Note: TeX's hpack sets glue_sign to "normal" when there's no shrink, so it doesn't
-        // actually produce a -1.0 ratio internally, but we need a usable value for our API.
-        let items = [| Items.box 70.0 ; Items.forcedBreak () |]
+        // actually produce a -1.0f ratio internally, but we need a usable value for our API.
+        let items = [| Items.box 70.0f ; Items.forcedBreak () |]
 
-        let options = LineBreakOptions.Default 50.0
+        let options = LineBreakOptions.Default 50.0f
 
         let lines = LineBreaker.breakLines options items
 
         lines.Length |> shouldEqual 1
         lines.[0].Start |> shouldEqual 0
         lines.[0].End |> shouldEqual items.Length
-        // Our convention: -1.0 for overfull lines (maximally compressed)
-        lines.[0].AdjustmentRatio |> shouldEqual -1.0
+        // Our convention: -1.0f for overfull lines (maximally compressed)
+        lines.[0].AdjustmentRatio |> shouldEqual -1.0f
 
     [<Test>]
     let ``Forced break allows overfull line with limited shrink`` () =
-        // Overfull, but some shrink exists. Ratio is clamped to -1.0 (maximally compressed).
+        // Overfull, but some shrink exists. Ratio is clamped to -1.0f (maximally compressed).
         // The key point is that the break is ACCEPTED (explicit forced break allows overfull).
-        let items = [| Items.box 80.0 ; Items.glue 0.0 0.0 5.0 ; Items.forcedBreak () |]
+        let items = [| Items.box 80.0f ; Items.glue 0.0f 0.0f 5.0f ; Items.forcedBreak () |]
 
-        let options = LineBreakOptions.Default 50.0
+        let options = LineBreakOptions.Default 50.0f
 
         let lines = LineBreaker.breakLines options items
 
         lines.Length |> shouldEqual 1
         lines.[0].Start |> shouldEqual 0
         lines.[0].End |> shouldEqual items.Length
-        // Ratio clamped to -1.0 for overfull lines (our convention for maximally compressed)
-        lines.[0].AdjustmentRatio |> shouldEqual -1.0
+        // Ratio clamped to -1.0f for overfull lines (our convention for maximally compressed)
+        lines.[0].AdjustmentRatio |> shouldEqual -1.0f
 
     [<Test>]
     let ``Overfull without explicit forced break uses final-pass fallback`` () =
@@ -80,31 +81,31 @@ module ForcedBreakTests =
         // TeX's final pass keeps an active node even for overfull lines at the paragraph end
         // (tex.web:16815-16829), producing an overfull hbox rather than failing.
         // The implicit paragraph-end forced break (eject_penalty) rescues the paragraph.
-        let items = [| Items.box 80.0 ; Items.glue 0.0 0.0 5.0 |]
+        let items = [| Items.box 80.0f ; Items.glue 0.0f 0.0f 5.0f |]
 
-        let options = LineBreakOptions.Default 50.0
+        let options = LineBreakOptions.Default 50.0f
 
         let lines = LineBreaker.breakLines options items
 
         lines.Length |> shouldEqual 1
         lines.[0].Start |> shouldEqual 0
         lines.[0].End |> shouldEqual items.Length
-        // Ratio clamped to -1.0 for overfull lines (our convention for maximally compressed)
-        lines.[0].AdjustmentRatio |> shouldEqual -1.0
+        // Ratio clamped to -1.0f for overfull lines (our convention for maximally compressed)
+        lines.[0].AdjustmentRatio |> shouldEqual -1.0f
 
     [<Test>]
     let ``Mid-paragraph forced break survives overfull first line`` () =
         // First line is overfull; forced break comes later. Ensure we still produce two lines.
         let items =
             [|
-                Items.box 80.0
-                Items.glue 0.0 0.0 5.0
-                Items.box 10.0
+                Items.box 80.0f
+                Items.glue 0.0f 0.0f 5.0f
+                Items.box 10.0f
                 Items.forcedBreak ()
-                Items.box 10.0
+                Items.box 10.0f
             |]
 
-        let options = LineBreakOptions.Default 50.0
+        let options = LineBreakOptions.Default 50.0f
 
         let lines = LineBreaker.breakLines options items
 
@@ -118,14 +119,14 @@ module ForcedBreakTests =
     let ``Multiple forced breaks create multiple lines`` () =
         let items =
             [|
-                Items.box 20.0
+                Items.box 20.0f
                 Items.forcedBreak ()
-                Items.box 30.0
+                Items.box 30.0f
                 Items.forcedBreak ()
-                Items.box 40.0
+                Items.box 40.0f
             |]
 
-        let options = LineBreakOptions.Default 100.0
+        let options = LineBreakOptions.Default 100.0f
         let lines = LineBreaker.breakLines options items
 
         lines.Length |> shouldEqual 3
@@ -144,25 +145,25 @@ module ForcedBreakTests =
         // With high FinalHyphenDemerits, the looser line (unflagged break) wins.
         let items =
             [|
-                Items.box 45.0
-                Items.glue 10.0 20.0 5.0
-                Items.penalty 0.0 0.0 true // Position 3: flagged
-                Items.box 10.0
-                Items.penalty 0.0 0.0 false // Position 5: not flagged
-                Items.glue 10.0 20.0 5.0
-                Items.box 20.0
+                Items.box 45.0f
+                Items.glue 10.0f 20.0f 5.0f
+                Items.penalty 0.0f 0.0f true // Position 3: flagged
+                Items.box 10.0f
+                Items.penalty 0.0f 0.0f false // Position 5: not flagged
+                Items.glue 10.0f 20.0f 5.0f
+                Items.box 20.0f
             |]
 
         let lowPenalty =
-            { LineBreakOptions.Default 70.0 with
-                FinalHyphenDemerits = 0.0
-                Tolerance = 5000.0
+            { LineBreakOptions.Default 70.0f with
+                FinalHyphenDemerits = 0.0f
+                Tolerance = 5000.0f
             }
 
         let highPenalty =
-            { LineBreakOptions.Default 70.0 with
-                FinalHyphenDemerits = 10_000_000.0
-                Tolerance = 5000.0
+            { LineBreakOptions.Default 70.0f with
+                FinalHyphenDemerits = 10_000_000.0f
+                Tolerance = 5000.0f
             }
 
         let linesLow = LineBreaker.breakLines lowPenalty items

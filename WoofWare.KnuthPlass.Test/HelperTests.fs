@@ -1,5 +1,6 @@
 namespace WoofWare.KnuthPlass.Test
 
+open System
 open NUnit.Framework
 open WoofWare.Expect
 open WoofWare.KnuthPlass
@@ -20,8 +21,8 @@ module HelperTests =
     [<Test>]
     let ``fromString creates correct items for simple text`` () =
         let text = "hello world"
-        let wordWidth (s : string) = float s.Length * 10.0
-        let spaceWidth = 5.0
+        let wordWidth (s : string) = float32 s.Length * 10.0f
+        let spaceWidth = 5.0f
         let items = Items.fromEnglishString wordWidth spaceWidth text
 
         expect {
@@ -44,8 +45,8 @@ module HelperTests =
     [<Test>]
     let ``fromString handles single word`` () =
         let text = "hello"
-        let wordWidth (s : string) = float s.Length * 10.0
-        let spaceWidth = 5.0
+        let wordWidth (s : string) = float32 s.Length * 10.0f
+        let spaceWidth = 5.0f
         let items = Items.fromEnglishString wordWidth spaceWidth text
 
         expect {
@@ -64,8 +65,8 @@ module HelperTests =
     [<Test>]
     let ``fromString concatenates multiple spaces`` () =
         let text = "hello    world"
-        let wordWidth (s : string) = float s.Length * 10.0
-        let spaceWidth = 5.0
+        let wordWidth (s : string) = float32 s.Length * 10.0f
+        let spaceWidth = 5.0f
         let items = Items.fromEnglishString wordWidth spaceWidth text
 
         expect {
@@ -87,31 +88,31 @@ module HelperTests =
 
     [<Test>]
     let ``box helper creates correct item`` () =
-        let item = Items.box 42.0
+        let item = Items.box 42.0f
 
         match item with
-        | Box b -> b.Width |> shouldEqual 42.0
+        | Box b -> b.Width |> shouldEqual 42.0f
         | _ -> failwith "Should create a Box item"
 
     [<Test>]
     let ``glue helper creates correct item`` () =
-        let item = Items.glue 10.0 5.0 3.0
+        let item = Items.glue 10.0f 5.0f 3.0f
 
         match item with
         | Glue g ->
-            g.Width |> shouldEqual 10.0
-            g.Stretch |> shouldEqual 5.0
-            g.Shrink |> shouldEqual 3.0
+            g.Width |> shouldEqual 10.0f
+            g.Stretch |> shouldEqual 5.0f
+            g.Shrink |> shouldEqual 3.0f
         | _ -> failwith "Should create a Glue item"
 
     [<Test>]
     let ``penalty helper creates correct item`` () =
-        let item = Items.penalty 2.0 100.0 true
+        let item = Items.penalty 2.0f 100.0f true
 
         match item with
         | Penalty p ->
-            p.Width |> shouldEqual 2.0
-            p.Cost |> shouldEqual 100.0
+            p.Width |> shouldEqual 2.0f
+            p.Cost |> shouldEqual 100.0f
             p.Flagged |> shouldEqual true
         | _ -> failwith "Should create a Penalty item"
 
@@ -121,8 +122,8 @@ module HelperTests =
 
         match item with
         | Penalty p ->
-            p.Width |> shouldEqual 0.0
-            p.Cost |> shouldEqual -infinity
+            p.Width |> shouldEqual LanguagePrimitives.GenericZero
+            p.Cost |> shouldEqual Single.NegativeInfinity
             p.Flagged |> shouldEqual false
         | _ -> failwith "Should create a Penalty item"
 
@@ -133,7 +134,7 @@ module HelperTests =
         let text = "👨‍👩‍👧‍👦 👍🏽"
 
         // Using default width function
-        let result = Text.formatEnglishFixedWidth 10.0 text
+        let result = Text.formatEnglishFixedWidth 10.0f text
 
         // Should successfully format without crashing
         result |> shouldNotEqual ""
@@ -144,7 +145,10 @@ module HelperTests =
         let text = "👍🏽"
 
         let items =
-            Items.fromEnglishString (fun s -> float (System.Globalization.StringInfo(s).LengthInTextElements)) 5.0 text
+            Items.fromEnglishString
+                (fun s -> float32 (System.Globalization.StringInfo(s).LengthInTextElements))
+                5.0f
+                text
 
         // The main content of the test is that we see 1.0 rather than 4.0 in the box width.
         expect {
@@ -165,7 +169,9 @@ module HelperTests =
         // finishing glue (width=0, stretch=∞) followed by an explicit forced break
         // penalty (cost=-∞). This achieves the same effect for our algorithm.
         let text = "word"
-        let items = Items.fromEnglishString (fun s -> float s.Length) 1.0 text
+
+        let items =
+            Items.fromEnglishString (fun s -> float32 s.Length) LanguagePrimitives.GenericOne text
 
         // Last two items should be the finishing glue and forced break
         let finishingGlue = items.[items.Length - 2]
@@ -173,15 +179,15 @@ module HelperTests =
 
         match finishingGlue with
         | Glue g ->
-            g.Width |> shouldEqual 0.0
-            System.Double.IsPositiveInfinity g.Stretch |> shouldEqual true
-            g.Shrink |> shouldEqual 0.0
+            g.Width |> shouldEqual LanguagePrimitives.GenericZero
+            System.Single.IsPositiveInfinity g.Stretch |> shouldEqual true
+            g.Shrink |> shouldEqual LanguagePrimitives.GenericZero
         | _ -> failwith "Second-to-last item should be finishing glue"
 
         match forcedBreak with
         | Penalty p ->
-            p.Width |> shouldEqual 0.0
-            System.Double.IsNegativeInfinity p.Cost |> shouldEqual true
+            p.Width |> shouldEqual LanguagePrimitives.GenericZero
+            System.Single.IsNegativeInfinity p.Cost |> shouldEqual true
             p.Flagged |> shouldEqual false
         | _ -> failwith "Last item should be forced break penalty"
 
@@ -195,8 +201,8 @@ module HelperTests =
         // paragraph boundary, producing separate paragraph items for each line.
         // This is convenient for plain-text input where newlines are meaningful.
         let text = "hello\nworld"
-        let wordWidth (s : string) = float s.Length * 10.0
-        let spaceWidth = 5.0
+        let wordWidth (s : string) = float32 s.Length * 10.0f
+        let spaceWidth = 5.0f
         let items = Items.fromEnglishString wordWidth spaceWidth text
 
         expect {

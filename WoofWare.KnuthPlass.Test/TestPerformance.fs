@@ -13,13 +13,13 @@ module TestPerformance =
         // In a complex logic loop, this might take 500ms-1s.
         // With N=5000, N^2 = 25,000,000. This will definitely hang a slow implementation.
 
-        let word = Items.box 5.0
-        let space = Items.glue 1.0 0.5 0.2
+        let word = Items.box 5.0f
+        let space = Items.glue 1.0f 0.5f 0.2f
 
         // Create 5000 words separated by spaces
         let items = Array.init 10000 (fun i -> if i % 2 = 0 then word else space)
 
-        let options = LineBreakOptions.Default 100.0
+        let options = LineBreakOptions.Default 100.0f
 
         let stopwatch = System.Diagnostics.Stopwatch.StartNew ()
 

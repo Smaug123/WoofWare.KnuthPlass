@@ -13,7 +13,7 @@ type Box =
         /// The width may be zero or negative, but these "must be used with care and understanding",
         /// according to Knuth and Plass.
         /// </remarks>
-        Width : float
+        Width : float32
     }
 
     /// Terse but human-readable non-round-trip string representation.
@@ -30,21 +30,21 @@ type Glue =
         ///
         /// The unit is arbitrary; it only matters that it's the same across all boxes, glues, and penalties.
         /// </remarks>
-        Width : float
+        Width : float32
         /// <summary>Maximum amount this glue can be stretched beyond its natural width.</summary>
         /// <remarks>
         /// The unit is arbitrary; it only matters that it's the same across all boxes, glues, and penalties.
         ///
         /// This can be negative; TODO explain the semantics
         /// </remarks>
-        Stretch : float
+        Stretch : float32
         /// <summary>Maximum amount this glue can be compressed below its natural width.</summary>
         /// <remarks>
         /// The unit is arbitrary; it only matters that it's the same across all boxes, glues, and penalties.
         ///
         /// This can be negative; TODO explain the semantics
         /// </remarks>
-        Shrink : float
+        Shrink : float32
     }
 
     /// Terse but human-readable non-round-trip string representation.
@@ -60,14 +60,14 @@ type Penalty =
         /// <remarks>
         /// The unit is arbitrary; it only matters that it's the same across all boxes, glues, and penalties.
         /// </remarks>
-        Width : float
+        Width : float32
         /// <summary>
         /// Cost of breaking at this point. Negative values encourage breaks, positive values discourage them.
         /// </summary>
         /// <remarks>
         /// The unit is arbitrary; it only matters that it's the same across all boxes, glues, and penalties.
         /// </remarks>
-        Cost : float
+        Cost : float32
         /// <summary>
         /// The algorithm tries to prevent two consecutive breaks at flagged penalties (e.g. to prevent two hyphenations
         /// in a row in the same word).
@@ -124,7 +124,7 @@ type Line =
         /// The Knuth-Plass algorithm adjusts the width of all glues proportionally by adding to the glue
         /// a width of "adjustment ratio for line * stretch/shrinkability of that glue".
         /// </remarks>
-        AdjustmentRatio : float
+        AdjustmentRatio : float32
     }
 
     /// Terse but human-readable non-round-trip string representation.
@@ -156,46 +156,46 @@ type FitnessClass =
 type LineBreakOptions =
     {
         /// Target width for each line
-        LineWidth : float
+        LineWidth : float32
         /// Badness threshold for applying the quadratic tolerance penalty (badness = 100 * |ratio|^3).
         /// Typical values: 1-3 for strict, 10 for moderate. Higher values delay the penalty and let looser lines survive.
-        Tolerance : float
+        Tolerance : float32
         /// <summary>Added to badness in demerits calculation (tex.web:16901).</summary>
         /// <remarks>TeX's default is 10. The demerits formula is: (LinePenalty + badness)² + penalty²</remarks>
-        LinePenalty : float
+        LinePenalty : float32
         /// Penalty for consecutive lines of very different tightness (fitness diff > 1)
-        AdjacentLooseTightDemerits : float
+        AdjacentLooseTightDemerits : float32
         /// Penalty for consecutive hyphenated lines
-        DoubleHyphenDemerits : float
+        DoubleHyphenDemerits : float32
         /// Penalty for ending a paragraph with a hyphen
-        FinalHyphenDemerits : float
+        FinalHyphenDemerits : float32
         /// <summary>Multiplier by which to penalise consecutive lines having different fitness classes.</summary>
         /// <remarks>See the <see cref="FitnessClass"/> type for what a fitness class is.
         /// Note: TeX only applies adj_demerits when fitness diff > 1, not for adjacent classes (diff=1).</remarks>
-        FitnessClassDifferencePenalty : float
+        FitnessClassDifferencePenalty : float32
     }
 
     /// TeX's maximum badness value (inf_bad in tex.web:109). Per TeX's badness function
     /// (tex.web:16110-16113), this is returned directly when there's no stretch/shrink
     /// available (s <= 0) or when the ratio would be too extreme (r > 297 in TeX's units).
-    static member internal infBad = 10000.0
+    static member internal infBad : float32 = 10000.0f
 
     /// Default tolerance value: matches TeX's default (200) which allows ratio up to ~1.26.
     /// TeX uses tolerance as a feasibility cutoff - lines with badness > tolerance are rejected.
-    static member DefaultTolerance = 200.0
+    static member DefaultTolerance = 200.0f
     /// Default line penalty value: matches TeX's default (10).
-    static member DefaultLinePenalty = 10.0
+    static member DefaultLinePenalty = 10.0f
     /// Default penalty for consecutive lines of very different tightness
-    static member DefaultAdjacentLooseTightDemerits = 10000.0
+    static member DefaultAdjacentLooseTightDemerits = 10000.0f
     /// Default penalty for consecutive hyphenated lines
-    static member DefaultDoubleHyphenDemerits = 10000.0
+    static member DefaultDoubleHyphenDemerits = 10000.0f
     /// Default penalty for ending a paragraph with a hyphen
-    static member DefaultFinalHyphenDemerits = 5000.0
+    static member DefaultFinalHyphenDemerits = 5000.0f
     /// Default penalty for fitness class differences
-    static member DefaultFitnessClassDifferencePenalty = 100.0
+    static member DefaultFitnessClassDifferencePenalty = 100.0f
 
     /// Creates default options with standard TeX-like values
-    static member Default (lineWidth : float) =
+    static member Default (lineWidth : float32) =
         {
             LineWidth = lineWidth
             Tolerance = LineBreakOptions.DefaultTolerance
@@ -208,11 +208,11 @@ type LineBreakOptions =
 
     /// Creates default options with standard TeX-like values, tuned for monospace layouts like a console where
     /// spaces can't really stretch.
-    static member DefaultMonospace (lineWidth : float) =
+    static member DefaultMonospace (lineWidth : float32) =
         {
             LineWidth = lineWidth
             // Large tolerance so that we accept underfull lines.
-            Tolerance = LineBreakOptions.infBad + 0.1
+            Tolerance = LineBreakOptions.infBad + 0.1f
             LinePenalty = LineBreakOptions.DefaultLinePenalty
             AdjacentLooseTightDemerits = LineBreakOptions.DefaultAdjacentLooseTightDemerits
             DoubleHyphenDemerits = LineBreakOptions.DefaultDoubleHyphenDemerits

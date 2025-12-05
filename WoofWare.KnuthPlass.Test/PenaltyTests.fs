@@ -23,18 +23,18 @@ module PenaltyTests =
         // position 3 because 5000² = 25,000,000 added to demerits is massive.
         let items =
             [|
-                Items.box 25.0 // idx 0
-                Items.glue 10.0 20.0 5.0 // idx 1: provides stretch for first line
-                Items.penalty 0.0 0.0 false // idx 2: zero-cost break (position 3)
-                Items.box 15.0 // idx 3
-                Items.penalty 0.0 5000.0 false // idx 4: high penalty break (position 5)
-                Items.glue 10.0 10.0 5.0 // idx 5
-                Items.box 25.0 // idx 6
+                Items.box 25.0f // idx 0
+                Items.glue 10.0f 20.0f 5.0f // idx 1: provides stretch for first line
+                Items.penalty 0.0f 0.0f false // idx 2: zero-cost break (position 3)
+                Items.box 15.0f // idx 3
+                Items.penalty 0.0f 5000.0f false // idx 4: high penalty break (position 5)
+                Items.glue 10.0f 10.0f 5.0f // idx 5
+                Items.box 25.0f // idx 6
             |]
 
         let options =
-            { LineBreakOptions.Default 55.0 with
-                Tolerance = 5000.0
+            { LineBreakOptions.Default 55.0f with
+                Tolerance = 5000.0f
             }
 
         let lines = LineBreaker.breakLines options items
@@ -75,31 +75,31 @@ module PenaltyTests =
         // the second flagged break is on the penultimate line.
         let items =
             [|
-                Items.box 40.0 // idx 0
-                Items.glue 5.0 10.0 3.0 // idx 1: stretch for line 1
-                Items.penalty 0.0 0.0 false // idx 2: unflagged option A
-                Items.penalty 5.0 0.0 true // idx 3: flagged option A (width 5 gives better geometry)
-                Items.glue 5.0 10.0 3.0 // idx 4: stretch for line 2
-                Items.box 40.0 // idx 5
-                Items.glue 5.0 10.0 3.0 // idx 6
-                Items.penalty 0.0 0.0 false // idx 7: unflagged option B
-                Items.penalty 5.0 0.0 true // idx 8: flagged option B (width 5 gives perfect fit at line width 55)
-                Items.glue 5.0 10.0 3.0 // idx 9: stretch for line 3
-                Items.box 40.0 // idx 10
+                Items.box 40.0f // idx 0
+                Items.glue 5.0f 10.0f 3.0f // idx 1: stretch for line 1
+                Items.penalty 0.0f 0.0f false // idx 2: unflagged option A
+                Items.penalty 5.0f 0.0f true // idx 3: flagged option A (width 5 gives better geometry)
+                Items.glue 5.0f 10.0f 3.0f // idx 4: stretch for line 2
+                Items.box 40.0f // idx 5
+                Items.glue 5.0f 10.0f 3.0f // idx 6
+                Items.penalty 0.0f 0.0f false // idx 7: unflagged option B
+                Items.penalty 5.0f 0.0f true // idx 8: flagged option B (width 5 gives perfect fit at line width 55)
+                Items.glue 5.0f 10.0f 3.0f // idx 9: stretch for line 3
+                Items.box 40.0f // idx 10
             |]
 
         let lowPenalty =
-            { LineBreakOptions.Default 55.0 with
-                DoubleHyphenDemerits = 0.0
-                FinalHyphenDemerits = 0.0 // Must be 0 to isolate DoubleHyphenDemerits
-                Tolerance = 200.0
+            { LineBreakOptions.Default 55.0f with
+                DoubleHyphenDemerits = 0.0f
+                FinalHyphenDemerits = 0.0f // Must be 0 to isolate DoubleHyphenDemerits
+                Tolerance = 200.0f
             }
 
         let highPenalty =
-            { LineBreakOptions.Default 55.0 with
-                DoubleHyphenDemerits = 50_000.0 // Well above the 34 threshold
-                FinalHyphenDemerits = 0.0 // Must be 0 to isolate DoubleHyphenDemerits
-                Tolerance = 200.0
+            { LineBreakOptions.Default 55.0f with
+                DoubleHyphenDemerits = 50_000.0f // Well above the 34 threshold
+                FinalHyphenDemerits = 0.0f // Must be 0 to isolate DoubleHyphenDemerits
+                Tolerance = 200.0f
             }
 
         let linesLow = LineBreaker.breakLines lowPenalty items
@@ -135,33 +135,33 @@ module PenaltyTests =
 
         let makeItems penaltyCost =
             [|
-                Items.box 60.0
-                Items.glue 15.0 20.0 5.0
+                Items.box 60.0f
+                Items.glue 15.0f 20.0f 5.0f
 
                 // Break A: loose line but no penalty cost
-                Items.box 5.0
-                Items.penalty 0.0 0.0 false // Zero-cost break
+                Items.box 5.0f
+                Items.penalty 0.0f 0.0f false // Zero-cost break
 
                 // Break B: tighter line but with signed penalty cost
-                Items.box 10.0
-                Items.penalty 0.0 penaltyCost false // Signed penalty
+                Items.box 10.0f
+                Items.penalty 0.0f penaltyCost false // Signed penalty
 
                 // Second line
-                Items.box 30.0
-                Items.glue 10.0 50.0 5.0
-                Items.box 40.0
+                Items.box 30.0f
+                Items.glue 10.0f 50.0f 5.0f
+                Items.box 40.0f
             |]
 
         let options =
-            { LineBreakOptions.Default 100.0 with
-                Tolerance = 500.0 // High enough that both breaks are feasible
+            { LineBreakOptions.Default 100.0f with
+                Tolerance = 500.0f // High enough that both breaks are feasible
             }
 
         // Use penalty 150 which is high enough to flip the choice
         // For positive penalty, Break A (12100) < Break B (23006), so Break A wins
         // For negative penalty, Break B (-21994) < Break A (12100), so Break B wins
-        let linesWithNegative = LineBreaker.breakLines options (makeItems -150.0)
-        let linesWithPositive = LineBreaker.breakLines options (makeItems 150.0)
+        let linesWithNegative = LineBreaker.breakLines options (makeItems -150.0f)
+        let linesWithPositive = LineBreaker.breakLines options (makeItems 150.0f)
 
         // Both should successfully break
         linesWithNegative.Length |> shouldBeGreaterThan 0
@@ -203,28 +203,28 @@ module PenaltyTests =
         // With FinalHyphenDemerits=50,000,000: Position 3 wins (~10,208 < ~50,003,625)
         let items =
             [|
-                Items.box 55.0 // word1
-                Items.glue 10.0 15.0 3.0
-                Items.penalty 0.0 0.0 false // NON-FLAGGED penalty for non-hyphen break
-                Items.box 12.0 // "hy"
-                Items.penalty 3.0 50.0 true // optional hyphen (FLAGGED) - width 3 represents hyphen width
-                Items.box 13.0 // "phen"
-                Items.glue 10.0 25.0 3.0 // Increased stretch from 17 to 25 - makes second line better when breaking at hyphen
-                Items.box 40.0 // word2
+                Items.box 55.0f // word1
+                Items.glue 10.0f 15.0f 3.0f
+                Items.penalty 0.0f 0.0f false // NON-FLAGGED penalty for non-hyphen break
+                Items.box 12.0f // "hy"
+                Items.penalty 3.0f 50.0f true // optional hyphen (FLAGGED) - width 3 represents hyphen width
+                Items.box 13.0f // "phen"
+                Items.glue 10.0f 25.0f 3.0f // Increased stretch from 17 to 25 - makes second line better when breaking at hyphen
+                Items.box 40.0f // word2
             |]
 
         // Keep tolerance high so that this test focuses solely on
         // the FinalHyphenDemerits behaviour rather than tolerance penalties.
         let baseOptions =
-            { LineBreakOptions.Default 80.0 with
-                Tolerance = 1000.0
+            { LineBreakOptions.Default 80.0f with
+                Tolerance = 1000.0f
             }
 
         // With low FinalHyphenDemerits, the algorithm chooses the hyphenated version
         // since it gives a perfect first line (55 + 10 + 12 + 3 = 80) and decent second line
         let optionsLowPenalty =
             { baseOptions with
-                FinalHyphenDemerits = 0.0
+                FinalHyphenDemerits = 0.0f
             }
 
         let linesLowPenalty = LineBreaker.breakLines optionsLowPenalty items
@@ -233,7 +233,7 @@ module PenaltyTests =
         // and instead break at the non-flagged penalty to avoid the massive penalty
         let optionsHighPenalty =
             { baseOptions with
-                FinalHyphenDemerits = 50000000.0
+                FinalHyphenDemerits = 50000000.0f
             }
 
         let linesHighPenalty = LineBreaker.breakLines optionsHighPenalty items

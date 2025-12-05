@@ -8,47 +8,47 @@ open FsUnitTyped
 module GlueTests =
     [<Test>]
     let ``Glue stretches when line is too short`` () =
-        let items = [| Items.box 30.0 ; Items.glue 10.0 20.0 5.0 ; Items.box 30.0 |]
+        let items = [| Items.box 30.0f ; Items.glue 10.0f 20.0f 5.0f ; Items.box 30.0f |]
         // Line width is 80, content is 70, so glue should stretch
-        let options = LineBreakOptions.Default 80.0
+        let options = LineBreakOptions.Default 80.0f
         let lines = LineBreaker.breakLines options items
 
         lines.Length |> shouldEqual 1
-        lines.[0].AdjustmentRatio |> shouldBeGreaterThan 0.0
+        lines.[0].AdjustmentRatio |> shouldBeGreaterThan 0.0f
 
     [<Test>]
     let ``Glue shrinks when line is too long`` () =
-        let items = [| Items.box 40.0 ; Items.glue 30.0 5.0 10.0 ; Items.box 40.0 |]
+        let items = [| Items.box 40.0f ; Items.glue 30.0f 5.0f 10.0f ; Items.box 40.0f |]
         // Line width is 100, content is 110, so glue should shrink
-        let options = LineBreakOptions.Default 100.0
+        let options = LineBreakOptions.Default 100.0f
         let lines = LineBreaker.breakLines options items
 
         lines.Length |> shouldEqual 1
-        lines.[0].AdjustmentRatio |> shouldBeSmallerThan 0.0
+        lines.[0].AdjustmentRatio |> shouldBeSmallerThan 0.0f
 
     [<Test>]
     let ``Perfect fit has zero adjustment ratio`` () =
-        let items = [| Items.box 40.0 ; Items.glue 20.0 10.0 5.0 ; Items.box 40.0 |]
+        let items = [| Items.box 40.0f ; Items.glue 20.0f 10.0f 5.0f ; Items.box 40.0f |]
         // Line width is exactly 100
-        let options = LineBreakOptions.Default 100.0
+        let options = LineBreakOptions.Default 100.0f
         let lines = LineBreaker.breakLines options items
 
         lines.Length |> shouldEqual 1
-        (abs lines.[0].AdjustmentRatio < 1e-6) |> shouldEqual true
+        (abs lines.[0].AdjustmentRatio < 1e-6f) |> shouldEqual true
 
     [<Test>]
     let ``Glue at start of line should be discarded from width calculation`` () =
         let items =
             [|
-                Items.box 40.0 // "word" on first line
-                Items.penalty 5.0 (-infinity) false // forced break with hyphen width
-                Items.glue 20.0 10.0 5.0 // space that should be discarded on second line
-                Items.box 30.0 // "word" on second line
-                Items.glue 10.0 5.0 3.0 // another glue
-                Items.box 20.0 // another box
+                Items.box 40.0f // "word" on first line
+                Items.penalty 5.0f System.Single.NegativeInfinity false // forced break with hyphen width
+                Items.glue 20.0f 10.0f 5.0f // space that should be discarded on second line
+                Items.box 30.0f // "word" on second line
+                Items.glue 10.0f 5.0f 3.0f // another glue
+                Items.box 20.0f // another box
             |]
 
-        let options = LineBreakOptions.Default 100.0
+        let options = LineBreakOptions.Default 100.0f
         let lines = LineBreaker.breakLines options items
 
         // Should break into 2 lines at the forced break
@@ -69,7 +69,7 @@ module GlueTests =
         // The resulting width is 60 with 5 units of stretch. With a 100-unit target width,
         // the ratio must therefore be (100 - 60) / 5 = 8.0. Including the leading glue would
         // yield roughly 1.333, which keeps the bug alive.
-        let expectedRatio = (options.LineWidth - 60.0) / 5.0
+        let expectedRatio = (options.LineWidth - 60.0f) / 5.0f
         secondLineRatio |> shouldEqual expectedRatio
 
     [<Test>]
@@ -107,13 +107,13 @@ module GlueTests =
 
         let items =
             [|
-                Items.box 20.0
-                Items.glue 5.0 1.0 1.0
-                Items.glue 5.0 1.0 1.0
-                Items.box 20.0
+                Items.box 20.0f
+                Items.glue 5.0f 1.0f 1.0f
+                Items.glue 5.0f 1.0f 1.0f
+                Items.box 20.0f
             |]
 
-        let options = LineBreakOptions.Default 30.0
+        let options = LineBreakOptions.Default 30.0f
         let lines = LineBreaker.breakLines options items
 
         // If the bug exists, it will break at index 2 (after the first glue, eating the second),

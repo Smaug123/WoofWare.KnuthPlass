@@ -10,12 +10,12 @@ open System.Text
 [<RequireQualifiedAccess>]
 module Text =
     /// Compute the display width of a string, in a fixed-width font.
-    let defaultWordWidth (s : string) : float =
-        float (StringInfo(s).LengthInTextElements)
+    let defaultWordWidth (s : string) : float32 =
+        float32 (StringInfo(s).LengthInTextElements)
 
     /// Width of a single space character.
     [<Literal>]
-    let SPACE_WIDTH = 1.0
+    let SPACE_WIDTH = 1.0f
 
     /// Formats text into paragraphs with line breaks using the Knuth-Plass algorithm.
     /// Returns the text with line breaks inserted at 'optimal' positions.
@@ -30,9 +30,9 @@ module Text =
     /// and `getHyphenationPoints` doesn't let that 5-length string hyphenate, you will get an overfull line.)
     let format
         (options : LineBreakOptions)
-        (wordWidth : string -> float)
+        (wordWidth : string -> float32)
         (spaceWidth : Glue)
-        (hyphenPenalty : float)
+        (hyphenPenalty : float32)
         (getHyphenationPoints : string -> int list)
         (text : string)
         : string
@@ -141,7 +141,8 @@ module Text =
                         | true, hasBox when hasBox -> result.Append ' ' |> ignore<StringBuilder>
                         | _ -> ()
 
-                    | Penalty pen when i = line.End - 1 && pen.Width > 0.0 -> result.Append '-' |> ignore<StringBuilder>
+                    | Penalty pen when i = line.End - 1 && pen.Width > 0.0f ->
+                        result.Append '-' |> ignore<StringBuilder>
 
                     | _ -> ()
 
@@ -163,7 +164,7 @@ module Text =
     /// It's up to you to deal with this appropriately.
     /// (For example, if the line length is 4 and you try to typeset the string "xxxxx" which can't hyphenate,
     /// you will get an overfull line containing the string "xxxxx".)
-    let formatEnglishFixedWidth (lineWidth : float) (text : string) : string =
+    let formatEnglishFixedWidth (lineWidth : float32) (text : string) : string =
         format
             (LineBreakOptions.Default lineWidth)
             defaultWordWidth

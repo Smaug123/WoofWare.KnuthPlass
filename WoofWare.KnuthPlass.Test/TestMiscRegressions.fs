@@ -4,7 +4,7 @@ open NUnit.Framework
 open WoofWare.KnuthPlass
 open FsUnitTyped
 
-// Gemini 3.0 Pro came up with these.
+// Gemini 3.0f Pro came up with these.
 
 [<TestFixture>]
 module BugReproductionTests =
@@ -18,16 +18,16 @@ module BugReproductionTests =
         // If trailing glue is included, the line is overfull.
         let items =
             [|
-                Items.box 10.0
-                Items.glue 10.0 0.0 0.0 // Width 10, no stretch/shrink
-                Items.box 10.0
+                Items.box 10.0f
+                Items.glue 10.0f 0.0f 0.0f // Width 10, no stretch/shrink
+                Items.box 10.0f
             |]
 
         // Target 10.
         // Correct: Break after Box 1. Line = Box(10). Glue(10) is discarded. Width 10. Ratio 0.
         // Buggy: Break after Box 1. Line = Box(10) + Glue(10). Width 20. Ratio -infinity (Overfull).
         //        It will be forced to break at the end or fail.
-        let options = LineBreakOptions.Default 10.0
+        let options = LineBreakOptions.Default 10.0f
         let lines = LineBreaker.breakLines options items
 
         lines.Length |> shouldEqual 2
@@ -45,11 +45,11 @@ module BugReproductionTests =
         // so it gets pruned. TeX then falls back to a single overfull line.
         let items =
             [|
-                Items.box 1.0
-                Items.glue 0.0 1.0 0.0 // Stretch 1.0
-                Items.box 1.0
-                Items.glue 0.0 1.0 0.0 // Potential break point (badness 51200 at this position)
-                Items.box 100.0 // Force remaining content to be too long for one line
+                Items.box 1.0f
+                Items.glue 0.0f 1.0f 0.0f // Stretch 1.0
+                Items.box 1.0f
+                Items.glue 0.0f 1.0f 0.0f // Potential break point (badness 51200 at this position)
+                Items.box 100.0f // Force remaining content to be too long for one line
             |]
 
         // Target: 10.0. Tolerance: 1.0.
@@ -57,15 +57,15 @@ module BugReproductionTests =
         // This break is pruned by tolerance.
         // TeX falls back to final-pass rescue: single overfull line.
         let options =
-            { LineBreakOptions.Default 10.0 with
-                Tolerance = 1.0
+            { LineBreakOptions.Default 10.0f with
+                Tolerance = 1.0f
             }
 
         // TeX does NOT reject - it produces an overfull line on the final pass.
         let lines = LineBreaker.breakLines options items
         lines.Length |> shouldEqual 1
-        // The line is overfull (content > line width); we return -1.0 (our convention)
-        lines.[0].AdjustmentRatio |> shouldEqual -1.0
+        // The line is overfull (content > line width); we return -1.0f (our convention)
+        lines.[0].AdjustmentRatio |> shouldEqual -1.0f
 
     // 4. Penalty contributes to demerits
     [<Test>]
@@ -80,26 +80,26 @@ module BugReproductionTests =
 
         let items =
             [|
-                Items.box 70.0
-                Items.glue 20.0 15.0 5.0 // Ample stretch/shrink for both breaks
+                Items.box 70.0f
+                Items.glue 20.0f 15.0f 5.0f // Ample stretch/shrink for both breaks
 
                 // Break A (low penalty): slightly loose line but low penalty cost
-                Items.box 5.0
-                Items.penalty 0.0 10.0 false // Low penalty cost
+                Items.box 5.0f
+                Items.penalty 0.0f 10.0f false // Low penalty cost
 
                 // Break B (high penalty): tighter line but high penalty cost
-                Items.box 5.0
-                Items.penalty 0.0 100.0 false // High penalty cost
+                Items.box 5.0f
+                Items.penalty 0.0f 100.0f false // High penalty cost
 
                 // Second line content
-                Items.box 30.0
-                Items.glue 10.0 50.0 5.0
-                Items.box 40.0
+                Items.box 30.0f
+                Items.glue 10.0f 50.0f 5.0f
+                Items.box 40.0f
             |]
 
         let options =
-            { LineBreakOptions.Default 100.0 with
-                Tolerance = 500.0 // High enough that both breaks are feasible
+            { LineBreakOptions.Default 100.0f with
+                Tolerance = 500.0f // High enough that both breaks are feasible
             }
 
         let lines = LineBreaker.breakLines options items
@@ -120,11 +120,11 @@ module BugReproductionTests =
         // New setup: Add glue AFTER the second-line box so it has stretch for fitting.
         let items =
             [|
-                Items.box 10.0
-                Items.glue 10.0 0.0 5.0 // Glue A
-                Items.glue 10.0 0.0 5.0 // Glue B - cannot break between A and B
-                Items.box 10.0
-                Items.glue 10.0 10.0 0.0 // Glue after second box - provides stretch for second line
+                Items.box 10.0f
+                Items.glue 10.0f 0.0f 5.0f // Glue A
+                Items.glue 10.0f 0.0f 5.0f // Glue B - cannot break between A and B
+                Items.box 10.0f
+                Items.glue 10.0f 10.0f 0.0f // Glue after second box - provides stretch for second line
             |]
 
         // Target 20.
@@ -152,15 +152,15 @@ module BugReproductionTests =
         // REVISED: Add another box and glue to create a viable second line
         let items =
             [|
-                Items.box 10.0
-                Items.glue 10.0 15.0 3.0 // Glue A with stretch
-                Items.glue 10.0 15.0 3.0 // Glue B - cannot break between A and B
-                Items.box 10.0
-                Items.glue 10.0 15.0 3.0 // Provides stretch for potential second line
-                Items.box 10.0 // Additional box to make layout work
+                Items.box 10.0f
+                Items.glue 10.0f 15.0f 3.0f // Glue A with stretch
+                Items.glue 10.0f 15.0f 3.0f // Glue B - cannot break between A and B
+                Items.box 10.0f
+                Items.glue 10.0f 15.0f 3.0f // Provides stretch for potential second line
+                Items.box 10.0f // Additional box to make layout work
             |]
 
-        let options = LineBreakOptions.Default 30.0
+        let options = LineBreakOptions.Default 30.0f
         let lines = LineBreaker.breakLines options items
 
         // Should break into two lines at position 3 (after Glue B), not between the consecutive glues

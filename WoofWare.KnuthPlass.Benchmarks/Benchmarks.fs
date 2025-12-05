@@ -17,7 +17,7 @@ type LineBreakingBenchmarks () =
 
     /// Line width for breaking
     [<DefaultValue>]
-    val mutable lineWidth : float
+    val mutable lineWidth : float32
 
     /// Pre-generated items array for the benchmark
     [<DefaultValue>]
@@ -29,11 +29,11 @@ type LineBreakingBenchmarks () =
 
     [<GlobalSetup>]
     member this.Setup () =
-        this.lineWidth <- 100.0
+        this.lineWidth <- 100.0f
 
         // Create word and space items
-        let word = Items.box 5.0
-        let space = Items.glue 1.0 0.5 0.2
+        let word = Items.box 5.0f
+        let space = Items.glue 1.0f 0.5f 0.2f
 
         // Create alternating word-space pattern
         // Total items = WordCount * 2 (word + space for each)
@@ -80,10 +80,10 @@ type LineWidthVariationBenchmarks () =
     [<GlobalSetup>]
     member this.Setup () =
         // Fixed paragraph size
-        let word = Items.box 5.0
-        let space = Items.glue 1.0 0.5 0.2
+        let word = Items.box 5.0f
+        let space = Items.glue 1.0f 0.5f 0.2f
         this.items <- Array.init 20000 (fun i -> if i % 2 = 0 then word else space)
-        this.options <- LineBreakOptions.Default this.LineWidth
+        this.options <- LineBreakOptions.Default (float32 this.LineWidth)
 
     [<Benchmark>]
     member this.BreakLines () =
@@ -115,19 +115,19 @@ type RealWorldScenarioBenchmarks () =
 
         for _ in 1..50000 do
             // Add word with random width
-            let wordWidth = 3.0 + rng.NextDouble () * 5.0
+            let wordWidth = 3.0f + rng.NextSingle () * 5.0f
             items.Add (Items.box wordWidth)
 
             // 10% chance of a hyphenation point
             if rng.NextDouble () < 0.1 then
-                items.Add (Items.penalty 0.0 50.0 true) // Flagged penalty for hyphen
-                items.Add (Items.box (rng.NextDouble () * 5.0))
+                items.Add (Items.penalty 0.0f 50.0f true) // Flagged penalty for hyphen
+                items.Add (Items.box (rng.NextSingle () * 5.0f))
 
             // Add space
-            items.Add (Items.glue 1.0 0.5 0.2)
+            items.Add (Items.glue 1.0f 0.5f 0.2f)
 
         this.items <- items.ToArray ()
-        this.options <- LineBreakOptions.Default 100.0
+        this.options <- LineBreakOptions.Default 100.0f
 
     [<Benchmark>]
     member this.BreakRealWorldParagraph () =

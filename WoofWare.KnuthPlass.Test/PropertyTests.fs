@@ -25,7 +25,7 @@ module PropertyTests =
             match items.[breakPos - 1] with
             | Penalty p ->
                 // Breaking at a penalty is legal if the penalty is not +infinity
-                not (System.Double.IsPositiveInfinity p.Cost)
+                not (System.Single.IsPositiveInfinity p.Cost)
             | Glue _ ->
                 // Breaking at a glue is legal if the preceding item is a box
                 breakPos >= 2
@@ -52,11 +52,11 @@ module PropertyTests =
         )
 
     /// Generates a positive line width that's reasonable for the text
-    let private genLineWidth : Gen<float> = Gen.choose (10, 200) |> Gen.map float
+    let private genLineWidth : Gen<float32> = Gen.choose (10, 200) |> Gen.map float32
 
     [<Test>]
     let ``All breakpoints in English text line breaking are legal`` () =
-        let property (text : string) (lineWidth : float) =
+        let property (text : string) (lineWidth : float32) =
             let items = Items.fromEnglishString Text.defaultWordWidth Text.SPACE_WIDTH text
 
             if items.Length = 0 then
@@ -66,7 +66,7 @@ module PropertyTests =
                 // Use monospace defaults with high tolerance to ensure we can always find a breaking
                 let options =
                     { LineBreakOptions.DefaultMonospace lineWidth with
-                        Tolerance = 100000.0
+                        Tolerance = 100000.0f
                     }
 
                 let lines = LineBreaker.breakLines options items
@@ -100,7 +100,7 @@ module PropertyTests =
 
         let arb =
             ArbMap.defaults
-            |> ArbMap.generate<string * float>
+            |> ArbMap.generate<string * float32>
             |> Gen.zip genEnglishLikeText
             |> Gen.zip genLineWidth
             |> Gen.map (fun (lineWidth, (text, _)) -> text, lineWidth)

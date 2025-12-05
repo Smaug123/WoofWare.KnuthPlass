@@ -7,7 +7,7 @@ open System
 module Hyphenation =
     /// Cost penalty to apply to the addition of a single hyphen.
     [<Literal>]
-    let DEFAULT_PENALTY = 50.0
+    let DEFAULT_PENALTY = 50.0f
 
     /// Simple English hyphenation following TeX rules:
     /// - Minimum word length: 5 characters
@@ -42,14 +42,14 @@ module Hyphenation =
 [<RequireQualifiedAccess>]
 module Items =
     /// Creates a box with the given width
-    let box (width : float) : Item =
+    let box (width : float32) : Item =
         Box
             {
                 Width = width
             }
 
     /// Creates glue with the given width, stretch, and shrink values
-    let glue (width : float) (stretch : float) (shrink : float) : Item =
+    let glue (width : float32) (stretch : float32) (shrink : float32) : Item =
         Glue
             {
                 Width = width
@@ -58,7 +58,7 @@ module Items =
             }
 
     /// Creates a penalty with the given width, cost, and flagged status
-    let penalty (width : float) (cost : float) (flagged : bool) : Item =
+    let penalty (width : float32) (cost : float32) (flagged : bool) : Item =
         Penalty
             {
                 Width = width
@@ -67,14 +67,15 @@ module Items =
             }
 
     /// Creates a forced break (infinite penalty against not breaking)
-    let forcedBreak () : Item = penalty 0.0 (-infinity) false
+    let forcedBreak () : Item =
+        penalty 0.0f Single.NegativeInfinity false
 
     /// Creates word items with optional hyphenation support
     let private createWordItems
         (word : string)
-        (wordWidth : string -> float)
-        (hyphenWidth : float)
-        (hyphenPenalty : float)
+        (wordWidth : string -> float32)
+        (hyphenWidth : float32)
+        (hyphenPenalty : float32)
         (getHyphenationPoints : string -> int list)
         : Item list
         =
@@ -110,19 +111,19 @@ module Items =
     /// A more complex system like TeX treats the glue after punctuation marks differently from the glue between words.
     /// WoofWare.KnuthPlass doesn't do that out of the box - `defaultGlue` is used for both - but you are free to use
     /// the primitives to write this if you like.
-    let defaultGlue (width : float) : Glue =
+    let defaultGlue (width : float32) : Glue =
         {
             Width = width
-            Stretch = width * 0.5
-            Shrink = width / 3.0
+            Stretch = width * 0.5f
+            Shrink = width / 3.0f
         }
 
     /// A glue which has width 1, can't shrink, and resists stretching.
     let monospaceGlue : Glue =
         {
-            Width = 1.0
-            Stretch = 0.1
-            Shrink = 0.0
+            Width = 1.0f
+            Stretch = 0.1f
+            Shrink = 0.0f
         }
 
     /// Converts a simple string into a list of items (boxes for words, glue for spaces, forced breaks for newlines).
@@ -132,10 +133,10 @@ module Items =
     /// A more complex system like TeX treats the glue after punctuation marks differently from the glue between words.
     /// This function doesn't do that, although you are free to write one if you like!
     let fromString
-        (wordWidth : string -> float)
+        (wordWidth : string -> float32)
         (spaceWidth : Glue)
         (getHyphenationPoints : string -> int list)
-        (hyphenPenalty : float)
+        (hyphenPenalty : float32)
         (text : string)
         : Item[]
         =
@@ -157,7 +158,7 @@ module Items =
                     arr.Add (Glue spaceWidth)
 
             // End each paragraph with infinite-stretch glue and forced break
-            glue 0.0 infinity 0.0 |> arr.Add
+            glue 0.0f Single.PositiveInfinity 0.0f |> arr.Add
             forcedBreak () |> arr.Add
 
         arr.ToArray ()
@@ -167,5 +168,5 @@ module Items =
     ///
     /// A more complex system like TeX treats the glue after punctuation marks differently from the glue between words.
     /// This function doesn't do that, although you are free to write one if you like!
-    let fromEnglishString (wordWidth : string -> float) (spaceWidth : float) (text : string) : Item[] =
+    let fromEnglishString (wordWidth : string -> float32) (spaceWidth : float32) (text : string) : Item[] =
         fromString wordWidth (defaultGlue spaceWidth) Hyphenation.simpleEnglish Hyphenation.DEFAULT_PENALTY text

@@ -3,12 +3,11 @@ namespace WoofWare.KnuthPlass.Test
 open NUnit.Framework
 open WoofWare.KnuthPlass
 open FsUnitTyped
-open WoofWare.Expect
 
 [<TestFixture>]
 module ToleranceTests =
     /// Compute badness = 100 * |ratio|^3
-    let private badness (ratio : float) : float = 100.0 * (abs ratio ** 3.0)
+    let private badness (ratio : float32) : float32 = 100.0f * (abs ratio ** 3.0f)
 
     [<Test>]
     let ``Overfull line with no shrink is rescued on final pass`` () =
@@ -16,20 +15,20 @@ module ToleranceTests =
         // the final pass keeps an active node even when badness exceeds tolerance, producing an
         // overfull box instead of failing (tex.web:16760-16779, 16824-16829).
         //
-        // We return -1.0 as our convention for overfull lines (maximally compressed).
-        let items = [| Items.box 60.0 |]
+        // We return -1.0f as our convention for overfull lines (maximally compressed).
+        let items = [| Items.box 60.0f |]
 
         // Box is 60 wide, line width is 50
         // This is overfull with no glue, but TeX's final pass rescues it.
         let options =
-            { LineBreakOptions.Default 50.0 with
-                Tolerance = 5000.0
+            { LineBreakOptions.Default 50.0f with
+                Tolerance = 5000.0f
             }
 
         let lines = LineBreaker.breakLines options items
 
         lines.Length |> shouldEqual 1
-        lines.[0].AdjustmentRatio |> shouldEqual -1.0
+        lines.[0].AdjustmentRatio |> shouldEqual -1.0f
 
     [<Test>]
     let ``Underfull lines exceeding tolerance are pruned mid-paragraph`` () =
@@ -42,14 +41,14 @@ module ToleranceTests =
 
         let items =
             [|
-                Items.box 30.0
-                Items.glue 5.0 5.0 0.0 // Can stretch by 5
-                Items.box 30.0
+                Items.box 30.0f
+                Items.glue 5.0f 5.0f 0.0f // Can stretch by 5
+                Items.box 30.0f
             |]
 
         let options =
-            { LineBreakOptions.Default 80.0 with
-                Tolerance = 10.0 // Strict tolerance
+            { LineBreakOptions.Default 80.0f with
+                Tolerance = 10.0f // Strict tolerance
             }
 
         // Natural width: 30 + 5 + 30 = 65
@@ -64,25 +63,25 @@ module ToleranceTests =
 
         let lines = LineBreaker.breakLines options items
         lines.Length |> shouldEqual 1
-        lines.[0].AdjustmentRatio |> shouldEqual 3.0
+        lines.[0].AdjustmentRatio |> shouldEqual 3.0f
 
     [<Test>]
     let ``Overfull lines within shrink limits are accepted`` () =
         // Lines with -1 <= ratio < 0 are feasible if the shrinkage is within glue limits.
         // TeX's tolerance is a feasibility cutoff for badness, not for the ratio.
-        // A ratio of -1.0 corresponds to using all available shrink, and
+        // A ratio of -1.0f corresponds to using all available shrink, and
         // badness = 100 * |ratio|³ = 100 for ratio = -1.0.
 
         let items =
             [|
-                Items.box 50.0
-                Items.glue 10.0 0.0 5.0 // Width 10, can shrink by 5
-                Items.box 50.0
+                Items.box 50.0f
+                Items.glue 10.0f 0.0f 5.0f // Width 10, can shrink by 5
+                Items.box 50.0f
             |]
 
         let options =
-            { LineBreakOptions.Default 105.0 with
-                Tolerance = 100.0 // Badness cutoff
+            { LineBreakOptions.Default 105.0f with
+                Tolerance = 100.0f // Badness cutoff
             }
 
         // Natural width: 50 + 10 + 50 = 110
@@ -93,7 +92,7 @@ module ToleranceTests =
 
         let lines = LineBreaker.breakLines options items
         lines.Length |> shouldEqual 1
-        lines.[0].AdjustmentRatio |> shouldEqual -1.0
+        lines.[0].AdjustmentRatio |> shouldEqual -1.0f
 
     [<Test>]
     let ``Higher tolerance allows looser lines to be feasible`` () =
@@ -104,21 +103,21 @@ module ToleranceTests =
         // With higher tolerance, more breakpoints become feasible.
         let items =
             [|
-                Items.box 50.0
-                Items.glue 10.0 5.0 3.0
-                Items.box 50.0
-                Items.glue 10.0 5.0 3.0
-                Items.box 50.0
+                Items.box 50.0f
+                Items.glue 10.0f 5.0f 3.0f
+                Items.box 50.0f
+                Items.glue 10.0f 5.0f 3.0f
+                Items.box 50.0f
             |]
 
         let strictOptions =
-            { LineBreakOptions.Default 100.0 with
-                Tolerance = 0.5 // Very strict: most breaks are infeasible
+            { LineBreakOptions.Default 100.0f with
+                Tolerance = 0.5f // Very strict: most breaks are infeasible
             }
 
         let looseOptions =
-            { LineBreakOptions.Default 100.0 with
-                Tolerance = 5000.0 // Permissive: more breaks are feasible
+            { LineBreakOptions.Default 100.0f with
+                Tolerance = 5000.0f // Permissive: more breaks are feasible
             }
 
         // With strict tolerance, mid-paragraph breaks are likely pruned as infeasible,
@@ -141,12 +140,12 @@ module ToleranceTests =
 
         let items =
             [|
-                Items.box 25.0
-                Items.glue 8.0 0.0 8.5
-                Items.box 25.0
-                Items.penalty 0.0 0.0 false
-                Items.glue 15.0 5.0 5.0 // More balanced glue for second line
-                Items.box 30.0 // Larger box for second line
+                Items.box 25.0f
+                Items.glue 8.0f 0.0f 8.5f
+                Items.box 25.0f
+                Items.penalty 0.0f 0.0f false
+                Items.glue 15.0f 5.0f 5.0f // More balanced glue for second line
+                Items.box 30.0f // Larger box for second line
             |]
 
         // Two-line solution:
@@ -157,20 +156,20 @@ module ToleranceTests =
         //
         // The tight line should NOT be pruned; both lines are within tolerance.
         let tolerantOptions =
-            { LineBreakOptions.Default 50.0 with
-                Tolerance = 5000.0
+            { LineBreakOptions.Default 50.0f with
+                Tolerance = 5000.0f
             }
 
         let optimalLines = LineBreaker.breakLines tolerantOptions items
         optimalLines.Length |> shouldEqual 2
         optimalLines.[0].End |> shouldEqual 4
 
-        (abs (optimalLines.[0].AdjustmentRatio + 0.9411764705882353)) < 1e-6
+        (abs (optimalLines.[0].AdjustmentRatio + 0.9411764705882353f)) < 1e-6f
         |> shouldEqual true
 
         // With default tolerance (200), the tight line (badness 83) is still feasible
         // and should be chosen as the optimal solution.
-        let defaultOptions = LineBreakOptions.Default 50.0
+        let defaultOptions = LineBreakOptions.Default 50.0f
         let actualLines = LineBreaker.breakLines defaultOptions items
 
         actualLines |> shouldEqual optimalLines
@@ -194,17 +193,17 @@ module ToleranceTests =
 
         let items =
             [|
-                Items.box 30.0
-                Items.glue 10.0 10.0 5.0
-                Items.penalty 0.0 0.0 false // Position 3: Line 1 badness 6400 > tolerance
-                Items.box 30.0
-                Items.glue 10.0 60.0 10.0
-                Items.penalty 0.0 0.0 false // Position 6: Line 1 badness 0, Line 2 badness ~195
-                Items.glue 20.0 40.0 5.0 // Line 2 stretch/shrink
-                Items.box 10.0
+                Items.box 30.0f
+                Items.glue 10.0f 10.0f 5.0f
+                Items.penalty 0.0f 0.0f false // Position 3: Line 1 badness 6400 > tolerance
+                Items.box 30.0f
+                Items.glue 10.0f 60.0f 10.0f
+                Items.penalty 0.0f 0.0f false // Position 6: Line 1 badness 0, Line 2 badness ~195
+                Items.glue 20.0f 40.0f 5.0f // Line 2 stretch/shrink
+                Items.box 10.0f
             |]
 
-        let options = LineBreakOptions.Default 80.0 // Uses default tolerance = 200
+        let options = LineBreakOptions.Default 80.0f // Uses default tolerance = 200
         let lines = LineBreaker.breakLines options items
 
         // Should break at position 6 (position 3 was pruned by tolerance)
@@ -212,4 +211,4 @@ module ToleranceTests =
         lines.[0].End |> shouldEqual 6
 
         // Verify Line 1 has the expected ratio
-        (abs (lines.[0].AdjustmentRatio - 0.0)) < 0.01 |> shouldEqual true
+        (abs lines.[0].AdjustmentRatio) < 0.01f |> shouldEqual true

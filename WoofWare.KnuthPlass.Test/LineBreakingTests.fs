@@ -14,21 +14,21 @@ module LineBreakingTests =
         // overfull line. To actually get multiple lines, we need higher tolerance.
         let items =
             [|
-                Items.box 30.0
-                Items.glue 10.0 5.0 3.0
-                Items.box 25.0
-                Items.glue 10.0 5.0 3.0
-                Items.box 30.0
-                Items.glue 10.0 5.0 3.0
-                Items.box 35.0
-                Items.glue 10.0 5.0 3.0
-                Items.box 20.0
+                Items.box 30.0f
+                Items.glue 10.0f 5.0f 3.0f
+                Items.box 25.0f
+                Items.glue 10.0f 5.0f 3.0f
+                Items.box 30.0f
+                Items.glue 10.0f 5.0f 3.0f
+                Items.box 35.0f
+                Items.glue 10.0f 5.0f 3.0f
+                Items.box 20.0f
             |]
 
         // Raise tolerance to allow looser lines to be feasible
         let options =
-            { LineBreakOptions.Default 80.0 with
-                Tolerance = 5000.0
+            { LineBreakOptions.Default 80.0f with
+                Tolerance = 5000.0f
             }
 
         let lines = LineBreaker.breakLines options items
@@ -57,33 +57,33 @@ module LineBreakingTests =
 
         let items =
             [|
-                Items.box 8.0
-                Items.glue 2.0 1.0 1.0 // width/stretch/shrink
-                Items.box 8.0
-                Items.glue 2.0 1.0 1.0
-                Items.box 8.0
-                Items.glue 2.0 1.0 1.0
-                Items.box 8.0
-                Items.glue 2.0 1.0 1.0
-                Items.box 8.0
-                Items.glue 2.0 1.0 1.0
-                Items.box 8.0
+                Items.box 8.0f
+                Items.glue 2.0f 1.0f 1.0f // width/stretch/shrink
+                Items.box 8.0f
+                Items.glue 2.0f 1.0f 1.0f
+                Items.box 8.0f
+                Items.glue 2.0f 1.0f 1.0f
+                Items.box 8.0f
+                Items.glue 2.0f 1.0f 1.0f
+                Items.box 8.0f
+                Items.glue 2.0f 1.0f 1.0f
+                Items.box 8.0f
             |]
 
-        let options = LineBreakOptions.Default 30.0
+        let options = LineBreakOptions.Default 30.0f
         let lines = LineBreaker.breakLines options items
 
         lines.Length |> shouldEqual 2
 
         // The algorithm should prefer balanced lines (both around ratio 1.0)
         for line in lines do
-            (abs line.AdjustmentRatio < 2.0) |> shouldEqual true
+            (abs line.AdjustmentRatio < 2.0f) |> shouldEqual true
 
         // Both lines should have similar adjustment ratios
         let ratios = lines |> Array.map (fun l -> l.AdjustmentRatio)
         let maxRatio = ratios |> Array.max
         let minRatio = ratios |> Array.min
-        (maxRatio - minRatio < 1.0) |> shouldEqual true
+        (maxRatio - minRatio < 1.0f) |> shouldEqual true
 
     [<Test>]
     let ``Underfull line without glue is infeasible`` () =
@@ -104,14 +104,14 @@ module LineBreakingTests =
         // not because of high demerits. The algorithm chooses option 2.
         let items =
             [|
-                Items.box 15.0 // "word1"
-                Items.glue 10.0 5.0 10.0 // Need shrink=10 to make one-line solution achievable
-                Items.box 15.0 // "word2"
-                Items.glue 10.0 5.0 10.0 // Total shrink=20 allows ratio=-1.0 for one line
-                Items.box 40.0 // "word3" - if alone on a line, it's underfull with no glue
+                Items.box 15.0f // "word1"
+                Items.glue 10.0f 5.0f 10.0f // Need shrink=10 to make one-line solution achievable
+                Items.box 15.0f // "word2"
+                Items.glue 10.0f 5.0f 10.0f // Total shrink=20 allows ratio=-1.0f for one line
+                Items.box 40.0f // "word3" - if alone on a line, it's underfull with no glue
             |]
 
-        let options = LineBreakOptions.Default 70.0
+        let options = LineBreakOptions.Default 70.0f
         let lines = LineBreaker.breakLines options items
 
         // Should choose to keep everything on one line (tight but feasible)
@@ -127,16 +127,16 @@ module LineBreakingTests =
         // but perfectly fills the line with actual boxes.
         let items =
             [|
-                Items.box 20.0
-                Items.glue 10.0 10.0 3.0
-                Items.box 0.5
-                Items.penalty 0.5 100.0 true
-                Items.box 15.0
-                Items.glue 5.0 5.0 2.0
-                Items.box 10.0
+                Items.box 20.0f
+                Items.glue 10.0f 10.0f 3.0f
+                Items.box 0.5f
+                Items.penalty 0.5f 100.0f true
+                Items.box 15.0f
+                Items.glue 5.0f 5.0f 2.0f
+                Items.box 10.0f
             |]
 
-        let options = LineBreakOptions.Default 31.0
+        let options = LineBreakOptions.Default 31.0f
         let lines = LineBreaker.breakLines options items
 
         lines.Length |> shouldEqual 2
@@ -167,16 +167,16 @@ module LineBreakingTests =
 
         let items =
             [|
-                Items.box 55.0
-                Items.glue 5.0 0.0 40.0 // At pos 2: trailing (no shrink). At pos 4: NOT trailing (provides shrink)
-                Items.box 15.0
-                Items.glue 5.0 10.0 0.0 // Trailing at position 4
-                Items.box 20.0
-                Items.glue 10.0 30.0 10.0 // Stretch/shrink for the second line
-                Items.box 5.0
+                Items.box 55.0f
+                Items.glue 5.0f 0.0f 40.0f // At pos 2: trailing (no shrink). At pos 4: NOT trailing (provides shrink)
+                Items.box 15.0f
+                Items.glue 5.0f 10.0f 0.0f // Trailing at position 4
+                Items.box 20.0f
+                Items.glue 10.0f 30.0f 10.0f // Stretch/shrink for the second line
+                Items.box 5.0f
             |]
 
-        let options = LineBreakOptions.Default 50.0
+        let options = LineBreakOptions.Default 50.0f
         let lines = LineBreaker.breakLines options items
 
         // Should break at position 4 (position 2 is overfull due to trailing glue exclusion)
@@ -184,4 +184,4 @@ module LineBreakingTests =
         lines.[0].End |> shouldEqual 4
 
         // Verify Line 1 uses the non-trailing glue's shrink
-        (abs (lines.[0].AdjustmentRatio - (-0.625))) < 0.02 |> shouldEqual true
+        (abs (lines.[0].AdjustmentRatio - -0.625f)) < 0.02f |> shouldEqual true
