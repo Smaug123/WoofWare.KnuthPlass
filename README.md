@@ -13,6 +13,7 @@
 The [Knuth-Plass line breaking algorithm](https://en.wikipedia.org/wiki/Knuth%E2%80%93Plass_line-breaking_algorithm).
 (See [Gwern's mirror of the paper](https://gwern.net/doc/design/typography/tex/1981-knuth.pdf).)
 This is almost entirely coded by Claude Sonnet 4.5, Claude Opus 4.5, and GPT-5.1-codex, with review from Sonnet and Opus 4.5, Gemini 2.5 and 3.0 Pro, and GPT-5.
+(That's why it sometimes uses American English; I thought it was more honest to leave it that way!)
 
 ## How to use
 

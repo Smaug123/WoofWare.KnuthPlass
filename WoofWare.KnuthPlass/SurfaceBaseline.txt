@@ -113,5 +113,5 @@ WoofWare.KnuthPlass.Penalty.Width [property]: [read-only] float
 WoofWare.KnuthPlass.Text inherit obj
 WoofWare.KnuthPlass.Text.defaultWordWidth [static method]: string -> float
 WoofWare.KnuthPlass.Text.format [static method]: WoofWare.KnuthPlass.LineBreakOptions -> (string -> float) -> WoofWare.KnuthPlass.Glue -> float -> (string -> int list) -> string -> string
-WoofWare.KnuthPlass.Text.formatEnglish [static method]: float -> string -> string
+WoofWare.KnuthPlass.Text.formatEnglishFixedWidth [static method]: float -> string -> string
 WoofWare.KnuthPlass.Text.SPACE_WIDTH [static field]: float = 1

@@ -214,7 +214,10 @@ module LineBreaker =
             // overfull amount exceeds the available shrink.
             max -1.0 (diff / totalShrink)
         else
-            Double.NegativeInfinity
+            // No shrink available but line is overfull: clamp to -1.0
+            // This matches TeX's behavior where overfull boxes always have ratio = -1.0
+            // (the maximum shrink ratio), regardless of how much the line exceeds the width.
+            -1.0
 
     let inline private fitnessClass (ratio : float) : FitnessClass =
         if ratio < -0.5 then FitnessClass.Tight
@@ -579,6 +582,12 @@ module LineBreaker =
                            | Penalty p -> p.Cost = -infinity
                            | _ -> false
 
+                    // TeX's final-pass rescue (tex.web:16815-16831): at the implicit paragraph end,
+                    // we MUST produce output even if no feasible solution exists. Overfull/underfull
+                    // boxes are acceptable as a last resort. This is equivalent to TeX's behavior
+                    // where it "dare not lose all active nodes" during the final pass.
+                    let isImplicitParagraphEnd = i = n
+
                     let pendingNodes : PendingCandidate option array = Array.create 4 None
                     let nodesToDeactivate = System.Collections.Generic.HashSet<int> ()
                     let newlyCreatedNodes = ResizeArray<int> ()
@@ -642,11 +651,11 @@ module LineBreaker =
                                             }
                             | ValueNone ->
                                 // No shrink available (after adjusting for trailing glue).
-                                // Only EXPLICIT forced breaks (user-specified penalty with -infinity) allow
-                                // overfull boxes. The implicit paragraph end does NOT allow overfull rescue;
-                                // this design choice means infeasible paragraphs throw exceptions.
+                                // TeX's final-pass rescue (tex.web:16815-16831): at EXPLICIT forced breaks
+                                // OR the implicit paragraph end, we create overfull boxes rather than fail.
+                                // This ensures paragraphs always produce output.
 
-                                if isExplicitForcedBreak && overfullAmount > 0.0 then
+                                if (isExplicitForcedBreak || isImplicitParagraphEnd) && overfullAmount > 0.0 then
                                     // Forced break with no shrink. TeX creates an overfull box with ratio = -infinity.
                                     let overfullRatio = -infinity
 
@@ -673,9 +682,13 @@ module LineBreaker =
                                 // Ratio doesn't meet feasibility conditions, but might be rescuable
                                 if not canEverFit && not isForced && not forcedBreakInTail then
                                     nodesToDeactivate.Add currentEntryIdx |> ignore
-                                else if (isExplicitForcedBreak || forcedBreakInTail) && ratio < 0.0 then
-                                    // Create rescue candidate for overfull lines (ratio < 0) when there's an EXPLICIT forced break.
-                                    // Having ValueSome (vs ValueNone) means there's some shrink available.
+                                else if
+                                    (isExplicitForcedBreak || isImplicitParagraphEnd || forcedBreakInTail)
+                                    && ratio < 0.0
+                                then
+                                    // Create rescue candidate for overfull lines (ratio < 0) when there's a forced break
+                                    // (explicit or implicit paragraph end). Having ValueSome (vs ValueNone) means
+                                    // there's some shrink available but it's not enough.
                                     // For underfull lines (ratio >= 0), forced breaks are handled by the feasibility check above.
                                     let overfullRatio = ratio
 
