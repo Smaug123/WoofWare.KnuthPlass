@@ -557,7 +557,7 @@ module LineBreaker =
                     else
                         ValueNone
 
-                ratio, adjustedWidth
+                ratio, adjustedWidth, adjustedShrink
 
             // For each position, find the best predecessor
             let pendingNodes : PendingCandidate option array = Array.create 4 None
@@ -614,7 +614,8 @@ module LineBreaker =
                             let prevNode = nodes.[prevNodeIdx]
                             let prevPos = prevNode.Position
 
-                            let ratioResult, actualWidth = computeRatioFromTriple curActiveWidth i
+                            let ratioResult, actualWidth, _ = computeRatioFromTriple curActiveWidth i
+
                             let overfullAmount = max 0.0 (actualWidth - options.LineWidth)
                             let totalShrinkAvailable = sums.Shrink.[n] - sums.Shrink.[prevPos]
                             let canEverFit = overfullAmount <= totalShrinkAvailable + 1e-9
@@ -730,7 +731,7 @@ module LineBreaker =
                                     Shrink = sums.Shrink.[i] - sums.Shrink.[prevPos]
                                 }
 
-                            let ratioResult, actualWidth = computeRatioFromTriple widthTriple i
+                            let ratioResult, actualWidth, _ = computeRatioFromTriple widthTriple i
                             let overfullAmount = max 0.0 (actualWidth - options.LineWidth)
 
                             match ratioResult with

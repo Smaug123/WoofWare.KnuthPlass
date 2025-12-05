@@ -49,3 +49,27 @@ module BasicTests =
         lines.[0].End |> shouldEqual 1
         // Overfull with no shrink: we return -1.0 as our convention (maximally compressed)
         lines.[0].AdjustmentRatio |> shouldEqual -1.0
+
+    [<Test>]
+    let foo () =
+        let rng = System.Random (42) // Fixed seed for reproducibility
+
+        let items = ResizeArray<Item> ()
+
+        for _ in 1..50000 do
+            // Add word with random width
+            let wordWidth = 3.0 + rng.NextDouble () * 5.0
+            items.Add (Items.box wordWidth)
+
+            // 10% chance of a hyphenation point
+            if rng.NextDouble () < 0.1 then
+                items.Add (Items.penalty 0.0 50.0 true) // Flagged penalty for hyphen
+                items.Add (Items.box (rng.NextDouble () * 5.0))
+
+            // Add space
+            items.Add (Items.glue 1.0 0.5 0.2)
+
+        LineBreaker.breakLines (LineBreakOptions.Default 100.0) (items.ToArray ())
+        |> ignore
+
+        ()
