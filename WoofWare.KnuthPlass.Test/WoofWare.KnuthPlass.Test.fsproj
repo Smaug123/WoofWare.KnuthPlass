@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
@@ -6,7 +6,22 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="Assembly.fs" />
+    <Compile Include="FsCheck.fs" />
+    <Compile Include="BasicTests.fs"/>
+    <Compile Include="ForcedBreakTests.fs"/>
+    <Compile Include="GlueTests.fs"/>
+    <Compile Include="LineBreakingTests.fs"/>
+    <Compile Include="PenaltyTests.fs"/>
+    <Compile Include="HelperTests.fs"/>
+    <Compile Include="HyphenationTests.fs"/>
+    <Compile Include="RealWorldTests.fs"/>
+    <Compile Include="TestMiscRegressions.fs" />
+    <Compile Include="TestPerformance.fs" />
     <Compile Include="TestSurface.fs" />
+    <Compile Include="ToleranceTests.fs"/>
+    <Compile Include="TexComplianceTests.fs"/>
+    <Compile Include="PropertyTests.fs"/>
     <EmbeddedResource Include="publicdomain/*" />
   </ItemGroup>
 
