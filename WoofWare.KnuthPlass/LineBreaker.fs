@@ -566,7 +566,16 @@ module LineBreaker =
                 ratio, adjustedWidth
 
             // For each position, find the best predecessor
+            let pendingNodes : PendingCandidate option array = Array.create 4 None
+            let nodesToDeactivate = System.Collections.Generic.HashSet<int> ()
+            let newlyCreatedNodes = ResizeArray<int> ()
+
             for i in 1..n do
+                newlyCreatedNodes.Clear ()
+                nodesToDeactivate.Clear ()
+                for j = 0 to pendingNodes.Length - 1 do
+                    pendingNodes.[j] <- None
+
                 // Update the active width to include the contribution from the previous item
                 let itemTriple = WidthTriple.ofItem items.[i - 1]
                 activeWidth <- WidthTriple.add activeWidth itemTriple
@@ -589,9 +598,6 @@ module LineBreaker =
                     // where it "dare not lose all active nodes" during the final pass.
                     let isImplicitParagraphEnd = i = n
 
-                    let pendingNodes : PendingCandidate option array = Array.create 4 None
-                    let nodesToDeactivate = System.Collections.Generic.HashSet<int> ()
-                    let newlyCreatedNodes = ResizeArray<int> ()
                     let mutable rescueCandidate : (int * bool * float * float * float) option = None
                     let mutable anyNodeAdded = false
 
