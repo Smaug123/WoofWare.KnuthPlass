@@ -518,7 +518,7 @@ module LineBreaker =
             // Seed the active list with the start node
             appendActiveEntryForNode 0 0
 
-            let inline computeRatioFromTriple (widthTriple : WidthTriple) (startIdx : int) (endIdx : int) =
+            let inline computeRatioFromTriple (widthTriple : WidthTriple) (endIdx : int) =
                 // Start with the raw width from cumulative sums
                 let mutable adjustedWidth = widthTriple.Width
                 let mutable adjustedStretch = widthTriple.Stretch
@@ -614,7 +614,7 @@ module LineBreaker =
                             let prevNode = nodes.[prevNodeIdx]
                             let prevPos = prevNode.Position
 
-                            let ratioResult, actualWidth = computeRatioFromTriple curActiveWidth prevPos i
+                            let ratioResult, actualWidth = computeRatioFromTriple curActiveWidth i
                             let overfullAmount = max 0.0 (actualWidth - options.LineWidth)
                             let totalShrinkAvailable = sums.Shrink.[n] - sums.Shrink.[prevPos]
                             let canEverFit = overfullAmount <= totalShrinkAvailable + 1e-9
@@ -730,7 +730,7 @@ module LineBreaker =
                                     Shrink = sums.Shrink.[i] - sums.Shrink.[prevPos]
                                 }
 
-                            let ratioResult, actualWidth = computeRatioFromTriple widthTriple prevPos i
+                            let ratioResult, actualWidth = computeRatioFromTriple widthTriple i
                             let overfullAmount = max 0.0 (actualWidth - options.LineWidth)
 
                             match ratioResult with
