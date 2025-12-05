@@ -49,7 +49,9 @@ module RealWorldTests =
             adjustedWidth <= options.LineWidth + 1e-6
 
         lines
-        |> Array.iteri (fun idx line -> Assert.That (lineFits line, $"Line {idx} exceeds width {bounds.LineWidth}"))
+        |> Array.iteri (fun idx line ->
+            Assert.That (lineFits line, $"Line {idx} exceeds width {bounds.LineWidth}: {line}")
+        )
 
     [<Test>]
     let ``Format a typical paragraph`` () =
@@ -123,19 +125,25 @@ over the lazy dog."
                     text
         }
 
-    [<TestCase "publicdomain.jekyll_and_hyde.txt">]
-    [<TestCase "publicdomain.puck_speech.txt">]
-    let ``formatParagraph keeps text within bounds`` (testResource : string) =
+    let boundsTestCases =
+        [
+            "publicdomain.jekyll_and_hyde.txt"
+            "publicdomain.puck_speech.txt"
+        ]
+        |> List.allPairs [20..80]
+        |> List.map TestCaseData
+
+    [<TestCaseSource (nameof boundsTestCases)>]
+    let ``formatParagraph keeps text within bounds`` (width : int, testResource : string) =
         let text =
             Assembly.readEmbeddedResource testResource
             |> fun s -> s.Replace("\r", "").Replace ("\n", " ")
 
-        for i = 20 to 80 do
-            assertLayoutWithinBounds
-                {
-                    LineWidth = float i
-                }
-                text
+        assertLayoutWithinBounds
+            {
+                LineWidth = float width
+            }
+            text
 
 
     [<Test>]
