@@ -116,9 +116,44 @@ jobs:
       - name: Flake check
         run: nix flake check
 
+  nuget-pack:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0 # so that NerdBank.GitVersioning has access to history
+    - name: Install Nix
+      uses: cachix/install-nix-action@v31
+      with:
+        extra_nix_config: |
+          access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+    - name: Restore dependencies
+      run: nix develop --command dotnet restore
+    - name: Build
+      run: nix develop --command dotnet build --no-restore --configuration Release
+    - name: Pack
+      run: nix develop --command dotnet pack --configuration Release
+    - name: Upload NuGet artifact
+      uses: actions/upload-artifact@v5
+      with:
+        name: nuget-package
+        path: WoofWare.KnuthPlass/bin/Release/WoofWare.KnuthPlass.*.nupkg
+
+  expected-pack:
+    needs: [nuget-pack]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download NuGet artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: nuget-package
+      - name: Check NuGet contents
+        # Verify that there is exactly one nupkg in the artifact that would be NuGet published
+        run: if [[ $(find . -maxdepth 1 -name 'WoofWare.KnuthPlass.*.nupkg' -printf c | wc -c) -ne "1" ]]; then exit 1; fi
+
   all-required-checks-complete:
     if: ${{ always() }}
-    needs: [check-dotnet-format, check-nix-format, build, build-nix, flake-check, analyzers]
+    needs: [check-dotnet-format, check-nix-format, build, build-nix, flake-check, analyzers, nuget-pack]
     runs-on: ubuntu-latest
     steps:
       - uses: G-Research/common-actions/check-required-lite@2b7dc49cb14f3344fbe6019c14a31165e258c059
