@@ -58,6 +58,7 @@
           src = ./.;
           projectFile = "./WoofWare.KnuthPlass/WoofWare.KnuthPlass.fsproj";
           testProjectFile = "./WoofWare.KnuthPlass.Test/WoofWare.KnuthPlass.Test.fsproj";
+          disabledTests = ["WoofWare.KnuthPlass.Test.TestSurface.CheckVersionAgainstRemote"];
           nugetDeps = ./nix/deps.json; # `nix build .#default.fetch-deps && ./result nix/deps.json`
           doCheck = true;
         };
