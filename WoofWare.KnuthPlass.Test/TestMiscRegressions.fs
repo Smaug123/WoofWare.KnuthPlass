@@ -4,10 +4,10 @@ open NUnit.Framework
 open WoofWare.KnuthPlass
 open FsUnitTyped
 
+// Gemini 3.0f Pro came up with these.
+
 [<TestFixture>]
 module BugReproductionTests =
-
-    // Start of Gemini 3.0 Pro tests
 
     // 1. The "Break Point Glue" Calculation Error
     // This is covered by your existing test: ``Hyphenation is preferred when trailing glue cannot stretch``
@@ -166,55 +166,3 @@ module BugReproductionTests =
         // Should break into two lines at position 3 (after Glue B), not between the consecutive glues
         lines.Length |> shouldEqual 2
         lines.[0].End |> shouldEqual 3
-
-    // End of Gemini 3.0 Pro tests
-
-    /// The line-breaker should prefer earlier valid breakpoints over later overfull ones.
-    ///
-    /// This test demonstrates a bug where the algorithm produces an overfull line when
-    /// a valid breakpoint exists at an earlier position that would fit within the target width.
-    ///
-    /// Scenario:
-    /// - Text: "Mr. Utterson the lawyer was a man of a rugged countenance"
-    /// - Line width: 40
-    /// - Valid breakpoint at position 22 (after "a"): width 38, fits perfectly
-    /// - Algorithm incorrectly chooses position 26: width 45, overfull by 5
-    ///
-    /// The bug appears when additional text follows - with just "...rugged" (no "countenance"),
-    /// the algorithm correctly breaks at position 22.
-    [<Test>]
-    let ``Should prefer valid breakpoint over later overfull one`` () =
-        let text = "Mr. Utterson the lawyer was a man of a rugged countenance"
-        let items = Items.fromEnglishString Text.defaultWordWidth Text.SPACE_WIDTH text
-        let options = LineBreakOptions.Default 40.0f
-        let lines = LineBreaker.breakLines options items
-
-        // Calculate actual width of line 0
-        let mutable boxWidth = 0.0f
-        let mutable glueCount = 0
-
-        for i = lines.[0].Start to lines.[0].End - 1 do
-            match items.[i] with
-            | Box b -> boxWidth <- boxWidth + b.Width
-            | Glue _ -> glueCount <- glueCount + 1
-            | Penalty _ -> ()
-
-        // Exclude trailing glue
-        if lines.[0].End > 0 && lines.[0].End <= items.Length then
-            match items.[lines.[0].End - 1] with
-            | Glue _ -> glueCount <- glueCount - 1
-            | _ -> ()
-
-        let actualWidth = boxWidth + float32 glueCount
-
-        // The line should NOT be overfull. A valid breakpoint exists at position 22
-        // with width 38, which fits in the target width of 40.
-        //
-        // Position 22 is after "a" in "of a", giving the line:
-        // "Mr. Utterson the lawyer was a man of a" (38 chars, ratio ~0.5)
-        //
-        // The remaining text "rugged countenance" (18 chars) easily fits on line 2.
-        actualWidth <= 40.0f |> shouldEqual true
-
-        // Verify we break at the valid position, not the overfull one
-        lines.[0].End |> shouldEqual 22

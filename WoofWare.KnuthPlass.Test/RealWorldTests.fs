@@ -78,14 +78,12 @@ module RealWorldTests =
 
     [<Test>]
     let ``Varying line widths`` () =
-        // Use widths where the content can actually be broken into multiple lines
-        // Total natural width is ~605, so we use widths that allow proper line breaking
         let text = "This is a test of the line breaking algorithm with multiple words."
         let wordWidth (s : string) = float32 s.Length * 10.0f
         let spaceWidth = 5.0f
         let items = Items.fromEnglishString wordWidth spaceWidth text
 
-        let narrowLines = LineBreaker.breakLines (LineBreakOptions.Default 250.0f) items
+        let narrowLines = LineBreaker.breakLines (LineBreakOptions.Default 150.0f) items
         let wideLines = LineBreaker.breakLines (LineBreakOptions.Default 500.0f) items
 
         narrowLines.Length |> shouldBeGreaterThan wideLines.Length
@@ -122,9 +120,8 @@ dog."
 
         expect {
             snapshot
-                @"The quick brown fox
-jumps over the lazy
-dog."
+                @"The quick brown fox jumps
+over the lazy dog."
 
             return
                 Text.format

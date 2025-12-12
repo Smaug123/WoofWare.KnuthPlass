@@ -11,7 +11,7 @@ module TestSurface =
     [<Test>]
     let ``Ensure API surface has not been modified`` () = ApiSurface.assertIdentical assembly
 
-    [<Test ; Explicit "not published yet">]
+    [<Test>]
     // https://github.com/nunit/nunit3-vs-adapter/issues/876
     let CheckVersionAgainstRemote () =
         MonotonicVersion.validate assembly "WoofWare.KnuthPlass"

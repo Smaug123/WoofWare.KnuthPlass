@@ -29,10 +29,14 @@ jobs:
           access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
     - name: Restore dependencies
       run: nix develop --command dotnet restore
-    - name: Build
-      run: nix develop --command dotnet build --no-restore --configuration Release
-    - name: Test
+    - name: Build (debug)
+      run: nix develop --command dotnet build --configuration Debug
+    - name: Test (debug)
       run: nix develop --command dotnet test
+    - name: Build (release)
+      run: nix develop --command dotnet build --configuration Release
+    - name: Test (release)
+      run: nix develop --command dotnet test --configuration release
 
   build-nix:
     runs-on: ubuntu-latest

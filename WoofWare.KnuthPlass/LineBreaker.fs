@@ -85,6 +85,22 @@ type private ActiveEntry =
 [<RequireQualifiedAccess>]
 module LineBreaker =
 
+#if DEBUG
+    /// Debug tracing controlled by WOOFWARE_KNUTH_PLASS_DEBUG environment variable.
+    /// Set to "1" or "true" to enable tracing to stderr.
+    /// Only available in DEBUG builds.
+    let private debugEnabled =
+        match Environment.GetEnvironmentVariable "WOOFWARE_KNUTH_PLASS_DEBUG" with
+        | null -> false
+        | s -> s = "1" || String.Equals (s, "true", StringComparison.OrdinalIgnoreCase)
+
+    let inline private trace (msgFn : unit -> string) =
+        if debugEnabled then
+            Console.Error.WriteLine (msgFn ())
+#else
+    let inline private trace (_msgFn : unit -> string) = ()
+#endif
+
     /// Special sentinel ratio value indicating that a line has no glue available to stretch.
     /// This signals to badness() that it should return infBad directly (matching TeX's behavior
     /// when s <= 0). We use infinity as a sentinel since it's never a valid adjustment ratio.
@@ -506,8 +522,8 @@ module LineBreaker =
                         | ActiveEntryKind.Delta _, ActiveEntryKind.Sentinel ->
                             removeEntry prevIdx
                             removeEntry entryIdx
-                        | (ActiveEntryKind.Sentinel, ActiveEntryKind.ActiveNode _)
-                        | (ActiveEntryKind.Delta _, ActiveEntryKind.ActiveNode _) ->
+                        | ActiveEntryKind.Sentinel, ActiveEntryKind.ActiveNode _
+                        | ActiveEntryKind.Delta _, ActiveEntryKind.ActiveNode _ ->
                             // No delta separating entries; simply remove this node.
                             removeEntry entryIdx
                         | ActiveEntryKind.ActiveNode _, _ ->
@@ -641,6 +657,15 @@ module LineBreaker =
                             let forcedBreakInTail = forcedBreakAhead.[prevPos]
                             let noFutureFit = minPossibleWidth > options.LineWidth + 1e-9f
 
+                            trace (fun () ->
+                                let ratioStr =
+                                    match ratioResult with
+                                    | ValueSome r -> $"%.4f{r}"
+                                    | ValueNone -> "None"
+
+                                $"  Considering break %d{prevPos}->%d{i}: ratio=%s{ratioStr}, width=%.2f{actualWidth}, isForced=%b{isForced}, forcedBreakInTail=%b{forcedBreakInTail}"
+                            )
+
                             match ratioResult with
                             | ValueSome ratio when isForced || (ratio >= -1.0f && badness ratio <= options.Tolerance) ->
                                 // TeX feasibility check: accept if forced (explicit or implicit) OR (not overfull AND badness within tolerance)
@@ -667,6 +692,10 @@ module LineBreaker =
                                     | None -> true
                                     | Some existing -> demerits < existing.Demerits
 
+                                trace (fun () ->
+                                    $"    FEASIBLE: ratio=%.4f{ratio}, badness=%.2f{badness ratio}, demerits=%.2f{demerits}, fitness=%d{int fitness}, shouldUpdate=%b{shouldUpdate}"
+                                )
+
                                 if shouldUpdate then
                                     pendingNodes.[fitnessIdx] <-
                                         Some
@@ -680,24 +709,11 @@ module LineBreaker =
                                 // TeX's final-pass rescue (tex.web:16815-16831): at EXPLICIT forced breaks
                                 // OR the implicit paragraph end, we create overfull boxes rather than fail.
                                 // This ensures paragraphs always produce output.
+                                trace (fun () -> "    INFEASIBLE (ValueNone): no shrink available")
 
                                 if (isExplicitForcedBreak || isImplicitParagraphEnd) && overfullAmount > 0.0f then
                                     // Forced break with no shrink. TeX creates an overfull box with ratio = -infinity.
                                     let overfullRatio = Single.NegativeInfinity
-                                    let overfullFitness = fitnessClass overfullRatio
-
-                                    let lineDemerits =
-                                        computeDemerits
-                                            options
-                                            overfullRatio
-                                            penaltyCost
-                                            prevNode.Fitness
-                                            overfullFitness
-                                            prevNode.WasFlagged
-                                            isFlagged
-                                            (i = n)
-
-                                    let totalDemerits = prevNode.Demerits + lineDemerits
 
                                     let shouldRescue =
                                         match rescueCandidate with
@@ -705,16 +721,26 @@ module LineBreaker =
                                         | Some (_, _, existingOverfull, _, existingDemerits) ->
                                             overfullAmount < existingOverfull - 1e-9f
                                             || (abs (overfullAmount - existingOverfull) < 1e-9f
-                                                && totalDemerits < existingDemerits)
+                                                && prevNode.Demerits < existingDemerits)
 
                                     if shouldRescue then
                                         rescueCandidate <-
-                                            Some (prevNodeIdx, isFlagged, overfullAmount, overfullRatio, totalDemerits)
+                                            Some (
+                                                prevNodeIdx,
+                                                isFlagged,
+                                                overfullAmount,
+                                                overfullRatio,
+                                                prevNode.Demerits
+                                            )
                                 elif noFutureFit && not isForced && not forcedBreakInTail then
                                     nodesToDeactivate.Add currentEntryIdx |> ignore
                                     deferredForFinalBreak.Add prevNodeIdx |> ignore
                             | ValueSome ratio ->
                                 // Ratio doesn't meet feasibility conditions, but might be rescuable
+                                trace (fun () ->
+                                    $"    INFEASIBLE: ratio=%.4f{ratio} (>= -1: %b{ratio >= -1.0f}), badness=%.2f{badness ratio} (<= tol: %b{badness ratio <= options.Tolerance}), noFutureFit=%b{noFutureFit}, forcedBreakInTail=%b{forcedBreakInTail}"
+                                )
+
                                 if noFutureFit && not isForced && not forcedBreakInTail then
                                     nodesToDeactivate.Add currentEntryIdx |> ignore
                                     deferredForFinalBreak.Add prevNodeIdx |> ignore
@@ -727,20 +753,6 @@ module LineBreaker =
                                     && ratio < 0.0f
                                 then
                                     let overfullRatio = ratio
-                                    let overfullFitness = fitnessClass overfullRatio
-
-                                    let lineDemerits =
-                                        computeDemerits
-                                            options
-                                            overfullRatio
-                                            penaltyCost
-                                            prevNode.Fitness
-                                            overfullFitness
-                                            prevNode.WasFlagged
-                                            isFlagged
-                                            (i = n)
-
-                                    let totalDemerits = prevNode.Demerits + lineDemerits
 
                                     let shouldRescue =
                                         match rescueCandidate with
@@ -748,11 +760,21 @@ module LineBreaker =
                                         | Some (_, _, existingOverfull, _, existingDemerits) ->
                                             overfullAmount < existingOverfull - 1e-9f
                                             || (abs (overfullAmount - existingOverfull) < 1e-9f
-                                                && totalDemerits < existingDemerits)
+                                                && prevNode.Demerits < existingDemerits)
 
                                     if shouldRescue then
+                                        trace (fun () ->
+                                            $"    RESCUE CANDIDATE: from %d{prevPos}, overfull=%.2f{overfullAmount}, ratio=%.4f{overfullRatio}, demerits=%.2f{prevNode.Demerits}"
+                                        )
+
                                         rescueCandidate <-
-                                            Some (prevNodeIdx, isFlagged, overfullAmount, overfullRatio, totalDemerits)
+                                            Some (
+                                                prevNodeIdx,
+                                                isFlagged,
+                                                overfullAmount,
+                                                overfullRatio,
+                                                prevNode.Demerits
+                                            )
                         | ActiveEntryKind.Sentinel -> entryIdx <- activeEntries.[entryIdx].Next
 
                     if isImplicitParagraphEnd && deferredForFinalBreak.Count > 0 then
@@ -807,20 +829,6 @@ module LineBreaker =
                                 // Forced break with no shrink: rescue with an overfull box.
                                 if overfullAmount > 0.0f then
                                     let overfullRatio = Single.NegativeInfinity
-                                    let overfullFitness = fitnessClass overfullRatio
-
-                                    let lineDemerits =
-                                        computeDemerits
-                                            options
-                                            overfullRatio
-                                            penaltyCost
-                                            prevNode.Fitness
-                                            overfullFitness
-                                            prevNode.WasFlagged
-                                            isFlagged
-                                            true // isLast - this is always at paragraph end
-
-                                    let totalDemerits = prevNode.Demerits + lineDemerits
 
                                     let shouldRescue =
                                         match rescueCandidate with
@@ -828,7 +836,7 @@ module LineBreaker =
                                         | Some (_, _, existingOverfull, _, existingDemerits) ->
                                             overfullAmount < existingOverfull - 1e-9f
                                             || (abs (overfullAmount - existingOverfull) < 1e-9f
-                                                && totalDemerits < existingDemerits)
+                                                && prevNode.Demerits < existingDemerits)
 
                                     if shouldRescue then
                                         rescueCandidate <-
@@ -837,7 +845,7 @@ module LineBreaker =
                                                 isFlagged,
                                                 overfullAmount,
                                                 overfullRatio,
-                                                totalDemerits
+                                                prevNode.Demerits
                                             )
 
                     for entry in nodesToDeactivate do
@@ -872,6 +880,10 @@ module LineBreaker =
                                         WasFlagged = isFlagged
                                     }
 
+                                trace (fun () ->
+                                    $"  ADDING NODE at %d{i}: from %d{pending.PrevNodeIdx}, ratio=%.4f{pending.Ratio}, demerits=%.2f{pending.Demerits}, fitness=%d{int fitness}"
+                                )
+
                                 nodes.Add newNode
                                 let nodeIdx = nodes.Count - 1
                                 setBestNode fitness i nodeIdx
@@ -887,8 +899,14 @@ module LineBreaker =
                         | None -> ()
 
                     if not anyNodeAdded then
+                        trace (fun () -> $"  NO FEASIBLE NODE at %d{i}, checking rescue...")
+
                         match rescueCandidate with
                         | Some (prevNodeIdx, flag, _, ratio, prevDemerits) ->
+                            trace (fun () ->
+                                $"  USING RESCUE at %d{i}: from node %d{prevNodeIdx} (pos %d{nodes.[prevNodeIdx].Position}), ratio=%.4f{ratio}, demerits=%.2f{prevDemerits}"
+                            )
+
                             let newNode =
                                 {
                                     Position = i
@@ -927,7 +945,7 @@ module LineBreaker =
                                     appendActiveEntryForNode nodeIdx i
 
                                 anyNodeAdded <- true
-                        | None -> ()
+                        | None -> trace (fun () -> $"  NO RESCUE CANDIDATE at %d{i}")
 
                     if isForced then
                         clearActiveList ()
@@ -941,9 +959,7 @@ module LineBreaker =
             let bestEndIdx =
                 if nodes.Count = 0 then
                     failwithf
-                        "No valid line breaking found for paragraph with %d items and line width %.2f. Try: (1) increasing line width, (2) increasing tolerance, or (3) allowing hyphenation"
-                        items.Length
-                        options.LineWidth
+                        $"No valid line breaking found for paragraph with %d{items.Length} items and line width %.2f{options.LineWidth}. Try: (1) increasing line width, (2) increasing tolerance, or (3) allowing hyphenation"
                 else
 
                 let mutable minV = Single.PositiveInfinity
