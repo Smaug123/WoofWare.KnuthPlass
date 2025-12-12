@@ -684,6 +684,20 @@ module LineBreaker =
                                 if (isExplicitForcedBreak || isImplicitParagraphEnd) && overfullAmount > 0.0f then
                                     // Forced break with no shrink. TeX creates an overfull box with ratio = -infinity.
                                     let overfullRatio = Single.NegativeInfinity
+                                    let overfullFitness = fitnessClass overfullRatio
+
+                                    let lineDemerits =
+                                        computeDemerits
+                                            options
+                                            overfullRatio
+                                            penaltyCost
+                                            prevNode.Fitness
+                                            overfullFitness
+                                            prevNode.WasFlagged
+                                            isFlagged
+                                            (i = n)
+
+                                    let totalDemerits = prevNode.Demerits + lineDemerits
 
                                     let shouldRescue =
                                         match rescueCandidate with
@@ -691,17 +705,11 @@ module LineBreaker =
                                         | Some (_, _, existingOverfull, _, existingDemerits) ->
                                             overfullAmount < existingOverfull - 1e-9f
                                             || (abs (overfullAmount - existingOverfull) < 1e-9f
-                                                && prevNode.Demerits < existingDemerits)
+                                                && totalDemerits < existingDemerits)
 
                                     if shouldRescue then
                                         rescueCandidate <-
-                                            Some (
-                                                prevNodeIdx,
-                                                isFlagged,
-                                                overfullAmount,
-                                                overfullRatio,
-                                                prevNode.Demerits
-                                            )
+                                            Some (prevNodeIdx, isFlagged, overfullAmount, overfullRatio, totalDemerits)
                                 elif noFutureFit && not isForced && not forcedBreakInTail then
                                     nodesToDeactivate.Add currentEntryIdx |> ignore
                                     deferredForFinalBreak.Add prevNodeIdx |> ignore
@@ -719,6 +727,20 @@ module LineBreaker =
                                     && ratio < 0.0f
                                 then
                                     let overfullRatio = ratio
+                                    let overfullFitness = fitnessClass overfullRatio
+
+                                    let lineDemerits =
+                                        computeDemerits
+                                            options
+                                            overfullRatio
+                                            penaltyCost
+                                            prevNode.Fitness
+                                            overfullFitness
+                                            prevNode.WasFlagged
+                                            isFlagged
+                                            (i = n)
+
+                                    let totalDemerits = prevNode.Demerits + lineDemerits
 
                                     let shouldRescue =
                                         match rescueCandidate with
@@ -726,17 +748,11 @@ module LineBreaker =
                                         | Some (_, _, existingOverfull, _, existingDemerits) ->
                                             overfullAmount < existingOverfull - 1e-9f
                                             || (abs (overfullAmount - existingOverfull) < 1e-9f
-                                                && prevNode.Demerits < existingDemerits)
+                                                && totalDemerits < existingDemerits)
 
                                     if shouldRescue then
                                         rescueCandidate <-
-                                            Some (
-                                                prevNodeIdx,
-                                                isFlagged,
-                                                overfullAmount,
-                                                overfullRatio,
-                                                prevNode.Demerits
-                                            )
+                                            Some (prevNodeIdx, isFlagged, overfullAmount, overfullRatio, totalDemerits)
                         | ActiveEntryKind.Sentinel -> entryIdx <- activeEntries.[entryIdx].Next
 
                     if isImplicitParagraphEnd && deferredForFinalBreak.Count > 0 then
@@ -791,6 +807,20 @@ module LineBreaker =
                                 // Forced break with no shrink: rescue with an overfull box.
                                 if overfullAmount > 0.0f then
                                     let overfullRatio = Single.NegativeInfinity
+                                    let overfullFitness = fitnessClass overfullRatio
+
+                                    let lineDemerits =
+                                        computeDemerits
+                                            options
+                                            overfullRatio
+                                            penaltyCost
+                                            prevNode.Fitness
+                                            overfullFitness
+                                            prevNode.WasFlagged
+                                            isFlagged
+                                            true // isLast - this is always at paragraph end
+
+                                    let totalDemerits = prevNode.Demerits + lineDemerits
 
                                     let shouldRescue =
                                         match rescueCandidate with
@@ -798,7 +828,7 @@ module LineBreaker =
                                         | Some (_, _, existingOverfull, _, existingDemerits) ->
                                             overfullAmount < existingOverfull - 1e-9f
                                             || (abs (overfullAmount - existingOverfull) < 1e-9f
-                                                && prevNode.Demerits < existingDemerits)
+                                                && totalDemerits < existingDemerits)
 
                                     if shouldRescue then
                                         rescueCandidate <-
@@ -807,7 +837,7 @@ module LineBreaker =
                                                 isFlagged,
                                                 overfullAmount,
                                                 overfullRatio,
-                                                prevNode.Demerits
+                                                totalDemerits
                                             )
 
                     for entry in nodesToDeactivate do
