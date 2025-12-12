@@ -104,3 +104,186 @@ module PropertyTests =
         let prop = Prop.forAll arb (fun (text, lineWidth) -> property text lineWidth)
 
         Check.One (FsCheckConfig.config, prop)
+
+    // ============================================================================
+    // Properties that would have caught the rescue-node demerits bug
+    // ============================================================================
+
+    /// Compute the width of a line, excluding trailing glue but including penalty width.
+    let private computeLineWidth (items : Item[]) (startIdx : int) (endIdx : int) : float32 =
+        let mutable width = 0.0f
+
+        for i = startIdx to endIdx - 1 do
+            match items.[i] with
+            | Box b -> width <- width + b.Width
+            | Glue g -> width <- width + g.Width
+            | Penalty _ -> ()
+
+        // Exclude trailing glue, but include penalty width (for hyphens)
+        if endIdx > 0 && endIdx <= items.Length then
+            match items.[endIdx - 1] with
+            | Glue g -> width <- width - g.Width
+            | Penalty p -> width <- width + p.Width
+            | _ -> ()
+
+        width
+
+    /// Compute the shrink available on a line, excluding trailing glue.
+    let private computeLineShrink (items : Item[]) (startIdx : int) (endIdx : int) : float32 =
+        let mutable shrink = 0.0f
+
+        for i = startIdx to endIdx - 1 do
+            match items.[i] with
+            | Glue g -> shrink <- shrink + g.Shrink
+            | _ -> ()
+
+        // Exclude trailing glue
+        if endIdx > 0 && endIdx <= items.Length then
+            match items.[endIdx - 1] with
+            | Glue g -> shrink <- shrink - g.Shrink
+            | _ -> ()
+
+        shrink
+
+    /// Check if a line is overfull (width exceeds target even with maximum shrink).
+    let private isOverfull (items : Item[]) (lineWidth : float32) (startIdx : int) (endIdx : int) : bool =
+        let width = computeLineWidth items startIdx endIdx
+        let shrink = computeLineShrink items startIdx endIdx
+        let minPossibleWidth = width - shrink
+        minPossibleWidth > lineWidth + 1e-6f
+
+    /// Get all legal breakpoints in an items array.
+    let private getAllLegalBreakpoints (items : Item[]) : int list =
+        [ 0 .. items.Length ] |> List.filter (isLegalBreakpoint items)
+
+    /// Compute the stretch available on a line, excluding trailing glue.
+    let private computeLineStretch (items : Item[]) (startIdx : int) (endIdx : int) : float32 =
+        let mutable stretch = 0.0f
+
+        for i = startIdx to endIdx - 1 do
+            match items.[i] with
+            | Glue g -> stretch <- stretch + g.Stretch
+            | _ -> ()
+
+        // Exclude trailing glue
+        if endIdx > 0 && endIdx <= items.Length then
+            match items.[endIdx - 1] with
+            | Glue g -> stretch <- stretch - g.Stretch
+            | _ -> ()
+
+        stretch
+
+    /// Compute the adjustment ratio for a line.
+    let private computeRatio (items : Item[]) (lineWidth : float32) (startIdx : int) (endIdx : int) : float32 option =
+        let width = computeLineWidth items startIdx endIdx
+        let diff = lineWidth - width
+
+        if abs diff < 1e-6f then
+            Some 0.0f
+        elif diff > 0.0f then
+            let stretch = computeLineStretch items startIdx endIdx
+
+            if stretch > 0.0f then Some (diff / stretch) else None // Underfull with no stretch
+        else
+            let shrink = computeLineShrink items startIdx endIdx
+
+            if shrink > 0.0f then Some (diff / shrink) else None // Overfull with no shrink
+
+    /// Compute badness from ratio (TeX formula: 100 * |ratio|^3, capped at 10000).
+    let private badness (ratio : float32) : float32 =
+        min (100.0f * (abs ratio ** 3.0f)) 10000.0f
+
+    /// Check if a line is feasible (ratio >= -1 and badness <= tolerance).
+    let private isLineFeasible
+        (items : Item[])
+        (lineWidth : float32)
+        (tolerance : float32)
+        (startIdx : int)
+        (endIdx : int)
+        : bool
+        =
+        match computeRatio items lineWidth startIdx endIdx with
+        | None -> false
+        | Some ratio -> ratio >= -1.0f && badness ratio <= tolerance
+
+    /// Try to find a feasible breaking of items into lines using exhaustive search.
+    /// Returns Some breaks if a feasible solution exists, None otherwise.
+    /// A feasible solution has all lines with ratio >= -1 and badness <= tolerance.
+    let rec private tryFindFeasibleBreaking
+        (items : Item[])
+        (lineWidth : float32)
+        (tolerance : float32)
+        (legalBreakpoints : int list)
+        (currentStart : int)
+        : int list option
+        =
+        if currentStart >= items.Length then
+            // Reached the end - success!
+            Some []
+        else
+            // Try each legal breakpoint after currentStart
+            let candidateEnds =
+                legalBreakpoints
+                |> List.filter (fun bp -> bp > currentStart && bp <= items.Length)
+
+            candidateEnds
+            |> List.tryPick (fun endPos ->
+                if isLineFeasible items lineWidth tolerance currentStart endPos then
+                    // This line is feasible, try to complete the rest
+                    match tryFindFeasibleBreaking items lineWidth tolerance legalBreakpoints endPos with
+                    | Some restBreaks -> Some (endPos :: restBreaks)
+                    | None -> None
+                else
+                    None
+            )
+
+    /// Check if a feasible solution exists for breaking items into lines.
+    let private feasibleSolutionExists (items : Item[]) (lineWidth : float32) (tolerance : float32) : bool =
+        let legalBreakpoints = getAllLegalBreakpoints items
+
+        tryFindFeasibleBreaking items lineWidth tolerance legalBreakpoints 0
+        |> Option.isSome
+
+    /// Property: If the algorithm produces an overfull line, no feasible alternative should exist.
+    /// This is the core property violated by the rescue-node demerits bug.
+    [<Test>]
+    let ``No overfull line when a feasible alternative exists`` () =
+        let property (text : string) (lineWidth : float32) =
+            let items = Items.fromEnglishString Text.defaultWordWidth Text.SPACE_WIDTH text
+
+            if items.Length = 0 then
+                true
+            else
+                let options = LineBreakOptions.Default lineWidth
+                let lines = LineBreaker.breakLines options items
+
+                // Check if any line is overfull
+                let hasOverfullLine =
+                    lines
+                    |> Array.exists (fun line -> isOverfull items lineWidth line.Start line.End)
+
+                if hasOverfullLine then
+                    // If we have an overfull line, verify no feasible solution exists
+                    let feasibleExists = feasibleSolutionExists items lineWidth options.Tolerance
+
+                    if feasibleExists then
+                        failwithf
+                            "Algorithm produced overfull line but feasible solution exists! Text: %s, LineWidth: %f"
+                            text
+                            lineWidth
+
+                    not feasibleExists
+                else
+                    true
+
+        let arb =
+            ArbMap.defaults
+            |> ArbMap.generate<string * float32>
+            |> Gen.zip genEnglishLikeText
+            |> Gen.zip genLineWidth
+            |> Gen.map (fun (lineWidth, (text, _)) -> text, lineWidth)
+            |> Arb.fromGen
+
+        let prop = Prop.forAll arb (fun (text, lineWidth) -> property text lineWidth)
+
+        Check.One (FsCheckConfig.config, prop)
