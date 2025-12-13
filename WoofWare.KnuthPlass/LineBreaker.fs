@@ -898,7 +898,11 @@ module LineBreaker =
                                 anyNodeAdded <- true
                         | None -> ()
 
-                    if not anyNodeAdded then
+                    // Rescue candidates are only used at ACTUAL forced breaks (explicit -infinity penalty
+                    // or implicit paragraph end). Using them at non-forced breakpoints just because
+                    // `forcedBreakInTail=true` would cause the algorithm to prefer overfull solutions
+                    // over feasible ones, since rescue nodes inherit low demerits from their predecessors.
+                    if not anyNodeAdded && (isExplicitForcedBreak || isImplicitParagraphEnd) then
                         trace (fun () -> $"  NO FEASIBLE NODE at %d{i}, checking rescue...")
 
                         match rescueCandidate with

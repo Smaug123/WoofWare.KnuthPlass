@@ -40,8 +40,14 @@ module RealWorldTests =
                 | Penalty p -> width <- width + p.Width
                 | _ -> ()
 
+            // Handle infinite adjustment ratios: when a line is underfull with no stretch
+            // (e.g., last line with a single word), AdjustmentRatio is +infinity.
+            // Multiplying infinity * 0.0f yields NaN, so we guard against that.
             let adjustedWidth =
-                if line.AdjustmentRatio > LanguagePrimitives.GenericZero then
+                if System.Single.IsInfinity line.AdjustmentRatio then
+                    // No feasible adjustment possible; use natural width
+                    width
+                elif line.AdjustmentRatio > LanguagePrimitives.GenericZero then
                     width + (line.AdjustmentRatio * stretch)
                 else
                     width + (line.AdjustmentRatio * shrink)
@@ -78,13 +84,18 @@ module RealWorldTests =
 
     [<Test>]
     let ``Varying line widths`` () =
-        let text = "This is a test of the line breaking algorithm with multiple words."
-        let wordWidth (s : string) = float32 s.Length * 10.0f
-        let spaceWidth = 5.0f
-        let items = Items.fromEnglishString wordWidth spaceWidth text
+        // Use a real paragraph with monospace options (higher tolerance = 1000)
+        // so that feasible breakpoints exist at varying line widths
+        let text = "The quick brown fox jumps over the lazy dog and runs away."
+        let wordWidth (s : string) = float32 s.Length
+        let items = Items.fromEnglishString wordWidth 1.0f text
 
-        let narrowLines = LineBreaker.breakLines (LineBreakOptions.Default 150.0f) items
-        let wideLines = LineBreaker.breakLines (LineBreakOptions.Default 500.0f) items
+        // Use monospace options which have tolerance=1000, allowing more flexible breaks
+        let narrowLines =
+            LineBreaker.breakLines (LineBreakOptions.DefaultMonospace 20.0f) items
+
+        let wideLines =
+            LineBreaker.breakLines (LineBreakOptions.DefaultMonospace 50.0f) items
 
         narrowLines.Length |> shouldBeGreaterThan wideLines.Length
 
@@ -120,8 +131,9 @@ dog."
 
         expect {
             snapshot
-                @"The quick brown fox jumps
-over the lazy dog."
+                @"The quick brown fox
+jumps over the lazy
+dog."
 
             return
                 Text.format
