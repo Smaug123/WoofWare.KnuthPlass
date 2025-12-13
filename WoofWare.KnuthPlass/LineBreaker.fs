@@ -667,7 +667,12 @@ module LineBreaker =
                             )
 
                             match ratioResult with
-                            | ValueSome ratio when isForced || (ratio >= -1.0f && badness ratio <= options.Tolerance) ->
+                            // Use small epsilon for ratio >= -1 check to handle floating-point precision issues.
+                            // Cumulative sums can accumulate small errors (e.g., shrink=0.9999998808 instead of 1.0),
+                            // causing ratio to be -1.0000001 instead of -1.0, which would incorrectly fail the check.
+                            | ValueSome ratio when
+                                isForced || (ratio >= -1.0f - 1e-6f && badness ratio <= options.Tolerance)
+                                ->
                                 // TeX feasibility check: accept if forced (explicit or implicit) OR (not overfull AND badness within tolerance)
                                 // Both explicit forced breaks and implicit paragraph end bypass tolerance to avoid paragraph failures
                                 let fitness = fitnessClass ratio
