@@ -670,7 +670,9 @@ module LineBreaker =
                             // Use small epsilon for ratio >= -1 check to handle floating-point precision issues.
                             // Cumulative sums can accumulate small errors (e.g., shrink=0.9999998808 instead of 1.0),
                             // causing ratio to be -1.0000001 instead of -1.0, which would incorrectly fail the check.
-                            | ValueSome ratio when isForced || (ratio >= -1.0f - 1e-6f && badness ratio <= options.Tolerance) ->
+                            | ValueSome ratio when
+                                isForced || (ratio >= -1.0f - 1e-6f && badness ratio <= options.Tolerance)
+                                ->
                                 // TeX feasibility check: accept if forced (explicit or implicit) OR (not overfull AND badness within tolerance)
                                 // Both explicit forced breaks and implicit paragraph end bypass tolerance to avoid paragraph failures
                                 let fitness = fitnessClass ratio
@@ -901,7 +903,11 @@ module LineBreaker =
                                 anyNodeAdded <- true
                         | None -> ()
 
-                    if not anyNodeAdded then
+                    // Rescue candidates are only used at ACTUAL forced breaks (explicit -infinity penalty
+                    // or implicit paragraph end). Using them at non-forced breakpoints just because
+                    // `forcedBreakInTail=true` would cause the algorithm to prefer overfull solutions
+                    // over feasible ones, since rescue nodes inherit low demerits from their predecessors.
+                    if not anyNodeAdded && (isExplicitForcedBreak || isImplicitParagraphEnd) then
                         trace (fun () -> $"  NO FEASIBLE NODE at %d{i}, checking rescue...")
 
                         match rescueCandidate with

@@ -74,6 +74,132 @@ module BasicTests =
 
         ()
 
+    /// Regression test: the algorithm should not produce an overfull line when a feasible solution exists.
+    /// This case was found by property-based testing with text:
+    /// "snwzmxz noume iuvwqqfwtl ppvrmgekwx aofpb xwtiycijr eiejo kmtwvjtgb ooantpfhnq bzlazhoxra rpjrglpvn fyyflb rxxeavtfcv toh nlzainy coygriefm"
+    /// at line width 97.
+    [<Test>]
+    let ``No overfull line when feasible solution exists - regression`` () =
+        // Explicit items from: Items.fromEnglishString Text.defaultWordWidth Text.SPACE_WIDTH
+        // for text = "snwzmxz noume iuvwqqfwtl ppvrmgekwx aofpb xwtiycijr eiejo kmtwvjtgb ooantpfhnq bzlazhoxra rpjrglpvn fyyflb rxxeavtfcv toh nlzainy coygriefm"
+        // Glue: width=1, stretch=0.5, shrink=1/3
+        let items =
+            [|
+                Items.box 7.0f // snwzmxz
+                Items.glue 1.0f 0.5f (1.0f / 3.0f)
+                Items.box 5.0f // noume
+                Items.glue 1.0f 0.5f (1.0f / 3.0f)
+                Items.box 2.0f // iu (hyphen point)
+                Items.penalty 1.0f 50.0f true
+                Items.box 8.0f // vwqqfwtl
+                Items.glue 1.0f 0.5f (1.0f / 3.0f)
+                Items.box 7.0f // ppvrmge (hyphen point)
+                Items.penalty 1.0f 50.0f true
+                Items.box 3.0f // kwx
+                Items.glue 1.0f 0.5f (1.0f / 3.0f)
+                Items.box 2.0f // ao (hyphen point)
+                Items.penalty 1.0f 50.0f true
+                Items.box 3.0f // fpb
+                Items.glue 1.0f 0.5f (1.0f / 3.0f)
+                Items.box 5.0f // xwtiy (hyphen point)
+                Items.penalty 1.0f 50.0f true
+                Items.box 4.0f // cijr
+                Items.glue 1.0f 0.5f (1.0f / 3.0f)
+                Items.box 5.0f // eiejo
+                Items.glue 1.0f 0.5f (1.0f / 3.0f)
+                Items.box 9.0f // kmtwvjtgb
+                Items.glue 1.0f 0.5f (1.0f / 3.0f)
+                Items.box 3.0f // ooa (hyphen point)
+                Items.penalty 1.0f 50.0f true
+                Items.box 7.0f // ntpfhnq
+                Items.glue 1.0f 0.5f (1.0f / 3.0f)
+                Items.box 4.0f // bzla (hyphen point)
+                Items.penalty 1.0f 50.0f true
+                Items.box 3.0f // zho (hyphen point)
+                Items.penalty 1.0f 50.0f true
+                Items.box 3.0f // xra
+                Items.glue 1.0f 0.5f (1.0f / 3.0f)
+                Items.box 9.0f // rpjrglpvn
+                Items.glue 1.0f 0.5f (1.0f / 3.0f)
+                Items.box 3.0f // fyy (hyphen point)
+                Items.penalty 1.0f 50.0f true
+                Items.box 3.0f // flb
+                Items.glue 1.0f 0.5f (1.0f / 3.0f)
+                Items.box 5.0f // rxxea (hyphen point)
+                Items.penalty 1.0f 50.0f true
+                Items.box 5.0f // vtfcv
+                Items.glue 1.0f 0.5f (1.0f / 3.0f)
+                Items.box 3.0f // toh
+                Items.glue 1.0f 0.5f (1.0f / 3.0f)
+                Items.box 7.0f // nlzainy
+                Items.glue 1.0f 0.5f (1.0f / 3.0f)
+                Items.box 3.0f // coy (hyphen point)
+                Items.penalty 1.0f 50.0f true
+                Items.box 6.0f // griefm
+                Items.glue 0.0f System.Single.PositiveInfinity 0.0f
+                Items.forcedBreak ()
+            |]
+
+        let lineWidth = 97.0f
+        let options = LineBreakOptions.Default lineWidth
+
+        let lines = LineBreaker.breakLines options items
+
+        // Helper: compute line width excluding trailing glue, including penalty width
+        let computeLineWidth (startIdx : int) (endIdx : int) : float32 =
+            let mutable width = 0.0f
+
+            for i = startIdx to endIdx - 1 do
+                match items.[i] with
+                | Box b -> width <- width + b.Width
+                | Glue g -> width <- width + g.Width
+                | Penalty _ -> ()
+
+            // Exclude trailing glue, but include penalty width (for hyphens)
+            if endIdx > 0 && endIdx <= items.Length then
+                match items.[endIdx - 1] with
+                | Glue g -> width <- width - g.Width
+                | Penalty p -> width <- width + p.Width
+                | _ -> ()
+
+            width
+
+        // Helper: compute shrink available on a line, excluding trailing glue
+        let computeLineShrink (startIdx : int) (endIdx : int) : float32 =
+            let mutable shrink = 0.0f
+
+            for i = startIdx to endIdx - 1 do
+                match items.[i] with
+                | Glue g -> shrink <- shrink + g.Shrink
+                | _ -> ()
+
+            // Exclude trailing glue
+            if endIdx > 0 && endIdx <= items.Length then
+                match items.[endIdx - 1] with
+                | Glue g -> shrink <- shrink - g.Shrink
+                | _ -> ()
+
+            shrink
+
+        // Check if any line is overfull (width exceeds target even with maximum shrink)
+        let isOverfull (startIdx : int) (endIdx : int) : bool =
+            let width = computeLineWidth startIdx endIdx
+            let shrink = computeLineShrink startIdx endIdx
+            let minPossibleWidth = width - shrink
+            minPossibleWidth > lineWidth + 1e-6f
+
+        // Assert no line is overfull - a feasible solution exists for this input
+        for line in lines do
+            if isOverfull line.Start line.End then
+                failwithf
+                    "Overfull line from %d to %d: width=%.2f, shrink=%.2f, min=%.2f > lineWidth=%.2f"
+                    line.Start
+                    line.End
+                    (computeLineWidth line.Start line.End)
+                    (computeLineShrink line.Start line.End)
+                    (computeLineWidth line.Start line.End - computeLineShrink line.Start line.End)
+                    lineWidth
+
     /// Regression test for floating-point precision issue in ratio >= -1.0 check.
     /// Cumulative sums can accumulate small errors (e.g., shrink=0.9999998808 instead of 1.0),
     /// causing ratio to be -1.0000001 instead of -1.0, which incorrectly fails the feasibility check.
@@ -118,5 +244,4 @@ module BasicTests =
 
             let minWidth = width - shrink
             // Allow small epsilon for floating-point comparison
-            (minWidth <= lineWidth + 1e-5f)
-            |> shouldEqual true
+            (minWidth <= lineWidth + 1e-5f) |> shouldEqual true
