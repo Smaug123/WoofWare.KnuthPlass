@@ -166,3 +166,38 @@ module BugReproductionTests =
         // Should break into two lines at position 3 (after Glue B), not between the consecutive glues
         lines.Length |> shouldEqual 2
         lines.[0].End |> shouldEqual 3
+
+    // The algorithm should prefer a multi-line solution with low total demerits over
+    // a single overfull line. When content exceeds line width but can be split into
+    // lines that each fit well (badness within tolerance), the multi-line solution wins
+    // because its total demerits are much lower than the inf_bad penalty for overfull.
+    [<Test>]
+    let ``Multi-line solution preferred over single overfull line`` () =
+        // Three boxes with glue, total width 200 vs line width 150.
+        // Single line: 200 vs 150 → overfull by 50, ratio < -1 → inf_bad (10000), demerits ~100M
+        // Two lines (break at position 4):
+        //   Line 1: 60+10+60 = 130, need 20 stretch, stretch=80 → ratio=0.25, badness≈2
+        //   Line 2: 60, stretched to fill with infinite glue → ratio≈0, badness≈0
+        //   Total demerits ≈ (10+2)² + (10+0)² ≈ 244
+        // Clear winner: two lines (244) vs one overfull (100,200,100).
+        let items =
+            [|
+                Items.box 60.0f
+                Items.glue 10.0f 80.0f 5.0f
+                Items.box 60.0f
+                Items.glue 10.0f 80.0f 5.0f
+                Items.box 60.0f
+                Items.glue 0.0f infinityf 0.0f // finishing glue
+                Items.forcedBreak ()
+            |]
+
+        let options = LineBreakOptions.Default 150.0f
+        let lines = LineBreaker.breakLines options items
+
+        // Should produce two lines, not one overfull line
+        lines.Length |> shouldEqual 2
+        // First line ends at position 4 (after second glue)
+        lines.[0].End |> shouldEqual 4
+        // Both lines should have reasonable adjustment ratios (not overfull)
+        lines.[0].AdjustmentRatio |> shouldBeGreaterThan -1.0f
+        lines.[1].AdjustmentRatio |> shouldBeGreaterThan -1.0f
