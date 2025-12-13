@@ -167,62 +167,37 @@ module BugReproductionTests =
         lines.Length |> shouldEqual 2
         lines.[0].End |> shouldEqual 3
 
-    // Regression: nodes with noFutureFit should be deferred for consideration at the final
-    // forced break, even when forcedBreakInTail is true. Previously, when forcedBreakInTail
-    // was true, nodes were neither deferred nor used to create rescue candidates, causing
-    // them to be abandoned entirely.
+    // The algorithm should prefer a multi-line solution with low total demerits over
+    // a single overfull line. When content exceeds line width but can be split into
+    // lines that each fit well (badness within tolerance), the multi-line solution wins
+    // because its total demerits are much lower than the inf_bad penalty for overfull.
     [<Test>]
-    let ``Deferred nodes are reconsidered at paragraph end`` () =
-        // This case has a feasible break early (position 10) but then all subsequent
-        // lines from that position are too short. The node should be deferred and
-        // reconsidered at the paragraph end to find the best multi-line solution.
-        //
-        // Explicit items derived from: "This is a test of the line breaking algorithm with multiple words."
-        // with wordWidth = len * 10.0f and spaceWidth = 5.0f
+    let ``Multi-line solution preferred over single overfull line`` () =
+        // Three boxes with glue, total width 200 vs line width 150.
+        // Single line: 200 vs 150 → overfull by 50, ratio < -1 → inf_bad (10000), demerits ~100M
+        // Two lines (break at position 4):
+        //   Line 1: 60+10+60 = 130, need 20 stretch, stretch=80 → ratio=0.25, badness≈2
+        //   Line 2: 60, stretched to fill with infinite glue → ratio≈0, badness≈0
+        //   Total demerits ≈ (10+2)² + (10+0)² ≈ 244
+        // Clear winner: two lines (244) vs one overfull (100,200,100).
         let items =
             [|
-                Items.box 40.0f // "This"
-                Items.glue 5.0f 2.5f 1.7f
-                Items.box 20.0f // "is"
-                Items.glue 5.0f 2.5f 1.7f
-                Items.box 10.0f // "a"
-                Items.glue 5.0f 2.5f 1.7f
-                Items.box 40.0f // "test"
-                Items.glue 5.0f 2.5f 1.7f
-                Items.box 20.0f // "of"
-                Items.glue 5.0f 2.5f 1.7f
-                Items.box 30.0f // "the"
-                Items.glue 5.0f 2.5f 1.7f
-                Items.box 40.0f // "line"
-                Items.glue 5.0f 2.5f 1.7f
-                Items.box 40.0f // "break"
-                Items.penalty 10.0f 50.0f true // hyphen point
-                Items.box 40.0f // "ing"
-                Items.glue 5.0f 2.5f 1.7f
-                Items.box 40.0f // "algo"
-                Items.penalty 10.0f 50.0f true // hyphen point
-                Items.box 20.0f // "ri"
-                Items.penalty 10.0f 50.0f true // hyphen point
-                Items.box 30.0f // "thm"
-                Items.glue 5.0f 2.5f 1.7f
-                Items.box 40.0f // "with"
-                Items.glue 5.0f 2.5f 1.7f
-                Items.box 20.0f // "mul"
-                Items.penalty 10.0f 50.0f true // hyphen point
-                Items.box 30.0f // "ti"
-                Items.penalty 10.0f 50.0f true // hyphen point
-                Items.box 30.0f // "ple"
-                Items.glue 5.0f 2.5f 1.7f
-                Items.box 20.0f // "wor"
-                Items.penalty 10.0f 50.0f true // hyphen point
-                Items.box 40.0f // "ds."
+                Items.box 60.0f
+                Items.glue 10.0f 80.0f 5.0f
+                Items.box 60.0f
+                Items.glue 10.0f 80.0f 5.0f
+                Items.box 60.0f
                 Items.glue 0.0f infinityf 0.0f // finishing glue
                 Items.forcedBreak ()
             |]
 
-        // With narrow width, should break into multiple lines
         let options = LineBreakOptions.Default 150.0f
         let lines = LineBreaker.breakLines options items
 
-        // Should have more than one line - a single overfull line is wrong
-        lines.Length |> shouldBeGreaterThan 1
+        // Should produce two lines, not one overfull line
+        lines.Length |> shouldEqual 2
+        // First line ends at position 4 (after second glue)
+        lines.[0].End |> shouldEqual 4
+        // Both lines should have reasonable adjustment ratios (not overfull)
+        lines.[0].AdjustmentRatio |> shouldBeGreaterThan -1.0f
+        lines.[1].AdjustmentRatio |> shouldBeGreaterThan -1.0f
