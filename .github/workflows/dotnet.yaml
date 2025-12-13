@@ -36,7 +36,7 @@ jobs:
     - name: Build (release)
       run: nix develop --command dotnet build --configuration Release
     - name: Test (release)
-      run: nix develop --command dotnet test --configuration release
+      run: nix develop --command dotnet test --configuration Release
 
   build-nix:
     runs-on: ubuntu-latest
