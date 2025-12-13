@@ -40,8 +40,14 @@ module RealWorldTests =
                 | Penalty p -> width <- width + p.Width
                 | _ -> ()
 
+            // Handle infinite adjustment ratios: when a line is underfull with no stretch
+            // (e.g., last line with a single word), AdjustmentRatio is +infinity.
+            // Multiplying infinity * 0.0f yields NaN, so we guard against that.
             let adjustedWidth =
-                if line.AdjustmentRatio > LanguagePrimitives.GenericZero then
+                if System.Single.IsInfinity line.AdjustmentRatio then
+                    // No feasible adjustment possible; use natural width
+                    width
+                elif line.AdjustmentRatio > LanguagePrimitives.GenericZero then
                     width + (line.AdjustmentRatio * stretch)
                 else
                     width + (line.AdjustmentRatio * shrink)
