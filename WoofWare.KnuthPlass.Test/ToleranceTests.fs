@@ -286,28 +286,28 @@ module ToleranceTests =
             let minWidth = computeLineMinWidth line.Start line.End
             minWidth |> shouldBeSmallerThan 20.1f
 
-    /// Tolerance still prunes a non-overfull path when a "feasible" sibling exists.
-    /// A high-badness (underfull) split that would avoid all overfull lines is discarded
-    /// because another split at the same breakpoint passes the tolerance check, even though
-    /// that sibling can't complete without overfull.
+    /// Verifies that the algorithm finds a valid non-overfull solution when one exists.
+    /// The algorithm can break at index 6 (very loose line 1) or index 8 (perfect line 1).
+    /// Breaking at index 8 produces: Line 1 width=10 (perfect), Line 2 width=5 (underfull).
+    /// The second line is rescued by the forced break at the end.
     [<Test>]
     let ``Tolerance does not prune needed high-badness path when feasible sibling exists`` () =
         let lw = 10.0f
 
         let items =
             [|
-                // First segment: makes a very short, high-ratio line if broken here
-                Items.box 2.0f
-                Items.glue 0.0f 0.5f 0.0f
-                Items.box 2.0f
-                Items.glue 0.0f 0.5f 0.0f
-                Items.box 1.0f
-                Items.glue 0.0f 0.0f 0.0f // breakpoint A (high badness, needed)
-                // Remainder: just barely fits if we take breakpoint A; overfull otherwise
-                Items.box 5.0f
-                Items.glue 0.5f 0.0f 0.0f
-                Items.box 5.0f
-                Items.forcedBreak ()
+                // First segment
+                Items.box 2.0f // [0]
+                Items.glue 0.0f 0.5f 0.0f // [1]
+                Items.box 2.0f // [2]
+                Items.glue 0.0f 0.5f 0.0f // [3]
+                Items.box 1.0f // [4]
+                Items.glue 0.0f 0.0f 0.0f // [5] potential breakpoint (high badness)
+                // Second segment
+                Items.box 5.0f // [6]
+                Items.glue 0.5f 0.0f 0.0f // [7] potential breakpoint
+                Items.box 5.0f // [8]
+                Items.forcedBreak () // [9]
             |]
 
         let options = LineBreakOptions.Default lw
@@ -337,9 +337,14 @@ module ToleranceTests =
             width - shrink
 
         // Expect: two lines, none overfull.
-        // The first-line split at index 6 has ratio ~ 2.5 (badness > tolerance) but yields
-        // a second line that fits. If the algorithm returns an overfull line here, that's the bug.
+        // The optimal solution breaks at index 8:
+        //   Line 1 (items 0-7): width = 2+0+2+0+1+0+5 = 10 (perfect fit, ratio ≈ 0)
+        //   Line 2 (items 8-9): width = 5 (underfull, rescued by forced break)
         lines.Length |> shouldEqual 2
+        lines.[0].End |> shouldEqual 8
+
+        // Verify the first line has near-zero ratio (perfect fit)
+        abs lines.[0].AdjustmentRatio |> shouldBeSmallerThan 0.1f
 
         for line in lines do
             let minWidth = computeLineMinWidth line.Start line.End
