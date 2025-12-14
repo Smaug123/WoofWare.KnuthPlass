@@ -70,6 +70,7 @@ WoofWare.KnuthPlass.Line.get_Start [method]: unit -> int
 WoofWare.KnuthPlass.Line.Start [property]: [read-only] int
 WoofWare.KnuthPlass.LineBreaker inherit obj
 WoofWare.KnuthPlass.LineBreaker.breakLines [static method]: WoofWare.KnuthPlass.LineBreakOptions -> WoofWare.KnuthPlass.Item [] -> WoofWare.KnuthPlass.Line []
+WoofWare.KnuthPlass.LineBreaker.isValidBreakpoint [static method]: WoofWare.KnuthPlass.Item [] -> int -> bool
 WoofWare.KnuthPlass.LineBreakOptions inherit obj, implements WoofWare.KnuthPlass.LineBreakOptions System.IEquatable, System.Collections.IStructuralEquatable, WoofWare.KnuthPlass.LineBreakOptions System.IComparable, System.IComparable, System.Collections.IStructuralComparable
 WoofWare.KnuthPlass.LineBreakOptions..ctor [constructor]: (single, single, single, single, single, single, single)
 WoofWare.KnuthPlass.LineBreakOptions.AdjacentLooseTightDemerits [property]: [read-only] single

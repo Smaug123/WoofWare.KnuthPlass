@@ -389,7 +389,7 @@ module LineBreaker =
     /// 1. After any glue (but not between two consecutive glues)
     /// 2. At any penalty
     /// 3. At the end of the paragraph
-    let private isValidBreakpoint (itemsArray : Item array) (idx : int) : bool =
+    let isValidBreakpoint (itemsArray : Item array) (idx : int) : bool =
         if idx = 0 then
             true // Start of paragraph
         elif idx >= itemsArray.Length then
@@ -964,6 +964,70 @@ module LineBreaker =
                                         Ratio = Single.NegativeInfinity
                                         Demerits = bestDemerits
                                     }
+
+                // Final pass guard: prevent deactivating ALL active nodes.
+                // The isOnlyActiveNode check during iteration can fail when multiple nodes
+                // are all infeasible at the same position - each thinks others are still active,
+                // but all get scheduled for deactivation. This guard catches that case.
+                if isFinalPass && nodesToDeactivate.Count > 0 then
+                    // Count actual active nodes (excluding delta entries)
+                    let mutable activeNodeCount = 0
+                    let mutable scanEntry = activeEntries.[activeHead].Next
+
+                    while scanEntry <> activeHead do
+                        match activeEntries.[scanEntry].Kind with
+                        | ActiveEntryKind.ActiveNode _ -> activeNodeCount <- activeNodeCount + 1
+                        | _ -> ()
+
+                        scanEntry <- activeEntries.[scanEntry].Next
+
+                    // If we're about to deactivate ALL active nodes, rescue one
+                    if nodesToDeactivate.Count >= activeNodeCount && activeNodeCount > 0 then
+                        // Find the entry with the lowest accumulated demerits
+                        let mutable bestEntry = -1
+                        let mutable bestDemerits = Single.PositiveInfinity
+
+                        for entry in nodesToDeactivate do
+                            match activeEntries.[entry].Kind with
+                            | ActiveEntryKind.ActiveNode nodeIdx ->
+                                let d = nodes.[nodeIdx].Demerits
+
+                                if d < bestDemerits then
+                                    bestDemerits <- d
+                                    bestEntry <- entry
+                            | _ -> ()
+
+                        if bestEntry <> -1 then
+                            trace (fun () ->
+                                $"  FINAL PASS GUARD: preventing deactivation of all %d{activeNodeCount} nodes, keeping entry with demerits=%.2f{bestDemerits}"
+                            )
+
+                            nodesToDeactivate.Remove bestEntry |> ignore
+
+                            // Apply artificial demerits rescue if no feasible path found
+                            let anyFeasibleFound =
+                                pendingNodes
+                                |> Array.exists (
+                                    function
+                                    | Some _ -> true
+                                    | None -> false
+                                )
+
+                            if not anyFeasibleFound then
+                                match activeEntries.[bestEntry].Kind with
+                                | ActiveEntryKind.ActiveNode nodeIdx ->
+                                    trace (fun () ->
+                                        $"  ARTIFICIAL DEMERITS (final pass guard): recording d=0 from node %d{nodeIdx}"
+                                    )
+
+                                    pendingNodes.[int<FitnessClass> FitnessClass.Tight] <-
+                                        Some
+                                            {
+                                                PrevNodeIdx = nodeIdx
+                                                Ratio = Single.NegativeInfinity
+                                                Demerits = 0.0f
+                                            }
+                                | _ -> ()
 
                 // Now perform deactivations (after forced break rescue has found active nodes)
                 for entry in nodesToDeactivate do
