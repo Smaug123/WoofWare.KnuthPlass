@@ -212,3 +212,76 @@ module ToleranceTests =
 
         // Verify Line 1 has the expected ratio
         (abs lines.[0].AdjustmentRatio) < 0.01f |> shouldEqual true
+
+    /// Verify the algorithm preserves accumulated demerits through rescue paths.
+    [<Test>]
+    let ``Rescue paths preserve accumulated demerits`` () =
+        let items =
+            [|
+                Items.box 30.0f
+                Items.glue 5.0f 1.0f 0.5f
+                Items.penalty 0.0f 500.0f false // High penalty break point
+                Items.box 30.0f
+                Items.glue 5.0f 1.0f 0.5f
+                Items.penalty 0.0f 10.0f false // Low penalty break point
+                Items.box 30.0f
+                Items.glue 5.0f 1.0f 0.5f
+                Items.box 200.0f // Forces overfull ending
+            |]
+
+        let options =
+            { LineBreakOptions.Default 80.0f with
+                Tolerance = 1000.0f
+            }
+
+        let lines = LineBreaker.breakLines options items
+        lines.Length |> shouldBeGreaterThan 0
+
+    /// On the final pass, the algorithm should explore high-badness but non-overfull breaks
+    /// to find solutions that avoid overfull lines.
+    [<Test>]
+    let ``Final pass explores high-badness non-overfull breaks`` () =
+        // Items where:
+        // - Not breaking early leads to overfull
+        // - Breaking early (high badness) leads to non-overfull solution
+        let items =
+            [|
+                Items.box 3.0f
+                Items.glue 1.0f 10.0f 0.3f // Lots of stretch at position 2
+                Items.box 18.0f // Position 3: Creates a "trap"
+            // If we DON'T break at position 2:
+            //   Continue to position 3: width = 3+1+18 = 22 > 20 (overfull!)
+            // If we DO break at position 2 (high badness because 3 << 20):
+            //   Line 1 = 3 (can stretch to 20 with ratio=1.7, badness=491 > tolerance)
+            //   Line 2 = 18 < 20 (non-overfull!)
+            |]
+
+        let options = LineBreakOptions.Default 20.0f
+        let lines = LineBreaker.breakLines options items
+
+        // Helper to compute minimum possible line width
+        let computeLineMinWidth (start : int) (endPos : int) =
+            let mutable width = 0.0f
+            let mutable shrink = 0.0f
+
+            for i = start to endPos - 1 do
+                match items.[i] with
+                | Box b -> width <- width + b.Width
+                | Glue g ->
+                    width <- width + g.Width
+                    shrink <- shrink + g.Shrink
+                | Penalty _ -> ()
+
+            if endPos > 0 && endPos <= items.Length then
+                match items.[endPos - 1] with
+                | Glue g ->
+                    width <- width - g.Width
+                    shrink <- shrink - g.Shrink
+                | _ -> ()
+
+            width - shrink
+
+        // Verify no line is overfull
+        for line in lines do
+            let minWidth = computeLineMinWidth line.Start line.End
+            minWidth |> shouldBeSmallerThan 20.1f

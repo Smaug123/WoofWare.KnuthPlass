@@ -177,3 +177,65 @@ module ForcedBreakTests =
         // With high penalty, the unflagged break (position 5) should be preferred
         linesLow.[0].End |> shouldEqual 3
         linesHigh.[0].End |> shouldEqual 5
+
+    /// Ensure the algorithm produces output when multiple active nodes all become overfull
+    /// and are deactivated. The rescue mechanism must handle this case.
+    [<Test>]
+    let ``Algorithm survives multiple overfull nodes being deactivated`` () =
+        let items =
+            [|
+                Items.box 20.0f
+                Items.glue 5.0f 10.0f 2.0f
+                Items.box 20.0f
+                Items.glue 5.0f 10.0f 2.0f
+                Items.box 300.0f // Massive box that makes all paths overfull
+            |]
+
+        let options = LineBreakOptions.Default 60.0f
+        let lines = LineBreaker.breakLines options items
+
+        lines.Length |> shouldBeGreaterThan 0
+
+    /// Ensure the algorithm survives when multiple active nodes all become hopeless
+    /// at non-forced breakpoints.
+    [<Test>]
+    let ``Algorithm survives when all active nodes become hopeless`` () =
+        let items =
+            [|
+                Items.box 10.0f
+                Items.glue 5.0f 5.0f 2.0f
+                Items.penalty 0.0f 0.0f false
+                Items.box 10.0f
+                Items.glue 5.0f 5.0f 2.0f
+                Items.penalty 0.0f 0.0f false
+                Items.box 10.0f
+                Items.glue 5.0f 5.0f 2.0f
+                Items.box 500.0f // Massive box - all paths become overfull
+            |]
+
+        let options =
+            { LineBreakOptions.Default 50.0f with
+                Tolerance = 500.0f
+            }
+
+        let lines = LineBreaker.breakLines options items
+        lines.Length |> shouldBeGreaterThan 0
+
+    /// Verify forced break rescue produces output when competing paths exist.
+    [<Test>]
+    let ``Forced break rescue handles competing paths`` () =
+        let items =
+            [|
+                Items.box 40.0f
+                Items.glue 10.0f 5.0f 5.0f
+                Items.penalty 0.0f 0.0f false
+                Items.box 40.0f
+                Items.glue 10.0f 5.0f 5.0f
+                Items.penalty 0.0f 100.0f false
+                Items.box 200.0f // Massive final box
+            |]
+
+        let options = LineBreakOptions.Default 100.0f
+        let lines = LineBreaker.breakLines options items
+
+        lines.Length |> shouldBeGreaterThan 0

@@ -162,19 +162,40 @@ module LineBreaker =
 
         // Track whether there is an EXPLICIT forced break at or after each position.
         // This lets us preserve active nodes when an upcoming -infinity penalty could
-        // rescue an overfull line. The implicit paragraph end is NOT counted here
-        // (only arr.[n] is true) - the rescue logic at forced breaks handles that case.
-        // This distinction is important for performance: if we counted the implicit end,
-        // forcedBreakInTail would be true for ALL positions, preventing node deactivation.
+        // rescue an overfull line. The TERMINAL paragraph-end sequence (added by
+        // fromEnglishString: glue(0,inf,0) + penalty(-inf)) is NOT counted here - it's
+        // handled by the rescue logic at forced breaks separately. This distinction is
+        // crucial for O(n) performance: if we counted the terminal paragraph-end forced
+        // break, forcedBreakInTail would be true for ALL positions, preventing node
+        // deactivation and causing O(n²) behavior.
+        //
+        // A Penalty(-inf) at position idx is the "terminal paragraph-end" (and should be
+        // skipped) if and only if:
+        // 1. It's at the last position (idx = n-1), AND
+        // 2. It's preceded by glue with infinite stretch (the paragraph-end marker)
+        //
+        // Any other Penalty(-inf) is an intentional mid-paragraph forced break.
         let forcedBreakAhead : bool[] =
+            // Check if the last item is the terminal paragraph-end sequence
+            let isTerminalParagraphEnd =
+                n >= 2
+                && match items.[n - 1] with
+                   | Penalty p -> p.Cost = Single.NegativeInfinity
+                   | _ -> false
+                && match items.[n - 2] with
+                   | Glue g -> Single.IsPositiveInfinity g.Stretch
+                   | _ -> false
+
             let arr = Array.zeroCreate (n + 1)
             arr.[n] <- true // Implicit end-of-paragraph is a forced break
-            let mutable seen = false // Only track explicit forced breaks in the loop
+            let mutable seen = false
 
             for idx = n - 1 downto 0 do
                 let isForced =
                     match items.[idx] with
-                    | Penalty p when p.Cost = Single.NegativeInfinity -> true
+                    | Penalty p when p.Cost = Single.NegativeInfinity ->
+                        // Skip only if this is the terminal paragraph-end sequence
+                        not (isTerminalParagraphEnd && idx = n - 1)
                     | _ -> false
 
                 seen <- seen || isForced

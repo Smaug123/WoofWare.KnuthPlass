@@ -27,3 +27,53 @@ module TestPerformance =
         stopwatch.ElapsedMilliseconds |> shouldBeSmallerThan 1000L
 
         lines.Length |> shouldBeGreaterThan 1
+
+    /// Ensure O(n) performance when items include a terminal forced break.
+    /// The forcedBreakAhead optimization must not count the terminal Penalty(-inf),
+    /// otherwise it prevents node deactivation and causes O(n²) behavior.
+    [<Test>]
+    let ``Performance: Terminal forced break does not cause O(n²)`` () =
+        let words = Array.init 500 (fun i -> $"word{i}")
+        let text = String.concat " " words
+
+        let items = Items.fromEnglishString Text.defaultWordWidth Text.SPACE_WIDTH text
+        let options = LineBreakOptions.Default 100.0f
+
+        let stopwatch = System.Diagnostics.Stopwatch.StartNew ()
+        let lines = LineBreaker.breakLines options items
+        stopwatch.Stop ()
+
+        // With O(n) algorithm, 500 words should take < 500ms
+        // With O(n²) algorithm, it would take much longer
+        stopwatch.ElapsedMilliseconds |> shouldBeSmallerThan 500L
+
+        lines.Length |> shouldBeGreaterThan 1
+
+    /// Verify large paragraphs with terminal penalty complete quickly.
+    [<Test>]
+    let ``Performance: Large paragraph with terminal penalty`` () =
+        let word = Items.box 5.0f
+        let space = Items.glue 1.0f 0.5f 0.2f
+
+        let itemsList = ResizeArray<Item> ()
+
+        for _ in 0..4999 do
+            itemsList.Add word
+            itemsList.Add space
+
+        // Add terminal penalty (like fromEnglishString does)
+        itemsList.Add (Items.glue 0.0f System.Single.PositiveInfinity 0.0f)
+        itemsList.Add (Items.forcedBreak ())
+
+        let items = itemsList.ToArray ()
+        let options = LineBreakOptions.Default 100.0f
+
+        let stopwatch = System.Diagnostics.Stopwatch.StartNew ()
+        let lines = LineBreaker.breakLines options items
+        stopwatch.Stop ()
+
+        // Should complete in reasonable time (< 2 seconds even on slow machines)
+        // O(n²) on 10000 items would take much longer
+        stopwatch.ElapsedMilliseconds |> shouldBeSmallerThan 2000L
+
+        lines.Length |> shouldBeGreaterThan 1
