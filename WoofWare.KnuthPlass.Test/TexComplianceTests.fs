@@ -142,9 +142,11 @@ module TexComplianceTests =
         linesWithPenalty.[0].End |> shouldEqual 3
 
     /// When shrink is insufficient, we clamp ratio to -1.0f (our convention for maximally compressed).
+    /// Uses a single box wider than the line to ensure overfull is unavoidable.
     [<Test>]
     let ``Overfull line with limited shrink clamps ratio to minus one`` () =
-        let items = [| Items.box 80.0f ; Items.glue 10.0f 0.0f 5.0f ; Items.box 30.0f |]
+        // Single box wider than line width - no feasible alternative exists
+        let items = [| Items.box 150.0f |]
 
         let options = LineBreakOptions.Default 100.0f
         let lines = LineBreaker.breakLines options items

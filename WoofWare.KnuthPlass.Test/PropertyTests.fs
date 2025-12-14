@@ -104,3 +104,103 @@ module PropertyTests =
         let prop = Prop.forAll arb (fun (text, lineWidth) -> property text lineWidth)
 
         Check.One (FsCheckConfig.config, prop)
+
+    /// Helper: compute line width excluding trailing glue, including penalty width
+    let private computeLineWidth (items : Item[]) (startIdx : int) (endIdx : int) : float32 =
+        let mutable width = 0.0f
+
+        for i = startIdx to endIdx - 1 do
+            match items.[i] with
+            | Box b -> width <- width + b.Width
+            | Glue g -> width <- width + g.Width
+            | Penalty _ -> ()
+
+        // Exclude trailing glue, but include penalty width (for hyphens)
+        if endIdx > 0 && endIdx <= items.Length then
+            match items.[endIdx - 1] with
+            | Glue g -> width <- width - g.Width
+            | Penalty p -> width <- width + p.Width
+            | _ -> ()
+
+        width
+
+    /// Helper: compute shrink available on a line, excluding trailing glue
+    let private computeLineShrink (items : Item[]) (startIdx : int) (endIdx : int) : float32 =
+        let mutable shrink = 0.0f
+
+        for i = startIdx to endIdx - 1 do
+            match items.[i] with
+            | Glue g -> shrink <- shrink + g.Shrink
+            | _ -> ()
+
+        // Exclude trailing glue
+        if endIdx > 0 && endIdx <= items.Length then
+            match items.[endIdx - 1] with
+            | Glue g -> shrink <- shrink - g.Shrink
+            | _ -> ()
+
+        shrink
+
+    /// Check if a line is overfull (width exceeds target even with maximum shrink)
+    let private isOverfull (items : Item[]) (lineWidth : float32) (startIdx : int) (endIdx : int) : bool =
+        let width = computeLineWidth items startIdx endIdx
+        let shrink = computeLineShrink items startIdx endIdx
+        let minPossibleWidth = width - shrink
+        minPossibleWidth > lineWidth + 1e-6f
+
+    /// Check if there exists a feasible solution using exhaustive search
+    let rec private existsFeasibleSolution (items : Item[]) (lineWidth : float32) (currentPos : int) : bool =
+        if currentPos >= items.Length then
+            true
+        else
+            // Try all possible next break positions
+            let mutable found = false
+            let mutable nextPos = currentPos + 1
+
+            while not found && nextPos <= items.Length do
+                if isLegalBreakpoint items nextPos then
+                    // Check if this line would be feasible (not overfull)
+                    if not (isOverfull items lineWidth currentPos nextPos) then
+                        // Recursively check if the rest can be broken feasibly
+                        if existsFeasibleSolution items lineWidth nextPos then
+                            found <- true
+
+                nextPos <- nextPos + 1
+
+            found
+
+    [<Test>]
+    let ``No overfull line when a feasible alternative exists`` () =
+        let property (text : string) (lineWidth : float32) =
+            let items = Items.fromEnglishString Text.defaultWordWidth Text.SPACE_WIDTH text
+
+            if items.Length = 0 then
+                // Empty text trivially passes
+                ()
+            else
+                let options = LineBreakOptions.Default lineWidth
+                let lines = LineBreaker.breakLines options items
+
+                // Check each line for overfullness
+                for line in lines do
+                    if isOverfull items lineWidth line.Start line.End then
+                        // This line is overfull - check if a feasible solution existed
+                        if existsFeasibleSolution items lineWidth 0 then
+                            failwithf
+                                "Overfull line from %d to %d when feasible solution exists. Text: %s, LineWidth: %f"
+                                line.Start
+                                line.End
+                                text
+                                lineWidth
+
+        let arb =
+            ArbMap.defaults
+            |> ArbMap.generate<string * float32>
+            |> Gen.zip genEnglishLikeText
+            |> Gen.zip genLineWidth
+            |> Gen.map (fun (lineWidth, (text, _)) -> text, lineWidth)
+            |> Arb.fromGen
+
+        let prop = Prop.forAll arb (fun (text, lineWidth) -> property text lineWidth)
+
+        Check.One (FsCheckConfig.config, prop)
