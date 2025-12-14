@@ -366,7 +366,7 @@ module ToleranceTests =
         // The algorithm should produce output (even if overfull)
         lines.Length |> shouldBeGreaterThan 0
 
-        // If a rescued node ends up with demerits = 0 (instead of prev.Demerits),
-        // it will win over a higher-quality sibling path.
-        // This test documents that the guard fires; the semantic issue is that
-        // demerits may be incorrectly zeroed.
+// If a rescued node ends up with demerits = 0 (instead of prev.Demerits),
+// it will win over a higher-quality sibling path.
+// This test documents that the guard fires; the semantic issue is that
+// demerits may be incorrectly zeroed.
