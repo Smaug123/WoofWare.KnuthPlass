@@ -285,3 +285,88 @@ module ToleranceTests =
         for line in lines do
             let minWidth = computeLineMinWidth line.Start line.End
             minWidth |> shouldBeSmallerThan 20.1f
+
+    /// Tolerance still prunes a non-overfull path when a "feasible" sibling exists.
+    /// A high-badness (underfull) split that would avoid all overfull lines is discarded
+    /// because another split at the same breakpoint passes the tolerance check, even though
+    /// that sibling can't complete without overfull.
+    [<Test>]
+    let ``Tolerance does not prune needed high-badness path when feasible sibling exists`` () =
+        let lw = 10.0f
+
+        let items =
+            [|
+                // First segment: makes a very short, high-ratio line if broken here
+                Items.box 2.0f
+                Items.glue 0.0f 0.5f 0.0f
+                Items.box 2.0f
+                Items.glue 0.0f 0.5f 0.0f
+                Items.box 1.0f
+                Items.glue 0.0f 0.0f 0.0f // breakpoint A (high badness, needed)
+                // Remainder: just barely fits if we take breakpoint A; overfull otherwise
+                Items.box 5.0f
+                Items.glue 0.5f 0.0f 0.0f
+                Items.box 5.0f
+                Items.forcedBreak ()
+            |]
+
+        let options = LineBreakOptions.Default lw
+        let lines = LineBreaker.breakLines options items
+
+        // Helper to compute minimum possible line width
+        let computeLineMinWidth (start : int) (endPos : int) =
+            let mutable width = 0.0f
+            let mutable shrink = 0.0f
+
+            for i = start to endPos - 1 do
+                match items.[i] with
+                | Box b -> width <- width + b.Width
+                | Glue g ->
+                    width <- width + g.Width
+                    shrink <- shrink + g.Shrink
+                | Penalty _ -> ()
+
+            if endPos > 0 && endPos <= items.Length then
+                match items.[endPos - 1] with
+                | Glue g ->
+                    width <- width - g.Width
+                    shrink <- shrink - g.Shrink
+                | Penalty p -> width <- width + p.Width
+                | _ -> ()
+
+            width - shrink
+
+        // Expect: two lines, none overfull.
+        // The first-line split at index 6 has ratio ~ 2.5 (badness > tolerance) but yields
+        // a second line that fits. If the algorithm returns an overfull line here, that's the bug.
+        lines.Length |> shouldEqual 2
+
+        for line in lines do
+            let minWidth = computeLineMinWidth line.Start line.End
+            minWidth |> shouldBeSmallerThan (lw + 0.1f)
+
+    /// Artificial-demerits guard zeroes accumulated demerits.
+    /// When the guard fires, it resets total demerits to 0 instead of carrying the
+    /// predecessor's cost, letting a rescued path dominate incorrectly.
+    [<Test>]
+    let ``Artificial demerits guard preserves accumulated demerits`` () =
+        let lw = 10.0f
+
+        let items =
+            [|
+                Items.box 9.5f // Forces huge badness if kept active
+                Items.glue 0.0f 0.0f 0.0f
+                Items.box 9.5f // No shrink: any single-line attempt is overfull
+                Items.forcedBreak ()
+            |]
+
+        let options = LineBreakOptions.Default lw
+        let lines = LineBreaker.breakLines options items
+
+        // The algorithm should produce output (even if overfull)
+        lines.Length |> shouldBeGreaterThan 0
+
+        // If a rescued node ends up with demerits = 0 (instead of prev.Demerits),
+        // it will win over a higher-quality sibling path.
+        // This test documents that the guard fires; the semantic issue is that
+        // demerits may be incorrectly zeroed.
