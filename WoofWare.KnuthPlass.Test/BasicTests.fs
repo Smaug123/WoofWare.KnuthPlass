@@ -216,9 +216,15 @@ module BasicTests =
         let options = LineBreakOptions.Default lineWidth
         let lines = LineBreaker.breakLines options items
 
-        // The algorithm should find a multi-line solution (not a single overfull line).
-        // The exact number of lines may vary based on optimization, but all must fit.
-        lines.Length |> shouldBeGreaterThan 1
+        // The algorithm should find the feasible 3-line solution (0->14->22->31),
+        // not fall back to a single overfull line.
+        lines.Length |> shouldEqual 3
+        lines.[0].Start |> shouldEqual 0
+        lines.[0].End |> shouldEqual 14
+        lines.[1].Start |> shouldEqual 14
+        lines.[1].End |> shouldEqual 22
+        lines.[2].Start |> shouldEqual 22
+        lines.[2].End |> shouldEqual 31
 
         // No line should be overfull (min width > line width)
         for line in lines do

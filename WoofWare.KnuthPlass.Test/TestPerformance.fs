@@ -5,6 +5,8 @@ open WoofWare.KnuthPlass
 open FsUnitTyped
 
 [<TestFixture>]
+// If we ever see this flake in CI even once, we'll disable the performance tests in CI
+[<Category "Performance">]
 module TestPerformance =
     [<Test>]
     let ``Performance: Should handle large paragraphs`` () =

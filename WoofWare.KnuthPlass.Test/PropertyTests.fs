@@ -415,19 +415,18 @@ module PropertyTests =
                 if not (isOverfull items lineWidth line.Start line.End) then
                     Interlocked.Increment &fineCount |> ignore<int>
                 else
+                    // This line is overfull - check if a feasible solution existed
+                    Interlocked.Increment &overfullCount |> ignore<int>
 
-                // This line is overfull - check if a feasible solution existed
-                Interlocked.Increment &overfullCount |> ignore<int>
-
-                if existsFeasibleSolution items lineWidth 0 then
-                    failwithf
-                        "Overfull line from %d to %d when feasible solution exists. PenaltyProb: %f, LineWidth: %f, Segments: %d, Items: %d"
-                        line.Start
-                        line.End
-                        penaltyProb
-                        lineWidth
-                        (List.length spec.Segments)
-                        items.Length
+                    if existsFeasibleSolution items lineWidth 0 then
+                        failwithf
+                            "Overfull line from %d to %d when feasible solution exists. PenaltyProb: %f, LineWidth: %f, Segments: %d, Items: %d"
+                            line.Start
+                            line.End
+                            penaltyProb
+                            lineWidth
+                            (List.length spec.Segments)
+                            items.Length
 
         let arb = Arb.fromGen ParagraphGen.genTestCase
 

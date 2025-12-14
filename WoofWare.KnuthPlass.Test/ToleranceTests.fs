@@ -213,30 +213,6 @@ module ToleranceTests =
         // Verify Line 1 has the expected ratio
         (abs lines.[0].AdjustmentRatio) < 0.01f |> shouldEqual true
 
-    /// Verify the algorithm preserves accumulated demerits through rescue paths.
-    [<Test>]
-    let ``Rescue paths preserve accumulated demerits`` () =
-        let items =
-            [|
-                Items.box 30.0f
-                Items.glue 5.0f 1.0f 0.5f
-                Items.penalty 0.0f 500.0f false // High penalty break point
-                Items.box 30.0f
-                Items.glue 5.0f 1.0f 0.5f
-                Items.penalty 0.0f 10.0f false // Low penalty break point
-                Items.box 30.0f
-                Items.glue 5.0f 1.0f 0.5f
-                Items.box 200.0f // Forces overfull ending
-            |]
-
-        let options =
-            { LineBreakOptions.Default 80.0f with
-                Tolerance = 1000.0f
-            }
-
-        let lines = LineBreaker.breakLines options items
-        lines.Length |> shouldBeGreaterThan 0
-
     /// On the final pass, the algorithm should explore high-badness but non-overfull breaks
     /// to find solutions that avoid overfull lines.
     [<Test>]
@@ -282,9 +258,14 @@ module ToleranceTests =
             width - shrink
 
         // Verify no line is overfull
+        lines.Length |> shouldEqual 2
+
         for line in lines do
             let minWidth = computeLineMinWidth line.Start line.End
             minWidth |> shouldBeSmallerThan 20.1f
+
+        // we broke on position 1
+        lines.[0].End |> shouldEqual 2
 
     /// Verifies that the algorithm finds a valid non-overfull solution when one exists.
     /// The algorithm can break at index 6 (very loose line 1) or index 8 (perfect line 1).
@@ -350,11 +331,8 @@ module ToleranceTests =
             let minWidth = computeLineMinWidth line.Start line.End
             minWidth |> shouldBeSmallerThan (lw + 0.1f)
 
-    /// Artificial-demerits guard zeroes accumulated demerits.
-    /// When the guard fires, it resets total demerits to 0 instead of carrying the
-    /// predecessor's cost, letting a rescued path dominate incorrectly.
     [<Test>]
-    let ``Artificial demerits guard preserves accumulated demerits`` () =
+    let ``Regression: can avoid an overfull line when nearly full`` () =
         let lw = 10.0f
 
         let items =
@@ -368,10 +346,6 @@ module ToleranceTests =
         let options = LineBreakOptions.Default lw
         let lines = LineBreaker.breakLines options items
 
-        // The algorithm should produce output (even if overfull)
-        lines.Length |> shouldBeGreaterThan 0
-
-// If a rescued node ends up with demerits = 0 (instead of prev.Demerits),
-// it will win over a higher-quality sibling path.
-// This test documents that the guard fires; the semantic issue is that
-// demerits may be incorrectly zeroed.
+        lines.Length |> shouldEqual 2
+        // we broke on position 1
+        lines.[0].End |> shouldEqual 2

@@ -5,4 +5,4 @@ open FsCheck
 [<RequireQualifiedAccess>]
 module FsCheckConfig =
 
-    let config = Config.QuickThrowOnFailure.WithQuietOnSuccess(true).WithMaxTest 100
+    let config = Config.QuickThrowOnFailure.WithQuietOnSuccess(true).WithMaxTest 10000
