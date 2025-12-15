@@ -10,270 +10,16 @@ open WoofWare.KnuthPlass
 [<TestFixture>]
 module PropertyTests =
 
-    /// High-level specification for a paragraph of items.
-    /// This is what we actually generate; it compiles down to Item[].
-    /// The structure guarantees validity by construction: every segment has a box,
-    /// and we always append proper termination.
-    module ParagraphSpec =
-        type PenaltySpec =
-            {
-                Width : float32
-                Cost : float32
-                Flagged : bool
-            }
-
-        type GlueSpec =
-            {
-                Width : float32
-                Stretch : float32
-                Shrink : float32
-            }
-
-        /// A segment is: Box, then zero or more Penalties, then Glue.
-        /// This mirrors the structure "word [hyphenation-points] space".
-        type SegmentSpec =
-            {
-                BoxWidth : float32
-                Penalties : PenaltySpec list
-                Glue : GlueSpec
-            }
-
-        /// A paragraph is a non-empty list of segments.
-        /// We use a head + tail representation to guarantee non-emptiness by construction.
-        type T =
-            {
-                Head : SegmentSpec
-                Tail : SegmentSpec list
-            }
-
-            member this.Segments = this.Head :: this.Tail
-
-        /// Compile the high-level spec to an Item array.
-        let compile (spec : T) : Item[] =
-            [|
-                for seg in spec.Segments do
-                    yield
-                        Item.Box
-                            {
-                                Width = seg.BoxWidth
-                            }
-
-                    for pen in seg.Penalties do
-                        yield
-                            Item.Penalty
-                                {
-                                    Width = pen.Width
-                                    Cost = pen.Cost
-                                    Flagged = pen.Flagged
-                                }
-
-                    yield
-                        Item.Glue
-                            {
-                                Width = seg.Glue.Width
-                                Stretch = seg.Glue.Stretch
-                                Shrink = seg.Glue.Shrink
-                            }
-
-                // Termination: finishing glue (infinite stretch) + forced break
-                yield
-                    Item.Glue
-                        {
-                            Width = 0.0f
-                            Stretch = infinityf
-                            Shrink = 0.0f
-                        }
-                yield
-                    Item.Penalty
-                        {
-                            Width = 0.0f
-                            Cost = -infinityf
-                            Flagged = false
-                        }
-            |]
-
-    /// Generators for ParagraphSpec, parameterized by penalty probability.
-    module ParagraphGen =
-        open ParagraphSpec
-
-        let genPenaltySpec : Gen<PenaltySpec> =
-            gen {
-                // Width: typically small (hyphen width), but allow 0
-                let! width = Gen.choose (0, 5) |> Gen.map float32
-                // Cost: can be negative (encourage break) or positive (discourage)
-                // Avoid infinity here; that's for forced/forbidden breaks
-                let! cost = Gen.choose (-100, 100) |> Gen.map float32
-                let! flagged = Gen.elements [ true ; false ]
-
-                return
-                    {
-                        Width = width
-                        Cost = cost
-                        Flagged = flagged
-                    }
-            }
-
-        let genGlueSpec : Gen<GlueSpec> =
-            gen {
-                // Natural width: positive, representing space between words
-                let! width = Gen.choose (1, 10) |> Gen.map float32
-                // Stretch: how much it can grow (0 = rigid)
-                let! stretch = Gen.choose (0, 5) |> Gen.map float32
-                // Shrink: how much it can compress (0 = rigid)
-                let! shrink = Gen.choose (0, 3) |> Gen.map float32
-
-                return
-                    {
-                        Width = width
-                        Stretch = stretch
-                        Shrink = shrink
-                    }
-            }
-
-        /// Generate a segment with penalties appearing with the given probability.
-        /// Uses geometric distribution with a cap to prevent unbounded generation.
-        let genSegmentSpec (penaltyProbability : float) : Gen<SegmentSpec> =
-            let maxPenalties = 10 // Cap to prevent runaway generation
-
-            let rec genPenalties (acc : PenaltySpec list) : Gen<PenaltySpec list> =
-                gen {
-                    if List.length acc >= maxPenalties then
-                        return List.rev acc
-                    else
-                        let! roll = Gen.choose (0, 99)
-                        let addMore = float roll < penaltyProbability * 100.0
-
-                        if addMore then
-                            let! pen = genPenaltySpec
-                            return! genPenalties (pen :: acc)
-                        else
-                            return List.rev acc
-                }
-
-            gen {
-                // Box width: positive, representing word/content width
-                let! boxWidth = Gen.choose (1, 20) |> Gen.map float32
-                let! penalties = genPenalties []
-                let! glue = genGlueSpec
-
-                return
-                    {
-                        BoxWidth = boxWidth
-                        Penalties = penalties
-                        Glue = glue
-                    }
-            }
-
-        /// Generate a paragraph spec with the given penalty probability.
-        let genParagraphSpec (penaltyProbability : float) : Gen<T> =
-            gen {
-                let! segmentCount = Gen.choose (0, 19) // 0-19 tail segments = 1-20 total
-                let! head = genSegmentSpec penaltyProbability
-                let! tail = Gen.listOfLength segmentCount (genSegmentSpec penaltyProbability)
-
-                return
-                    {
-                        Head = head
-                        Tail = tail
-                    }
-            }
-
-        /// Generate a (penaltyProbability, paragraphSpec, lineWidth) triple.
-        /// Line width is correlated with content to ensure interesting test scenarios:
-        /// - Low multipliers (30-70%) produce tight/overfull lines
-        /// - High multipliers (100-150%) produce loose/underfull lines
-        let genTestCase : Gen<float * T * float32> =
-            gen {
-                let! penaltyProb = Gen.choose (0, 100) |> Gen.map (fun x -> float x / 100.0)
-                let! spec = genParagraphSpec penaltyProb
-
-                // Compute content metrics
-                let totalBoxWidth = spec.Segments |> List.sumBy (fun s -> s.BoxWidth)
-                let avgSegmentWidth = totalBoxWidth / float32 (List.length spec.Segments)
-
-                // Generate line width as 30%-150% of average segment width
-                // This ensures meaningful relationship between content and line width
-                let! multiplier = Gen.choose (30, 150) |> Gen.map (fun x -> float32 x / 100.0f)
-                let lineWidth = max 1.0f (avgSegmentWidth * multiplier)
-
-                return (penaltyProb, spec, lineWidth)
-            }
-
-    /// Generates a non-empty string of lowercase letters and spaces
-    let private genEnglishLikeText : Gen<string> =
-        Gen.choose (1, 20)
-        |> Gen.bind (fun wordCount ->
-            let genWord =
-                Gen.choose (1, 10)
-                |> Gen.bind (fun len ->
-                    Gen.elements [ 'a' .. 'z' ]
-                    |> Gen.listOfLength len
-                    |> Gen.map (fun chars -> System.String (chars |> List.toArray))
-                )
-
-            Gen.listOfLength wordCount genWord |> Gen.map (String.concat " ")
-        )
-
     /// Generates a positive line width that's reasonable for the text
     let private genLineWidth : Gen<float32> = Gen.choose (10, 200) |> Gen.map float32
 
-    [<Test>]
-    let ``All breakpoints in English text line breaking are legal`` () =
-        let property (text : string) (lineWidth : float32) =
-            let items = Items.fromEnglishString Text.defaultWordWidth Text.SPACE_WIDTH text
-
-            if items.Length = 0 then
-                // Empty text trivially passes
-                true
-            else
-                // Use monospace defaults with high tolerance to ensure we can always find a breaking
-                let options =
-                    { LineBreakOptions.DefaultMonospace lineWidth with
-                        Tolerance = 100000.0f
-                    }
-
-                let lines = LineBreaker.breakLines options items
-
-                lines
-                |> Array.forall (fun line ->
-                    let isLegal = LineBreaker.isValidBreakpoint items line.End
-
-                    if not isLegal then
-                        let itemBefore =
-                            if line.End > 0 && line.End <= items.Length then
-                                Some items.[line.End - 1]
-                            else
-                                None
-
-                        let itemTwoBefore =
-                            if line.End > 1 && line.End <= items.Length then
-                                Some items.[line.End - 2]
-                            else
-                                None
-
-                        failwithf
-                            $"Illegal breakpoint at position %d{line.End} (items.Length=%d{items.Length}). Item before: %A{itemBefore}, Item two before: %A{itemTwoBefore}"
-
-                    isLegal
-                )
-
-        let arb =
-            ArbMap.defaults
-            |> ArbMap.generate<string * float32>
-            |> Gen.zip genEnglishLikeText
-            |> Gen.zip genLineWidth
-            |> Gen.map (fun (lineWidth, (text, _)) -> text, lineWidth)
-            |> Arb.fromGen
-
-        let prop = Prop.forAll arb (fun (text, lineWidth) -> property text lineWidth)
-
-        Check.One (FsCheckConfig.config, prop)
-
-    /// Precomputed cumulative sums for O(1) line width/shrink queries
+    /// Precomputed cumulative sums for O(1) line width/stretch/shrink queries
     type private CumulativeSums =
         {
             /// cumWidth[i] = sum of (box + glue widths) for items 0..i-1
             Width : float32[]
+            /// cumStretch[i] = sum of glue stretches for items 0..i-1
+            Stretch : float32[]
             /// cumShrink[i] = sum of glue shrinks for items 0..i-1
             Shrink : float32[]
         }
@@ -281,26 +27,103 @@ module PropertyTests =
     let private computeCumulativeSums (items : Item[]) : CumulativeSums =
         let n = items.Length
         let cumWidth = Array.zeroCreate (n + 1)
+        let cumStretch = Array.zeroCreate (n + 1)
         let cumShrink = Array.zeroCreate (n + 1)
 
         for i = 0 to n - 1 do
             match items.[i] with
             | Box b ->
                 cumWidth.[i + 1] <- cumWidth.[i] + b.Width
+                cumStretch.[i + 1] <- cumStretch.[i]
                 cumShrink.[i + 1] <- cumShrink.[i]
             | Glue g ->
                 cumWidth.[i + 1] <- cumWidth.[i] + g.Width
+                cumStretch.[i + 1] <- cumStretch.[i] + g.Stretch
                 cumShrink.[i + 1] <- cumShrink.[i] + g.Shrink
             | Penalty _ ->
                 cumWidth.[i + 1] <- cumWidth.[i]
+                cumStretch.[i + 1] <- cumStretch.[i]
                 cumShrink.[i + 1] <- cumShrink.[i]
 
         {
             Width = cumWidth
+            Stretch = cumStretch
             Shrink = cumShrink
         }
 
-    /// Check if a line is overfull using precomputed sums. O(1) per query.
+    /// Compute line metrics (width, stretch, shrink) for a line from startIdx to endIdx.
+    /// Handles trailing glue exclusion and penalty width inclusion.
+    let private computeLineMetrics
+        (items : Item[])
+        (sums : CumulativeSums)
+        (startIdx : int)
+        (endIdx : int)
+        : float32 * float32 * float32
+        =
+        let mutable width = sums.Width.[endIdx] - sums.Width.[startIdx]
+        let mutable stretch = sums.Stretch.[endIdx] - sums.Stretch.[startIdx]
+        let mutable shrink = sums.Shrink.[endIdx] - sums.Shrink.[startIdx]
+
+        // Adjust for trailing item: exclude trailing glue, include penalty width
+        if endIdx > 0 && endIdx <= items.Length then
+            match items.[endIdx - 1] with
+            | Glue g ->
+                width <- width - g.Width
+                stretch <- stretch - g.Stretch
+                shrink <- shrink - g.Shrink
+            | Penalty p -> width <- width + p.Width
+            | _ -> ()
+
+        (width, stretch, shrink)
+
+    /// Compute the adjustment ratio for a line. Returns None if infeasible.
+    /// A line is feasible iff -1 <= r <= tolerance.
+    let private computeAdjustmentRatio
+        (lineWidth : float32)
+        (contentWidth : float32)
+        (stretch : float32)
+        (shrink : float32)
+        : float32 voption
+        =
+        let diff = lineWidth - contentWidth
+
+        if abs diff < 1e-6f then
+            // Perfect fit
+            ValueSome 0.0f
+        elif diff > 0.0f then
+            // Underfull: need to stretch
+            if stretch > 1e-9f then
+                ValueSome (diff / stretch)
+            else
+                // No stretch available -> infinite ratio (infeasible)
+                ValueNone
+        else if
+            // Overfull: need to shrink
+            shrink > 1e-9f
+        then
+            ValueSome (diff / shrink) // Will be negative
+        else
+            // No shrink available -> negative infinite ratio (infeasible)
+            ValueNone
+
+    /// Check if a line is feasible according to TeX rules.
+    /// A line is feasible iff its adjustment ratio r satisfies: -1 <= r <= tolerance
+    let private isLineFeasible
+        (items : Item[])
+        (sums : CumulativeSums)
+        (lineWidth : float32)
+        (tolerance : float32)
+        (startIdx : int)
+        (endIdx : int)
+        : bool
+        =
+        let width, stretch, shrink = computeLineMetrics items sums startIdx endIdx
+
+        match computeAdjustmentRatio lineWidth width stretch shrink with
+        | ValueNone -> false // Infinite ratio (no stretch/shrink when needed)
+        | ValueSome r -> r >= -1.0f && r <= tolerance
+
+    /// Check if a line is overfull (adjustment ratio < -1).
     let private isOverfullFast
         (items : Item[])
         (sums : CumulativeSums)
@@ -309,19 +132,7 @@ module PropertyTests =
         (endIdx : int)
         : bool
         =
-        // Base width from cumulative sums
-        let mutable width = sums.Width.[endIdx] - sums.Width.[startIdx]
-        let mutable shrink = sums.Shrink.[endIdx] - sums.Shrink.[startIdx]
-
-        // Adjust for trailing item: exclude trailing glue width/shrink, include penalty width
-        if endIdx > 0 && endIdx <= items.Length then
-            match items.[endIdx - 1] with
-            | Glue g ->
-                width <- width - g.Width
-                shrink <- shrink - g.Shrink
-            | Penalty p -> width <- width + p.Width
-            | _ -> ()
-
+        let width, _, shrink = computeLineMetrics items sums startIdx endIdx
         let minPossibleWidth = width - shrink
         minPossibleWidth > lineWidth + 1e-6f
 
@@ -331,9 +142,17 @@ module PropertyTests =
         let sums = computeCumulativeSums items
         isOverfullFast items sums lineWidth startIdx endIdx
 
-    /// Check if there exists a feasible solution using memoized search with precomputed sums.
+    /// Check if there exists a TeX-feasible solution using memoized search.
+    /// A solution is feasible iff ALL lines have adjustment ratio in [-1, tolerance].
+    /// Uses the PRODUCTION isValidBreakpoint to match what the algorithm actually considers.
     /// Complexity: O(n²) with O(n) space for memoization and cumulative sums.
-    let private existsFeasibleSolution (items : Item[]) (lineWidth : float32) (startPos : int) : bool =
+    let private existsFeasibleSolution
+        (items : Item[])
+        (lineWidth : float32)
+        (tolerance : float32)
+        (startPos : int)
+        : bool
+        =
         let sums = computeCumulativeSums items
         let memo = System.Collections.Generic.Dictionary<int, bool> ()
 
@@ -349,9 +168,10 @@ module PropertyTests =
                     let mutable nextPos = currentPos + 1
 
                     while not found && nextPos <= items.Length do
+                        // Use production breakpoint rules to match what the algorithm considers
                         if LineBreaker.isValidBreakpoint items nextPos then
-                            // Check if this line would be feasible (not overfull)
-                            if not (isOverfullFast items sums lineWidth currentPos nextPos) then
+                            // Check if this line would be feasible (ratio in [-1, tolerance])
+                            if isLineFeasible items sums lineWidth tolerance currentPos nextPos then
                                 // Recursively check if the rest can be broken feasibly
                                 if search nextPos then
                                     found <- true
@@ -378,8 +198,9 @@ module PropertyTests =
                 // Check each line for overfullness
                 for line in lines do
                     if isOverfull items lineWidth line.Start line.End then
-                        // This line is overfull - check if a feasible solution existed
-                        if existsFeasibleSolution items lineWidth 0 then
+                        // This line is overfull - check if a TeX-feasible solution existed
+                        // (all lines have adjustment ratio in [-1, tolerance])
+                        if existsFeasibleSolution items lineWidth options.Tolerance 0 then
                             failwithf
                                 "Overfull line from %d to %d when feasible solution exists. Text: %s, LineWidth: %f"
                                 line.Start
@@ -390,7 +211,7 @@ module PropertyTests =
         let arb =
             ArbMap.defaults
             |> ArbMap.generate<string * float32>
-            |> Gen.zip genEnglishLikeText
+            |> Gen.zip EnglishGen.text
             |> Gen.zip genLineWidth
             |> Gen.map (fun (lineWidth, (text, _)) -> text, lineWidth)
             |> Arb.fromGen
@@ -404,7 +225,7 @@ module PropertyTests =
         let mutable overfullCount = 0
         let mutable fineCount = 0
 
-        let property (penaltyProb : float) (spec : ParagraphSpec.T) (lineWidth : float32) =
+        let property (penaltyProb : float) (spec : ParagraphSpec) (lineWidth : float32) =
             let items = ParagraphSpec.compile spec
 
             let options = LineBreakOptions.Default lineWidth
@@ -415,10 +236,11 @@ module PropertyTests =
                 if not (isOverfull items lineWidth line.Start line.End) then
                     Interlocked.Increment &fineCount |> ignore<int>
                 else
-                    // This line is overfull - check if a feasible solution existed
+                    // This line is overfull - check if a TeX-feasible solution existed
+                    // (all lines have adjustment ratio in [-1, tolerance])
                     Interlocked.Increment &overfullCount |> ignore<int>
 
-                    if existsFeasibleSolution items lineWidth 0 then
+                    if existsFeasibleSolution items lineWidth options.Tolerance 0 then
                         failwithf
                             "Overfull line from %d to %d when feasible solution exists. PenaltyProb: %f, LineWidth: %f, Segments: %d, Items: %d"
                             line.Start
