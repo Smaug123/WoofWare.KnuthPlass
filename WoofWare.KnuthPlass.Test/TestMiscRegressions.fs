@@ -108,64 +108,44 @@ module BugReproductionTests =
         // The low-penalty break (End=4) wins because 100² >> 10².
         lines.[0].End |> shouldEqual 4
 
-    // 6. Invalid Breakpoint Logic (Consecutive Glues)
+    // 6. Glue breakpoint validity follows TeX rule
     [<Test>]
-    let ``Cannot break between consecutive glues`` () =
-        // TeX forbids breaking between consecutive glues (tex.web 16970-17115).
-        // CORRECTED: Adjusted setup so the two-line solution is actually better than one-line.
+    let ``Glue breaks require preceding box per TeX rules`` () =
+        // TeX rule (tex.web:17109-17118): glue is a legal breakpoint iff prev_p is not
+        // glue/penalty/explicit-kern/math. In our model: glue must be preceded by a box.
         //
-        // Previous setup: trailing glue exclusion made second line have no stretch (badness=inf_bad),
-        // making two-line solution as bad as one-line solution with shrink ratio -2 (badness 800).
+        // With [Box, Glue_a, Glue_b, Box, Glue, Box]:
+        // - Position 2 (after Glue_a): VALID - Glue_a preceded by Box
+        // - Position 3 (after Glue_b): INVALID - Glue_b preceded by Glue_a
+        // - Position 5 (after Glue): VALID - Glue preceded by Box
         //
-        // New setup: Add glue AFTER the second-line box so it has stretch for fitting.
-        let items =
-            [|
-                Items.box 10.0f
-                Items.glue 10.0f 0.0f 5.0f // Glue A
-                Items.glue 10.0f 0.0f 5.0f // Glue B - cannot break between A and B
-                Items.box 10.0f
-                Items.glue 10.0f 10.0f 0.0f // Glue after second box - provides stretch for second line
-            |]
+        // Consecutive glues at line start are discarded (tex.web:17297, 17304).
 
-        // Target 20.
-        // Breaking after Glue A would be perfect (10 + 10 = 20), but TeX forbids breaking between
-        // consecutive glues. First feasible break is after Glue B (position 3).
-        //
-        // Analysis:
-        // - Two lines (break at position 3):
-        //   Line 1: box(10) + glue(10,0,5) + glue(10,0,5), trailing glue B excluded
-        //           = box(10) + glue(10,0,5) = 20, perfect fit, badness=0, demerits=1
-        //   Line 2: box(10) + glue(10,10,0), trailing glue excluded
-        //           = box(10) = 10, target=20, need stretch=10 but no stretch (glue excluded!)
-        //           badness=inf_bad, demerits=100,020,001
-        //   Total: ~100,020,002
-        //
-        // - One line (break at position 5):
-        //   box(10) + glue(10,0,5) + glue(10,0,5) + box(10) + glue(10,10,0), trailing glue excluded
-        //   = box(10) + glue(10,0,5) + glue(10,0,5) + box(10) = 40
-        //   target=20, need to shrink by 20, shrink=10, ratio=-2.0, badness=800
-        //   demerits=(1 + 800)² = 641,601
-        //
-        // With these numbers, one-line is better (641,601 < 100,020,002)!
-        // Need to make second line in two-line solution better by ensuring it has stretch.
-        //
-        // REVISED: Add another box and glue to create a viable second line
         let items =
             [|
                 Items.box 10.0f
-                Items.glue 10.0f 15.0f 3.0f // Glue A with stretch
-                Items.glue 10.0f 15.0f 3.0f // Glue B - cannot break between A and B
+                Items.glue 10.0f 15.0f 3.0f // Glue A - can break after this (preceded by box)
+                Items.glue 10.0f 15.0f 3.0f // Glue B - cannot break after this (preceded by Glue A)
                 Items.box 10.0f
-                Items.glue 10.0f 15.0f 3.0f // Provides stretch for potential second line
-                Items.box 10.0f // Additional box to make layout work
+                Items.glue 10.0f 15.0f 3.0f // Can break after this (preceded by box)
+                Items.box 10.0f
             |]
 
         let options = LineBreakOptions.Default 30.0f
         let lines = LineBreaker.breakLines options items
 
-        // Should break into two lines at position 3 (after Glue B), not between the consecutive glues
-        lines.Length |> shouldEqual 2
-        lines.[0].End |> shouldEqual 3
+        // Verify all glue breaks follow the TeX rule: glue must be preceded by a box
+        for line in lines do
+            let breakIndex = line.End
+
+            if breakIndex >= 2 && breakIndex < items.Length then
+                match items.[breakIndex - 1] with
+                | Item.Glue _ ->
+                    // If we broke after a glue, verify the glue is preceded by a box
+                    match items.[breakIndex - 2] with
+                    | Item.Box _ -> () // Valid: glue preceded by box
+                    | other -> failwithf "Glue at position %d not preceded by box, but by %A" (breakIndex - 1) other
+                | _ -> ()
 
     // The algorithm should prefer a multi-line solution with low total demerits over
     // a single overfull line. When content exceeds line width but can be split into

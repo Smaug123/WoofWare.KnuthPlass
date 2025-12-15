@@ -8,6 +8,9 @@
   <ItemGroup>
     <Compile Include="Assembly.fs" />
     <Compile Include="FsCheck.fs" />
+    <Compile Include="EnglishGen.fs" />
+    <Compile Include="ParagraphGen.fs" />
+    <Compile Include="IsValidBreakpointTests.fs" />
     <Compile Include="BasicTests.fs"/>
     <Compile Include="ForcedBreakTests.fs"/>
     <Compile Include="GlueTests.fs"/>
