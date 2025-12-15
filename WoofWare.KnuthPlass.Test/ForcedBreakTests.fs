@@ -177,3 +177,88 @@ module ForcedBreakTests =
         // With high penalty, the unflagged break (position 5) should be preferred
         linesLow.[0].End |> shouldEqual 3
         linesHigh.[0].End |> shouldEqual 5
+
+    /// Ensure the algorithm produces output when multiple active nodes all become overfull
+    /// and are deactivated. The rescue mechanism must handle this case.
+    [<Test>]
+    let ``Algorithm survives multiple overfull nodes being deactivated`` () =
+        let items =
+            [|
+                Items.box 20.0f
+                Items.glue 5.0f 10.0f 2.0f
+                Items.box 20.0f
+                Items.glue 5.0f 10.0f 2.0f
+                Items.box 300.0f // Massive box that makes all paths overfull
+            |]
+
+        let options = LineBreakOptions.Default 60.0f
+        let lines = LineBreaker.breakLines options items
+
+        lines.Length |> shouldBeGreaterThan 0
+        let last = Array.last lines
+        last.End |> shouldEqual items.Length
+        // Overfull line = infinite badness, which exceeds any tolerance.
+        // Getting output at all proves the rescue mechanism was exercised.
+        last.AdjustmentRatio |> shouldEqual -1.0f
+
+    /// Ensure the algorithm survives when multiple active nodes all become overfull
+    /// at the paragraph-end forced break (all paths exceed tolerance).
+    [<Test>]
+    let ``Algorithm survives when all active nodes become overfull at paragraph end`` () =
+        // Multiple breakpoints exist in the middle, but the massive final box
+        // causes all active paths to become overfull when we reach the paragraph end.
+        // The implicit paragraph-end forced break must rescue the algorithm.
+        let items =
+            [|
+                Items.box 10.0f
+                Items.glue 5.0f 5.0f 2.0f
+                Items.penalty 0.0f 0.0f false
+                Items.box 10.0f
+                Items.glue 5.0f 5.0f 2.0f
+                Items.penalty 0.0f 0.0f false
+                Items.box 10.0f
+                Items.glue 5.0f 5.0f 2.0f
+                Items.box 500.0f // Massive box - all paths become overfull
+            |]
+
+        let options =
+            { LineBreakOptions.Default 50.0f with
+                Tolerance = 500.0f
+            }
+
+        let lines = LineBreaker.breakLines options items
+        lines.Length |> shouldBeGreaterThan 0
+        let last = Array.last lines
+        last.End |> shouldEqual items.Length
+        // Overfull line = infinite badness, which exceeds any tolerance.
+        // Getting output at all proves the rescue mechanism was exercised.
+        last.AdjustmentRatio |> shouldEqual -1.0f
+
+    /// Verify implicit paragraph-end forced break produces output when competing paths exist.
+    /// Note: This test does NOT use an explicit Items.forcedBreak(); it relies on the
+    /// implicit paragraph-end forced break (eject_penalty) that TeX always appends.
+    [<Test>]
+    let ``Implicit paragraph-end forced break handles competing paths`` () =
+        // Two penalties create competing break paths with different costs.
+        // The massive final box makes all paths overfull, requiring the implicit
+        // paragraph-end forced break to rescue the algorithm.
+        let items =
+            [|
+                Items.box 40.0f
+                Items.glue 10.0f 5.0f 5.0f
+                Items.penalty 0.0f 0.0f false
+                Items.box 40.0f
+                Items.glue 10.0f 5.0f 5.0f
+                Items.penalty 0.0f 100.0f false
+                Items.box 200.0f // Massive final box
+            |]
+
+        let options = LineBreakOptions.Default 100.0f
+        let lines = LineBreaker.breakLines options items
+
+        lines.Length |> shouldBeGreaterThan 0
+        let last = Array.last lines
+        last.End |> shouldEqual items.Length
+        // Overfull line = infinite badness, which exceeds any tolerance.
+        // Getting output at all proves the rescue mechanism was exercised.
+        last.AdjustmentRatio |> shouldEqual -1.0f
