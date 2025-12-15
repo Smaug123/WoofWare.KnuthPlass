@@ -14,12 +14,14 @@ module IsValidBreakpointProperties =
         ParagraphGen.genTestCase
         |> Gen.map (fun (_, spec, _) -> ParagraphSpec.compile spec)
 
-    // Property 1: Position 0 (start of paragraph) is NOT a valid breakpoint.
-    // It's where we START, not where we BREAK. (TeX semantics)
+    // Property 1: Position 0 (start of paragraph) IS a valid breakpoint.
+    // TeX's line_break procedure seeds the active list with "an active breakpoint representing
+    // the beginning of the paragraph" before scanning any items (tex.web:16999-17035).
+    // This makes position 0 part of the feasible set of breakpoints.
     [<Test>]
-    let ``Position 0 is not a valid breakpoint`` () =
+    let ``Position 0 is a valid breakpoint`` () =
         let property (items : Item[]) =
-            LineBreaker.isValidBreakpoint items 0 |> shouldEqual false
+            LineBreaker.isValidBreakpoint items 0 |> shouldEqual true
 
         Check.One (FsCheckConfig.config, Prop.forAll (Arb.fromGen genItems) property)
 
