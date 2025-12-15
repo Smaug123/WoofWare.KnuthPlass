@@ -257,6 +257,10 @@ module PropertyTests =
 
         Check.One (FsCheckConfig.config, prop)
 
-        // Assert that the test was actually testing something (some lines were overfull)
+        // Assert that the test was actually testing something (some lines were overfull).
+        // A quarter of an episode of The Night Manager was enough to yield these statistics over 1000 runs of the
+        // property (all of which passed at 10_000 tests each):
+        // the range of the ratios was 0.650865 to 0.666410, mean 0.658688, variance 0.000006
+        // If that distribution is ever observed <= 0.1, I'll eat a very small hat.
         float overfullCount / float (overfullCount + fineCount)
         |> shouldBeGreaterThan 0.1
