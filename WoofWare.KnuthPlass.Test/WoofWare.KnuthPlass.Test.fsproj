@@ -24,9 +24,6 @@
     <Compile Include="TestSurface.fs" />
     <Compile Include="ToleranceTests.fs"/>
     <Compile Include="TexComplianceTests.fs"/>
-    <Compile Include="ParagraphGen.fs" />
-    <Compile Include="EnglishGen.fs" />
-    <Compile Include="IsValidBreakpointTests.fs" />
     <Compile Include="PropertyTests.fs"/>
     <EmbeddedResource Include="publicdomain/*" />
   </ItemGroup>
