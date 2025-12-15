@@ -306,27 +306,37 @@ module LineBreaker =
 
         demerits
 
-    /// In Knuth-Plass, we can break at the following positions:
-    /// 1. After any glue (but not between two consecutive glues)
-    /// 2. At any penalty
+    /// In Knuth-Plass/TeX, we can break at the following positions (tex.web references):
+    /// 0. Start of paragraph (tex.web:16999-17035 creates an active breakpoint here)
+    /// 1. After glue that follows a box (tex.web:17109-17118, 16969-16971)
+    /// 2. At any penalty with finite cost (tex.web:16350-16408)
     /// 3. At the end of the paragraph
-    let private isValidBreakpoint (itemsArray : Item array) (idx : int) : bool =
+    let isValidBreakpoint (itemsArray : Item array) (idx : int) : bool =
         if idx = 0 then
-            true // Start of paragraph
-        elif idx >= itemsArray.Length then
+            true // Start of paragraph (tex.web:16999-17035)
+        elif idx = itemsArray.Length then
             true // End of paragraph - always a valid breakpoint
-        elif idx > 0 && idx <= itemsArray.Length then
+        elif idx > 0 && idx < itemsArray.Length then
             // Look at the item just before this position
             match itemsArray.[idx - 1] with
             | Glue _ ->
-                // Can break after glue, but not if the next item is also glue
-                if idx < itemsArray.Length then
-                    match itemsArray.[idx] with
-                    | Glue _ -> false // Cannot break between two consecutive glues
-                    | _ -> true
+                // Can break after glue, but only if preceded by a box (tex.web:17109-17118)
+                // "If |type(cur_p)=glue_node| then |cur_p| is a legal breakpoint
+                // if and only if |auto_breaking| is true and |prev_p| does not
+                // point to a glue node, penalty node, explicit kern node, or math node"
+                // Note: TeX only looks backward, not forward. If multiple glues follow a box,
+                // only the first one is a legal breakpoint. Subsequent glues at line start
+                // are pruned later (tex.web:17297, 17304).
+                if idx >= 2 then
+                    match itemsArray.[idx - 2] with
+                    | Box _ -> true
+                    | _ -> false // Glue not preceded by Box
                 else
-                    true // At end of array
-            | Penalty _ -> true // Can break at penalty
+                    false // At position 1, glue at position 0 has no preceding box
+            | Penalty p ->
+                // Can break at penalty only if cost < infinity (tex.web:16407-16408)
+                // "if abs(pi)>=inf_penalty then if pi>0 then return"
+                not (Single.IsPositiveInfinity p.Cost)
             | Box _ -> false // Cannot break after a box
         else
             false
