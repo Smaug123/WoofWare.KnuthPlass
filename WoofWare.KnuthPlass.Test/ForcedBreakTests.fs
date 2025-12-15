@@ -195,11 +195,16 @@ module ForcedBreakTests =
         let lines = LineBreaker.breakLines options items
 
         lines.Length |> shouldBeGreaterThan 0
+        let last = Array.last lines
+        last.End |> shouldEqual items.Length
 
-    /// Ensure the algorithm survives when multiple active nodes all become hopeless
-    /// at non-forced breakpoints.
+    /// Ensure the algorithm survives when multiple active nodes all become overfull
+    /// at the paragraph-end forced break (all paths exceed tolerance).
     [<Test>]
-    let ``Algorithm survives when all active nodes become hopeless`` () =
+    let ``Algorithm survives when all active nodes become overfull at paragraph end`` () =
+        // Multiple breakpoints exist in the middle, but the massive final box
+        // causes all active paths to become overfull when we reach the paragraph end.
+        // The implicit paragraph-end forced break must rescue the algorithm.
         let items =
             [|
                 Items.box 10.0f
@@ -220,10 +225,17 @@ module ForcedBreakTests =
 
         let lines = LineBreaker.breakLines options items
         lines.Length |> shouldBeGreaterThan 0
+        let last = Array.last lines
+        last.End |> shouldEqual items.Length
 
-    /// Verify forced break rescue produces output when competing paths exist.
+    /// Verify implicit paragraph-end forced break produces output when competing paths exist.
+    /// Note: This test does NOT use an explicit Items.forcedBreak(); it relies on the
+    /// implicit paragraph-end forced break (eject_penalty) that TeX always appends.
     [<Test>]
-    let ``Forced break rescue handles competing paths`` () =
+    let ``Implicit paragraph-end forced break handles competing paths`` () =
+        // Two penalties create competing break paths with different costs.
+        // The massive final box makes all paths overfull, requiring the implicit
+        // paragraph-end forced break to rescue the algorithm.
         let items =
             [|
                 Items.box 40.0f
@@ -239,3 +251,5 @@ module ForcedBreakTests =
         let lines = LineBreaker.breakLines options items
 
         lines.Length |> shouldBeGreaterThan 0
+        let last = Array.last lines
+        last.End |> shouldEqual items.Length
