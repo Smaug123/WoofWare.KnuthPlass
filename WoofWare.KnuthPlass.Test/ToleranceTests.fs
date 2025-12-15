@@ -5,6 +5,7 @@ open WoofWare.KnuthPlass
 open FsUnitTyped
 
 [<TestFixture>]
+[<Parallelizable(ParallelScope.All)>]
 module ToleranceTests =
     /// Compute badness = 100 * |ratio|^3
     let private badness (ratio : float32) : float32 = 100.0f * (abs ratio ** 3.0f)

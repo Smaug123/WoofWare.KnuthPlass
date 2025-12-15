@@ -8,6 +8,7 @@ open NUnit.Framework
 open WoofWare.KnuthPlass
 
 [<TestFixture>]
+[<Parallelizable(ParallelScope.All)>]
 module PropertyTests =
 
     /// Generates a positive line width that's reasonable for the text
@@ -258,9 +259,10 @@ module PropertyTests =
         Check.One (FsCheckConfig.config, prop)
 
         // Assert that the test was actually testing something (some lines were overfull).
-        // A quarter of an episode of The Night Manager was enough to yield these statistics over 1000 runs of the
-        // property (all of which passed at 10_000 tests each):
-        // the range of the ratios was 0.650865 to 0.666410, mean 0.658688, variance 0.000006
+        // A quarter of an episode of The Night Manager was enough to run this test 1000 times, each of which
+        // ran 10_000 tests.
+        // The range of the ratios was 0.650865 to 0.666410, mean 0.658688, variance 0.000006
         // If that distribution is ever observed <= 0.1, I'll eat a very small hat.
+        // (Of course, the denominator is equal to 10_000 always, being FsCheckConfig.config's MaxTest value.)
         float overfullCount / float (overfullCount + fineCount)
         |> shouldBeGreaterThan 0.1

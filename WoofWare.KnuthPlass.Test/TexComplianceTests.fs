@@ -7,6 +7,7 @@ open FsUnitTyped
 /// Tests verifying compliance with TeX's Knuth-Plass semantics.
 /// References are to tex.web line numbers.
 [<TestFixture>]
+[<Parallelizable(ParallelScope.All)>]
 module TexComplianceTests =
 
     [<Test>]
