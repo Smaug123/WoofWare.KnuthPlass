@@ -197,6 +197,9 @@ module ForcedBreakTests =
         lines.Length |> shouldBeGreaterThan 0
         let last = Array.last lines
         last.End |> shouldEqual items.Length
+        // Overfull line = infinite badness, which exceeds any tolerance.
+        // Getting output at all proves the rescue mechanism was exercised.
+        last.AdjustmentRatio |> shouldEqual -1.0f
 
     /// Ensure the algorithm survives when multiple active nodes all become overfull
     /// at the paragraph-end forced break (all paths exceed tolerance).
@@ -227,6 +230,9 @@ module ForcedBreakTests =
         lines.Length |> shouldBeGreaterThan 0
         let last = Array.last lines
         last.End |> shouldEqual items.Length
+        // Overfull line = infinite badness, which exceeds any tolerance.
+        // Getting output at all proves the rescue mechanism was exercised.
+        last.AdjustmentRatio |> shouldEqual -1.0f
 
     /// Verify implicit paragraph-end forced break produces output when competing paths exist.
     /// Note: This test does NOT use an explicit Items.forcedBreak(); it relies on the
@@ -253,3 +259,6 @@ module ForcedBreakTests =
         lines.Length |> shouldBeGreaterThan 0
         let last = Array.last lines
         last.End |> shouldEqual items.Length
+        // Overfull line = infinite badness, which exceeds any tolerance.
+        // Getting output at all proves the rescue mechanism was exercised.
+        last.AdjustmentRatio |> shouldEqual -1.0f
