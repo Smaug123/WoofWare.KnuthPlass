@@ -73,37 +73,17 @@ module GlueTests =
         secondLineRatio |> shouldEqual expectedRatio
 
     [<Test>]
-    let ``Cannot break between two consecutive glues`` () =
-        // Scenario:
-        // Box(10) + Glue(10) + Glue(10) + Box(10)
-        // Target Width = 30.
+    let ``Glue break requires preceding box`` () =
+        // TeX rule (tex.web:17109-17118): when cur_p is a glue_node, it's a legal breakpoint
+        // iff auto_breaking and prev_p is not glue/penalty/explicit-kern/math.
+        // In our simplified model: glue is a legal breakpoint iff preceded by a box.
         //
-        // Option A (Legal): Break at first Glue.
-        // Line 1: Box(10). Discard Glue(10).
-        // Line 2 starts with Glue(10) -> Discarded by "Start of line" fix.
-        // Line 2 content: Box(10).
-        // This is very loose (Width 10 vs Target 30).
+        // With consecutive glues [Box, Glue_a, Glue_b, Box]:
+        // - Breaking after Glue_a (position 2) is LEGAL because Glue_a is preceded by Box
+        // - Breaking after Glue_b (position 3) is ILLEGAL because Glue_b is preceded by Glue_a
         //
-        // Option B (Illegal): Break at second Glue.
-        // Line 1: Box(10) + Glue(10). Width = 20. Target = 30.
-        // Line 2: Box(10). Width = 10. Target = 30.
-        //
-        // WAIT. This logic depends on how "Start of line" logic is implemented.
-        // Let's look at it strictly as "Previous item was glue".
-        //
-        // Let's use a clearer restriction:
-        // Box(20) Glue(5) Glue(5) Box(20). Target = 30.
-        //
-        // If we break at Glue 2 (Index 2):
-        // Line 1 contains Box(20) + Glue(5). Width 25.
-        // Target 30. This is a decent fit.
-        //
-        // If we break at Glue 1 (Index 1):
-        // Line 1 contains Box(20). Width 20.
-        // Target 30. This is a worse fit.
-        //
-        // The algorithm will prefer breaking at Index 2 (Glue 2) because 25 is closer to 30 than 20 is.
-        // But breaking at Index 2 should be impossible because Index 1 is Glue.
+        // If the algorithm breaks at position 2, Glue_b ends up at the start of the next line
+        // and is discarded (tex.web:17297, 17304).
 
         let items =
             [|
@@ -116,18 +96,15 @@ module GlueTests =
         let options = LineBreakOptions.Default 30.0f
         let lines = LineBreaker.breakLines options items
 
-        // If the bug exists, it will break at index 2 (after the first glue, eating the second),
-        // or index 3 (after second glue).
-        // We want to ensure it does NOT break at index 2 if index 1 was glue.
-
-        // Actually, let's simplify the assertion:
-        // Iterate through all lines. If a line ends at `i`, `items[i-1]` is the break point.
-        // If `items[i-1]` is Glue, then `items[i-2]` must NOT be Glue.
-
+        // Verify all glue breaks follow the TeX rule: glue must be preceded by a box
         for line in lines do
             let breakIndex = line.End
 
-            if breakIndex > 0 && breakIndex < items.Length then
-                match items.[breakIndex - 1], items.[breakIndex] with
-                | Item.Glue _, Item.Glue _ -> failwith "Found a break between two glues!"
+            if breakIndex >= 2 && breakIndex < items.Length then
+                match items.[breakIndex - 1] with
+                | Item.Glue _ ->
+                    // If we broke after a glue, verify the glue is preceded by a box
+                    match items.[breakIndex - 2] with
+                    | Item.Box _ -> () // Valid: glue preceded by box
+                    | other -> failwithf "Glue at position %d not preceded by box, but by %A" (breakIndex - 1) other
                 | _ -> ()
