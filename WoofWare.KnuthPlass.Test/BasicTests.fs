@@ -51,7 +51,7 @@ module BasicTests =
         lines.[0].AdjustmentRatio |> shouldEqual -1.0f
 
     [<Test>]
-    let foo () =
+    let ``Large paragraph with 50000 items completes without error`` () =
         let rng = System.Random (42) // Fixed seed for reproducibility
 
         let items = ResizeArray<Item> ()
