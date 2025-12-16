@@ -264,5 +264,8 @@ module PropertyTests =
         // The range of the ratios was 0.650865 to 0.666410, mean 0.658688, variance 0.000006
         // If that distribution is ever observed <= 0.1, I'll eat a very small hat.
         // (Of course, the denominator is equal to 10_000 always, being FsCheckConfig.config's MaxTest value.)
+        if overfullCount + fineCount = 0 then
+            Assert.Inconclusive "somehow didn't run any tests?!"
+
         float overfullCount / float (overfullCount + fineCount)
         |> shouldBeGreaterThan 0.1

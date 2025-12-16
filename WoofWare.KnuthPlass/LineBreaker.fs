@@ -186,8 +186,11 @@ module LineBreaker =
                    | Glue g -> Single.IsPositiveInfinity g.Stretch
                    | _ -> false
 
+            // Array indexed by position; arr.[pos] is true if there's a forced break
+            // at or after position pos (but before the terminal paragraph-end).
+            // We only need indices 0..n-1 since nodes at position n are end nodes
+            // and never become predecessors, but we allocate n+1 for simpler indexing.
             let arr = Array.zeroCreate (n + 1)
-            arr.[n] <- true // Implicit end-of-paragraph is a forced break
             let mutable seen = false
 
             for idx = n - 1 downto 0 do
