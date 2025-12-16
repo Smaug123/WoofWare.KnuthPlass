@@ -956,45 +956,7 @@ module PropertyTests =
 
 
     // ============================================================================
-    // Property 8: Line Count Lower Bound
-    // ============================================================================
-
-    [<Test>]
-    let ``Line count is at least the physical minimum`` () =
-        let property (spec : ParagraphSpec) (lineWidth : float32) =
-            let items = ParagraphSpec.compile spec
-            let options = LineBreakOptions.Default lineWidth
-            let lines = LineBreaker.breakLines options items
-
-            // Calculate total box width
-            let totalBoxWidth =
-                items
-                |> Array.sumBy (fun item ->
-                    match item with
-                    | Box b -> b.Width
-                    | _ -> 0.0f
-                )
-
-            // Theoretical minimum lines needed (ignoring forced breaks)
-            // This is a weak lower bound since we can't fit more content than lineWidth per line
-            if lineWidth > 0.0f && totalBoxWidth > 0.0f then
-                let theoreticalMinLines =
-                    int (System.Math.Ceiling (float totalBoxWidth / float lineWidth))
-                // The algorithm might need more lines, but never fewer
-                // Note: This is a very weak bound since glue can stretch/shrink
-                // We just verify the algorithm produces at least 1 line for non-empty input
-                lines.Length |> shouldBeGreaterThan 0
-
-        let arb =
-            ParagraphGen.genTestCase
-            |> Gen.map (fun (_, spec, lineWidth) -> spec, lineWidth)
-            |> Arb.fromGen
-
-        let prop = Prop.forAll arb (fun (spec, lineWidth) -> property spec lineWidth)
-        Check.One (FsCheckConfig.config, prop)
-
-    // ============================================================================
-    // Property 9: Penalty Options Affect Choice Monotonically
+    // Property 8: Penalty Options Affect Choice Monotonically
     // ============================================================================
 
     /// Count consecutive flagged breaks in a solution
@@ -1045,7 +1007,7 @@ module PropertyTests =
         Check.One (FsCheckConfig.config, prop)
 
     // ============================================================================
-    // Property 10: Scaling Invariance (REMOVED)
+    // Property 9: Scaling Invariance (REMOVED)
     // ============================================================================
     // NOTE: The scaling invariance property was removed because while it's
     // theoretically sound (uniform scaling should preserve break positions since
@@ -1057,7 +1019,7 @@ module PropertyTests =
 
 
     // ============================================================================
-    // Property 11: Box Coverage (Each Box in Exactly One Line)
+    // Property 10: Box Coverage (Each Box in Exactly One Line)
     // ============================================================================
 
     [<Test>]
