@@ -601,76 +601,109 @@ module PropertyTests =
 
         (width, stretch, shrink)
 
+    /// Property: Adjustment ratio is consistent with line geometry
+    let adjustmentRatioConsistencyProperty (spec : ParagraphSpec) (lineWidth : float32) : unit =
+        let epsilon = 1e-4f
+        let items = ParagraphSpec.compile spec
+        let options = LineBreakOptions.Default lineWidth
+        let lines = LineBreaker.breakLines options items
+
+        for line in lines do
+            let (contentWidth, totalStretch, totalShrink) =
+                computeLineMetricsForDisplay items line.Start line.End
+
+            let diff = lineWidth - contentWidth
+
+            // Check ratio consistency
+            if abs diff < epsilon then
+                // Perfect fit: ratio should be near 0
+                abs line.AdjustmentRatio < 1.0f |> shouldEqual true
+            elif diff > 0.0f then
+                // Underfull: need to stretch
+                if totalStretch > epsilon then
+                    let expectedRatio = diff / totalStretch
+                    abs (line.AdjustmentRatio - expectedRatio) < 0.1f |> shouldEqual true
+            // else: no stretch available, ratio semantics vary
+            else if
+                // Overfull: need to shrink
+                totalShrink > epsilon
+            then
+                // Ratio is clamped to -1.0 minimum for display
+                let expectedRatio = max -1.0f (diff / totalShrink)
+                abs (line.AdjustmentRatio - expectedRatio) < 0.1f |> shouldEqual true
+
     [<Test>]
     let ``Adjustment ratio is consistent with line geometry`` () =
-        let epsilon = 1e-4f
-
-        let property (spec : ParagraphSpec) (lineWidth : float32) =
-            let items = ParagraphSpec.compile spec
-            let options = LineBreakOptions.Default lineWidth
-            let lines = LineBreaker.breakLines options items
-
-            for line in lines do
-                let (contentWidth, totalStretch, totalShrink) =
-                    computeLineMetricsForDisplay items line.Start line.End
-
-                let diff = lineWidth - contentWidth
-
-                // Check ratio consistency
-                if abs diff < epsilon then
-                    // Perfect fit: ratio should be near 0
-                    abs line.AdjustmentRatio < 1.0f |> shouldEqual true
-                elif diff > 0.0f then
-                    // Underfull: need to stretch
-                    if totalStretch > epsilon then
-                        let expectedRatio = diff / totalStretch
-                        abs (line.AdjustmentRatio - expectedRatio) < 0.1f |> shouldEqual true
-                // else: no stretch available, ratio semantics vary
-                else if
-                    // Overfull: need to shrink
-                    totalShrink > epsilon
-                then
-                    // Ratio is clamped to -1.0 minimum for display
-                    let expectedRatio = max -1.0f (diff / totalShrink)
-                    abs (line.AdjustmentRatio - expectedRatio) < 0.1f |> shouldEqual true
-
         let arb =
             ParagraphGen.genTestCase
             |> Gen.map (fun (_, spec, lineWidth) -> spec, lineWidth)
             |> Arb.fromGen
 
-        let prop = Prop.forAll arb (fun (spec, lineWidth) -> property spec lineWidth)
+        let prop =
+            Prop.forAll arb (fun (spec, lineWidth) -> adjustmentRatioConsistencyProperty spec lineWidth)
+
         Check.One (FsCheckConfig.config, prop)
+
+    [<TestCase(3547343961690453090UL, 7773006706401362389UL, 34)>]
+    let ``Adjustment ratio consistency - reproduction`` (seed : uint64) (gamma : uint64) (size : int) =
+        let arb =
+            ParagraphGen.genTestCase
+            |> Gen.map (fun (_, spec, lineWidth) -> spec, lineWidth)
+            |> Arb.fromGen
+
+        let prop =
+            Prop.forAll arb (fun (spec, lineWidth) -> adjustmentRatioConsistencyProperty spec lineWidth)
+
+        let config = FsCheckConfig.config.WithReplay(seed, gamma, size).WithMaxTest 1
+
+        Check.One (config, prop)
 
     // ============================================================================
     // Property 7: No Breaks Between Consecutive Glues
     // ============================================================================
 
+    /// Property: No breaks between consecutive glues
+    let noBreaksBetweenConsecutiveGluesProperty (spec : ParagraphSpec) (lineWidth : float32) : unit =
+        let items = ParagraphSpec.compile spec
+        let options = LineBreakOptions.Default lineWidth
+        let lines = LineBreaker.breakLines options items
+
+        for line in lines do
+            if line.End > 0 && line.End < items.Length then
+                match items.[line.End - 1] with
+                | Glue _ ->
+                    // The item at the break point is glue; the next item should not also be glue
+                    match items.[line.End] with
+                    | Glue _ ->
+                        failwithf "Break between consecutive glues at positions %d and %d" (line.End - 1) line.End
+                    | _ -> ()
+                | _ -> ()
+
     [<Test>]
     let ``No breaks between consecutive glues`` () =
-        let property (spec : ParagraphSpec) (lineWidth : float32) =
-            let items = ParagraphSpec.compile spec
-            let options = LineBreakOptions.Default lineWidth
-            let lines = LineBreaker.breakLines options items
-
-            for line in lines do
-                if line.End > 0 && line.End < items.Length then
-                    match items.[line.End - 1] with
-                    | Glue _ ->
-                        // The item at the break point is glue; the next item should not also be glue
-                        match items.[line.End] with
-                        | Glue _ ->
-                            failwithf "Break between consecutive glues at positions %d and %d" (line.End - 1) line.End
-                        | _ -> ()
-                    | _ -> ()
-
         let arb =
             ParagraphGen.genTestCase
             |> Gen.map (fun (_, spec, lineWidth) -> spec, lineWidth)
             |> Arb.fromGen
 
-        let prop = Prop.forAll arb (fun (spec, lineWidth) -> property spec lineWidth)
+        let prop =
+            Prop.forAll arb (fun (spec, lineWidth) -> noBreaksBetweenConsecutiveGluesProperty spec lineWidth)
+
         Check.One (FsCheckConfig.config, prop)
+
+    [<TestCase(12865510674836294016UL, 12990313018054374031UL, 1)>]
+    let ``No breaks between consecutive glues - reproduction`` (seed : uint64) (gamma : uint64) (size : int) =
+        let arb =
+            ParagraphGen.genTestCase
+            |> Gen.map (fun (_, spec, lineWidth) -> spec, lineWidth)
+            |> Arb.fromGen
+
+        let prop =
+            Prop.forAll arb (fun (spec, lineWidth) -> noBreaksBetweenConsecutiveGluesProperty spec lineWidth)
+
+        let config = FsCheckConfig.config.WithReplay(seed, gamma, size).WithMaxTest 1
+
+        Check.One (config, prop)
 
     // ============================================================================
     // Property 8: Reference Implementation Equivalence (Optimality)
@@ -749,58 +782,72 @@ module PropertyTests =
             return spec, lineWidth
         }
 
+    /// Property: Algorithm produces minimum demerits among all legal breakings
+    let optimalityProperty (spec : ParagraphSpec) (lineWidth : float32) : unit =
+        let items = ParagraphSpec.compile spec
+
+        // Only test small inputs (exhaustive enumeration is expensive)
+        if items.Length > 15 then
+            ()
+        else
+            let options = LineBreakOptions.Default lineWidth
+            let result = LineBreaker.breakLines options items
+
+            // Compute demerits for the algorithm's result
+            let resultBreaks = 0 :: (result |> Array.map (fun l -> l.End) |> Array.toList)
+
+            let resultDemerits =
+                resultBreaks
+                |> List.pairwise
+                |> List.sumBy (fun (startPos, endPos) ->
+                    let width, stretch, shrink =
+                        computeLineMetrics items (computeCumulativeSums items) startPos endPos
+
+                    let diff = options.LineWidth - width
+
+                    let ratio =
+                        if abs diff < 1e-6f then
+                            0.0f
+                        elif diff > 0.0f then
+                            if stretch > 1e-9f then diff / stretch else 10000.0f
+                        elif shrink > 1e-9f then
+                            diff / shrink
+                        else
+                            -10000.0f
+
+                    let bad = min (100.0f * (abs ratio ** 3.0f)) 10000.0f
+                    (options.LinePenalty + bad) ** 2.0f
+                )
+
+            // Enumerate all legal breakings and find the minimum demerits
+            let allBreakings = enumerateAllLegalBreakings items options
+
+            if allBreakings.Length > 0 then
+                let minDemerits = allBreakings |> List.map snd |> List.min
+                // Algorithm result should be within a small tolerance of optimal
+                // (allowing for floating-point differences in demerits calculation)
+                let tolerance = max 1.0f (minDemerits * 0.01f)
+                resultDemerits <= minDemerits + tolerance |> shouldEqual true
+
     [<Test>]
     let ``Optimality - algorithm produces minimum demerits among all legal breakings`` () =
-        let property (spec : ParagraphSpec) (lineWidth : float32) =
-            let items = ParagraphSpec.compile spec
-
-            // Only test small inputs (exhaustive enumeration is expensive)
-            if items.Length > 15 then
-                ()
-            else
-                let options = LineBreakOptions.Default lineWidth
-                let result = LineBreaker.breakLines options items
-
-                // Compute demerits for the algorithm's result
-                let resultBreaks = 0 :: (result |> Array.map (fun l -> l.End) |> Array.toList)
-
-                let resultDemerits =
-                    resultBreaks
-                    |> List.pairwise
-                    |> List.sumBy (fun (startPos, endPos) ->
-                        let width, stretch, shrink =
-                            computeLineMetrics items (computeCumulativeSums items) startPos endPos
-
-                        let diff = options.LineWidth - width
-
-                        let ratio =
-                            if abs diff < 1e-6f then
-                                0.0f
-                            elif diff > 0.0f then
-                                if stretch > 1e-9f then diff / stretch else 10000.0f
-                            elif shrink > 1e-9f then
-                                diff / shrink
-                            else
-                                -10000.0f
-
-                        let bad = min (100.0f * (abs ratio ** 3.0f)) 10000.0f
-                        (options.LinePenalty + bad) ** 2.0f
-                    )
-
-                // Enumerate all legal breakings and find the minimum demerits
-                let allBreakings = enumerateAllLegalBreakings items options
-
-                if allBreakings.Length > 0 then
-                    let minDemerits = allBreakings |> List.map snd |> List.min
-                    // Algorithm result should be within a small tolerance of optimal
-                    // (allowing for floating-point differences in demerits calculation)
-                    let tolerance = max 1.0f (minDemerits * 0.01f)
-                    resultDemerits <= minDemerits + tolerance |> shouldEqual true
-
         let arb = Arb.fromGen genSmallSpec
 
-        let prop = Prop.forAll arb (fun (spec, lineWidth) -> property spec lineWidth)
+        let prop =
+            Prop.forAll arb (fun (spec, lineWidth) -> optimalityProperty spec lineWidth)
+
         Check.One (FsCheckConfig.config.WithMaxTest (1000), prop)
+
+    [<TestCase(5001961728819467141UL, 1312613472936549077UL, 1)>]
+    let ``Optimality - reproduction`` (seed : uint64) (gamma : uint64) (size : int) =
+        let arb = Arb.fromGen genSmallSpec
+
+        let prop =
+            Prop.forAll arb (fun (spec, lineWidth) -> optimalityProperty spec lineWidth)
+
+        let config = FsCheckConfig.config.WithReplay(seed, gamma, size).WithMaxTest 1
+
+        Check.One (config, prop)
 
     // ============================================================================
     // Property 9: Line Count Lower Bound
@@ -916,44 +963,59 @@ module PropertyTests =
                     Width = p.Width * k
                 }
 
+    /// Property: Uniform scaling preserves break structure
+    let scalingInvarianceProperty (spec : ParagraphSpec) (lineWidth : float32) (scaleFactor : float32) : unit =
+        // Ensure scale factor is positive and reasonable
+        let k = max 0.1f (min 10.0f (abs scaleFactor + 0.1f))
+
+        let items = ParagraphSpec.compile spec
+        let scaledItems = items |> Array.map (scaleItem k)
+
+        let options = LineBreakOptions.Default lineWidth
+
+        let scaledOptions =
+            { options with
+                LineWidth = options.LineWidth * k
+            }
+
+        let original = LineBreaker.breakLines options items
+        let scaled = LineBreaker.breakLines scaledOptions scaledItems
+
+        // Break positions should be identical
+        original.Length |> shouldEqual scaled.Length
+
+        for i in 0 .. original.Length - 1 do
+            original.[i].Start |> shouldEqual scaled.[i].Start
+            original.[i].End |> shouldEqual scaled.[i].End
+
+    /// Generator for scaling invariance test
+    let private genScalingTestCase : Gen<ParagraphSpec * float32 * float32> =
+        gen {
+            let! _, spec, lineWidth = ParagraphGen.genTestCase
+            let! scaleFactor = Gen.choose (10, 100) |> Gen.map (fun x -> float32 x / 10.0f)
+            return spec, lineWidth, scaleFactor
+        }
+
     [<Test>]
     let ``Scaling invariance - uniform scaling preserves break structure`` () =
-        let property (spec : ParagraphSpec) (lineWidth : float32) (scaleFactor : float32) =
-            // Ensure scale factor is positive and reasonable
-            let k = max 0.1f (min 10.0f (abs scaleFactor + 0.1f))
-
-            let items = ParagraphSpec.compile spec
-            let scaledItems = items |> Array.map (scaleItem k)
-
-            let options = LineBreakOptions.Default lineWidth
-
-            let scaledOptions =
-                { options with
-                    LineWidth = options.LineWidth * k
-                }
-
-            let original = LineBreaker.breakLines options items
-            let scaled = LineBreaker.breakLines scaledOptions scaledItems
-
-            // Break positions should be identical
-            original.Length |> shouldEqual scaled.Length
-
-            for i in 0 .. original.Length - 1 do
-                original.[i].Start |> shouldEqual scaled.[i].Start
-                original.[i].End |> shouldEqual scaled.[i].End
-
-        let arb =
-            gen {
-                let! _, spec, lineWidth = ParagraphGen.genTestCase
-                let! scaleFactor = Gen.choose (10, 100) |> Gen.map (fun x -> float32 x / 10.0f)
-                return spec, lineWidth, scaleFactor
-            }
-            |> Arb.fromGen
+        let arb = Arb.fromGen genScalingTestCase
 
         let prop =
-            Prop.forAll arb (fun (spec, lineWidth, scale) -> property spec lineWidth scale)
+            Prop.forAll arb (fun (spec, lineWidth, scale) -> scalingInvarianceProperty spec lineWidth scale)
 
         Check.One (FsCheckConfig.config, prop)
+
+    [<TestCase(6958901469302895480UL, 7492969200847688333UL, 10)>]
+    [<TestCase(16499873713914111118UL, 18153877609928584821UL, 4)>]
+    let ``Scaling invariance - reproduction`` (seed : uint64) (gamma : uint64) (size : int) =
+        let arb = Arb.fromGen genScalingTestCase
+
+        let prop =
+            Prop.forAll arb (fun (spec, lineWidth, scale) -> scalingInvarianceProperty spec lineWidth scale)
+
+        let config = FsCheckConfig.config.WithReplay(seed, gamma, size).WithMaxTest 1
+
+        Check.One (config, prop)
 
     // ============================================================================
     // Property 12: Box Coverage (Each Box in Exactly One Line)
