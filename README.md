@@ -67,6 +67,10 @@ As such, it is intended to be performant enough to run pretty regularly, e.g. to
 I consider it a performance bug if it is not performant enough to do that.
 (As I say, I haven't actually used this in prod yet, so I don't know the answer to that question.)
 
+## Divergences from TeX
+
+* We relax the definition of "feasibility" slightly: TeX considers solutions to be totally infeasible if their badness is too great, but we may keep them around. The upshot is that in edge cases where it's possible to avoid an overfull line but only at a very high cost, WoofWare.KnuthPlass will take that opportunity (likely involving a greatly overstretched previous line) whereas TeX will instead take the overfull line.
+
 ## Limitations
 
 ### Hyphenation

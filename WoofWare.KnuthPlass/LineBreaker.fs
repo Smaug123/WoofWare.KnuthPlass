@@ -81,6 +81,16 @@ type private ActiveEntry =
         mutable Kind : ActiveEntryKind
     }
 
+/// Precomputed state that is shared between passes.
+/// This is computed once at the start of breakLines and reused for both passes.
+type private PrecomputedState =
+    {
+        Sums : CumulativeSums
+        WidthMinusShrink : float32[]
+        SuffixMinWidthMinusShrink : float32[]
+        ForcedBreakAhead : bool[]
+    }
+
 /// The module holding the heart of the Knuth-Plass algorithm.
 [<RequireQualifiedAccess>]
 module LineBreaker =
@@ -129,6 +139,78 @@ module LineBreaker =
             Width = width
             Stretch = stretch
             Shrink = shrink
+        }
+
+    let private computePrecomputedState (items : Item[]) : PrecomputedState =
+        let n = items.Length
+        let sums = computeCumulativeSums items
+
+        // Precompute width-minus-shrink to cheaply bound how small a line can ever be
+        // if we keep extending it. This lets us drop hopeless active nodes early.
+        let widthMinusShrink = Array.zeroCreate (n + 1)
+
+        for i = 0 to n do
+            widthMinusShrink.[i] <- sums.Width.[i] - sums.Shrink.[i]
+
+        let suffixMinWidthMinusShrink = Array.zeroCreate (n + 1)
+        let mutable runningMin = Single.PositiveInfinity
+
+        for i = n downto 0 do
+            let candidate = widthMinusShrink.[i]
+            runningMin <- min runningMin candidate
+            suffixMinWidthMinusShrink.[i] <- runningMin
+
+        // Track whether there is an EXPLICIT forced break at or after each position.
+        // This lets us preserve active nodes when an upcoming -infinity penalty could
+        // rescue an overfull line. The TERMINAL paragraph-end sequence (added by
+        // fromEnglishString: glue(0,inf,0) + penalty(-inf)) is NOT counted here - it's
+        // handled by the rescue logic at forced breaks separately. This distinction is
+        // crucial for O(n) performance: if we counted the terminal paragraph-end forced
+        // break, forcedBreakInTail would be true for ALL positions, preventing node
+        // deactivation and causing O(n²) behavior.
+        //
+        // A Penalty(-inf) at position idx is the "terminal paragraph-end" (and should be
+        // skipped) if and only if:
+        // 1. It's at the last position (idx = n-1), AND
+        // 2. It's preceded by glue with infinite stretch (the paragraph-end marker)
+        //
+        // Any other Penalty(-inf) is an intentional mid-paragraph forced break.
+        let forcedBreakAhead : bool[] =
+            // Check if the last item is the terminal paragraph-end sequence
+            let isTerminalParagraphEnd =
+                n >= 2
+                && match items.[n - 1] with
+                   | Penalty p -> p.Cost = Single.NegativeInfinity
+                   | _ -> false
+                && match items.[n - 2] with
+                   | Glue g -> Single.IsPositiveInfinity g.Stretch
+                   | _ -> false
+
+            // Array indexed by position; arr.[pos] is true if there's a forced break
+            // at or after position pos (but before the terminal paragraph-end).
+            // We only need indices 0..n-1 since nodes at position n are end nodes
+            // and never become predecessors, but we allocate n+1 for simpler indexing.
+            let arr = Array.zeroCreate (n + 1)
+            let mutable seen = false
+
+            for idx = n - 1 downto 0 do
+                let isForced =
+                    match items.[idx] with
+                    | Penalty p when p.Cost = Single.NegativeInfinity ->
+                        // Skip only if this is the terminal paragraph-end sequence
+                        not (isTerminalParagraphEnd && idx = n - 1)
+                    | _ -> false
+
+                seen <- seen || isForced
+                arr.[idx] <- seen
+
+            arr
+
+        {
+            Sums = sums
+            WidthMinusShrink = widthMinusShrink
+            SuffixMinWidthMinusShrink = suffixMinWidthMinusShrink
+            ForcedBreakAhead = forcedBreakAhead
         }
 
     /// Compute adjustment ratio for a line from startIdx to endIdx.
@@ -359,336 +441,419 @@ module LineBreaker =
             Demerits : float32
         }
 
-    /// Break a paragraph into lines using the Knuth-Plass algorithm.
-    /// Returns a list of lines with their start/end positions and adjustment ratios.
-    /// Raises an exception if no valid breaking is possible.
+    /// Try to break a paragraph into lines.
+    /// Returns ValueSome lines on success, ValueNone if no valid breaking is possible.
     ///
-    /// This function doesn't mutate `items`.
-    let breakLines (options : LineBreakOptions) (items : Item[]) : Line[] =
-        if items.Length = 0 then
-            [||]
-        else
-            let n = items.Length
-            let sums = computeCumulativeSums items
-            // Precompute width-minus-shrink to cheaply bound how small a line can ever be
-            // if we keep extending it. This lets us drop hopeless active nodes early.
-            let widthMinusShrink = Array.zeroCreate (n + 1)
+    /// This implements TeX's line-breaking algorithm with a two-pass structure:
+    /// - Pass 1 (isFinalPass=false): Normal tolerance check, deactivate nodes that can't fit
+    /// - Pass 2 (isFinalPass=true): Same tolerance, but with "artificial demerits" guard
+    ///
+    /// The artificial demerits guard (tex.web:16815-16831) prevents losing the last active node
+    /// on the final pass. When about to deactivate the ONLY remaining active node, it instead:
+    /// - Suppresses the deactivation (keeps the node active)
+    /// - Records a break with demerits = 0 in the pending slot
+    ///
+    /// This ensures the algorithm always produces output on the final pass, even if it
+    /// requires overfull or severely underfull lines.
+    ///
+    /// Note on hyphenation: TeX has a pre-tolerance pass that runs without hyphenation,
+    /// only enabling it if that fails. Since hyphenation is handled externally to this
+    /// algorithm (items already include hyphenation points), we effectively always have
+    /// hyphenation enabled. This means we may hyphenate in cases where TeX wouldn't.
+    let private tryBreakLines
+        (options : LineBreakOptions)
+        (isFinalPass : bool)
+        (items : Item[])
+        (precomputed : PrecomputedState)
+        : Line[] voption
+        =
+        trace (fun () -> $"=== Starting tryBreakLines: isFinalPass=%b{isFinalPass} ===")
+        let n = items.Length
+        let sums = precomputed.Sums
+        let widthMinusShrink = precomputed.WidthMinusShrink
+        let suffixMinWidthMinusShrink = precomputed.SuffixMinWidthMinusShrink
+        let forcedBreakAhead = precomputed.ForcedBreakAhead
 
-            for i = 0 to n do
-                widthMinusShrink.[i] <- sums.Width.[i] - sums.Shrink.[i]
+        // Track the best node at each position for each fitness class.
+        // A value of IntMin means "not set".
+        let bestNodes = Array.create<int> (4 * (n + 1)) Int32.MinValue
 
-            let suffixMinWidthMinusShrink = Array.zeroCreate (n + 1)
+        let inline getBestNode (f : FitnessClass) (pos : int) =
+            bestNodes.[(n + 1) * int<FitnessClass> f + pos]
 
-            let mutable runningMin = Single.PositiveInfinity
+        let inline setBestNode (f : FitnessClass) (pos : int) (v : int) =
+            bestNodes.[(n + 1) * int<FitnessClass> f + pos] <- v
 
-            for i = n downto 0 do
-                let candidate = widthMinusShrink.[i]
-                runningMin <- min runningMin candidate
-                suffixMinWidthMinusShrink.[i] <- runningMin
+        // All nodes for backtracking
+        let nodes = ResizeArray<BreakNode> ()
 
-            // Track whether there is an explicit forced break at or after each position.
-            // This lets us preserve active nodes when an upcoming -infinity penalty could
-            // rescue an overfull line. The implicit paragraph end is handled separately
-            // (arr.[n] is set to true so the final line is still treated as forced).
-            let forcedBreakAhead : bool[] =
-                let arr = Array.zeroCreate (n + 1)
-                let mutable seen = false
+        // Start node at position 0
+        nodes.Add
+            {
+                Position = 0
+                Demerits = 0.0f
+                Ratio = 0.0f
+                PreviousNode = -1
+                Fitness = FitnessClass.Normal
+                WasFlagged = false
+            }
 
-                for idx = n - 1 downto 0 do
-                    let isForced =
-                        match items.[idx] with
-                        | Penalty p when p.Cost = Single.NegativeInfinity -> true
-                        | _ -> false
+        setBestNode FitnessClass.Normal 0 0
 
-                    seen <- seen || isForced
-                    arr.[idx] <- seen
+        // Active list of candidate predecessors
+        let activeEntries = ResizeArray<ActiveEntry> ()
 
-                arr.[n] <- true // Implicit end-of-paragraph is a forced break
-                arr
+        let addEntry (kind : ActiveEntryKind) =
+            let idx = activeEntries.Count
 
-            // Track the best node at each position for each fitness class.
-            // A value of IntMin means "not set".
-            let bestNodes = Array.create<int> (4 * (n + 1)) Int32.MinValue
-
-            let inline getBestNode (f : FitnessClass) (pos : int) =
-                bestNodes.[(n + 1) * int<FitnessClass> f + pos]
-
-            let inline setBestNode (f : FitnessClass) (pos : int) (v : int) =
-                bestNodes.[(n + 1) * int<FitnessClass> f + pos] <- v
-
-            // All nodes for backtracking
-            let nodes = ResizeArray<BreakNode> ()
-
-            // Start node at position 0
-            nodes.Add
+            activeEntries.Add
                 {
-                    Position = 0
-                    Demerits = 0.0f
-                    Ratio = 0.0f
-                    PreviousNode = -1
-                    Fitness = FitnessClass.Normal
-                    WasFlagged = false
+                    Prev = idx
+                    Next = idx
+                    Kind = kind
                 }
 
-            setBestNode FitnessClass.Normal 0 0
+            idx
 
-            // Active list of candidate predecessors
-            let activeEntries = ResizeArray<ActiveEntry> ()
+        let insertAfter (existingIdx : int) (newIdx : int) =
+            let nextIdx = activeEntries.[existingIdx].Next
+            activeEntries.[newIdx].Prev <- existingIdx
+            activeEntries.[newIdx].Next <- nextIdx
+            activeEntries.[existingIdx].Next <- newIdx
+            activeEntries.[nextIdx].Prev <- newIdx
 
-            let addEntry (kind : ActiveEntryKind) =
-                let idx = activeEntries.Count
+        let removeEntry (idx : int) =
+            let prevIdx = activeEntries.[idx].Prev
+            let nextIdx = activeEntries.[idx].Next
+            activeEntries.[prevIdx].Next <- nextIdx
+            activeEntries.[nextIdx].Prev <- prevIdx
+            activeEntries.[idx].Prev <- -1
+            activeEntries.[idx].Next <- -1
 
-                activeEntries.Add
-                    {
-                        Prev = idx
-                        Next = idx
-                        Kind = kind
-                    }
+        let activeHead = addEntry ActiveEntryKind.Sentinel
+        activeEntries.[activeHead].Prev <- activeHead
+        activeEntries.[activeHead].Next <- activeHead
 
-                idx
+        let nodeActiveEntry = ResizeArray<int> ()
 
-            let insertAfter (existingIdx : int) (newIdx : int) =
-                let nextIdx = activeEntries.[existingIdx].Next
-                activeEntries.[newIdx].Prev <- existingIdx
-                activeEntries.[newIdx].Next <- nextIdx
-                activeEntries.[existingIdx].Next <- newIdx
-                activeEntries.[nextIdx].Prev <- newIdx
+        let ensureNodeEntry (idx : int) =
+            while nodeActiveEntry.Count <= idx do
+                nodeActiveEntry.Add -1
 
-            let removeEntry (idx : int) =
-                let prevIdx = activeEntries.[idx].Prev
-                let nextIdx = activeEntries.[idx].Next
-                activeEntries.[prevIdx].Next <- nextIdx
-                activeEntries.[nextIdx].Prev <- prevIdx
-                activeEntries.[idx].Prev <- -1
-                activeEntries.[idx].Next <- -1
+        let appendActiveEntryForNode (nodeIdx : int) (nodePos : int) =
+            ensureNodeEntry nodeIdx
 
-            let activeHead = addEntry ActiveEntryKind.Sentinel
-            activeEntries.[activeHead].Prev <- activeHead
-            activeEntries.[activeHead].Next <- activeHead
+            let lastActiveIdx = activeEntries.[activeHead].Prev
 
-            let nodeActiveEntry = ResizeArray<int> ()
-
-            let ensureNodeEntry (idx : int) =
-                while nodeActiveEntry.Count <= idx do
-                    nodeActiveEntry.Add -1
-
-            let appendActiveEntryForNode (nodeIdx : int) (nodePos : int) =
-                ensureNodeEntry nodeIdx
-
-                let lastActiveIdx = activeEntries.[activeHead].Prev
-
-                let entryIdx =
-                    if lastActiveIdx = activeHead then
-                        let idx = addEntry (ActiveEntryKind.ActiveNode nodeIdx)
-                        insertAfter activeHead idx
-                        idx
-                    else
-                        match activeEntries.[lastActiveIdx].Kind with
-                        | ActiveEntryKind.ActiveNode prevNodeIdx ->
-                            let prevPos = nodes.[prevNodeIdx].Position
-
-                            let delta =
-                                {
-                                    Width = sums.Width.[nodePos] - sums.Width.[prevPos]
-                                    Stretch = sums.Stretch.[nodePos] - sums.Stretch.[prevPos]
-                                    Shrink = sums.Shrink.[nodePos] - sums.Shrink.[prevPos]
-                                }
-
-                            let deltaIdx = addEntry (ActiveEntryKind.Delta delta)
-                            insertAfter lastActiveIdx deltaIdx
-
-                            let idx = addEntry (ActiveEntryKind.ActiveNode nodeIdx)
-                            insertAfter deltaIdx idx
-                            idx
-                        | _ -> failwith "Invariant violation: last active entry should always be an active node."
-
-                nodeActiveEntry.[nodeIdx] <- entryIdx
-
-            let mutable activeWidth = WidthTriple.zero
-
-            let rec removeActiveEntry (entryIdx : int) =
-                if entryIdx = -1 then
-                    ()
+            let entryIdx =
+                if lastActiveIdx = activeHead then
+                    let idx = addEntry (ActiveEntryKind.ActiveNode nodeIdx)
+                    insertAfter activeHead idx
+                    idx
                 else
-                    match activeEntries.[entryIdx].Kind with
-                    | ActiveEntryKind.ActiveNode nodeIdx ->
-                        nodeActiveEntry.[nodeIdx] <- -1
-                        let prevIdx = activeEntries.[entryIdx].Prev
-                        let nextIdx = activeEntries.[entryIdx].Next
+                    match activeEntries.[lastActiveIdx].Kind with
+                    | ActiveEntryKind.ActiveNode prevNodeIdx ->
+                        let prevPos = nodes.[prevNodeIdx].Position
 
-                        match activeEntries.[prevIdx].Kind, activeEntries.[nextIdx].Kind with
-                        | ActiveEntryKind.Sentinel, ActiveEntryKind.Sentinel ->
-                            activeWidth <- WidthTriple.zero
-                            removeEntry entryIdx
-                        | ActiveEntryKind.Sentinel, ActiveEntryKind.Delta deltaAfter ->
-                            activeWidth <- WidthTriple.subtract activeWidth deltaAfter
-                            removeEntry nextIdx
-                            removeEntry entryIdx
-                        | ActiveEntryKind.Delta deltaBefore, ActiveEntryKind.Delta deltaAfter ->
-                            let combined = WidthTriple.add deltaBefore deltaAfter
-                            activeEntries.[prevIdx].Kind <- ActiveEntryKind.Delta combined
-                            removeEntry nextIdx
-                            removeEntry entryIdx
-                        | ActiveEntryKind.Delta _, ActiveEntryKind.Sentinel ->
-                            removeEntry prevIdx
-                            removeEntry entryIdx
-                        | ActiveEntryKind.Sentinel, ActiveEntryKind.ActiveNode _
-                        | ActiveEntryKind.Delta _, ActiveEntryKind.ActiveNode _ ->
-                            // No delta separating entries; simply remove this node.
-                            removeEntry entryIdx
-                        | ActiveEntryKind.ActiveNode _, _ ->
-                            failwith "Invariant violation: active nodes should be separated by delta nodes."
-                    | _ -> ()
+                        let delta =
+                            {
+                                Width = sums.Width.[nodePos] - sums.Width.[prevPos]
+                                Stretch = sums.Stretch.[nodePos] - sums.Stretch.[prevPos]
+                                Shrink = sums.Shrink.[nodePos] - sums.Shrink.[prevPos]
+                            }
 
-            let clearActiveList () =
-                let mutable entryIdx = activeEntries.[activeHead].Next
+                        let deltaIdx = addEntry (ActiveEntryKind.Delta delta)
+                        insertAfter lastActiveIdx deltaIdx
 
-                while entryIdx <> activeHead do
+                        let idx = addEntry (ActiveEntryKind.ActiveNode nodeIdx)
+                        insertAfter deltaIdx idx
+                        idx
+                    | _ -> failwith "Invariant violation: last active entry should always be an active node."
+
+            nodeActiveEntry.[nodeIdx] <- entryIdx
+
+        let mutable activeWidth = WidthTriple.zero
+
+        let rec removeActiveEntry (entryIdx : int) =
+            if entryIdx = -1 then
+                ()
+            else
+                match activeEntries.[entryIdx].Kind with
+                | ActiveEntryKind.ActiveNode nodeIdx ->
+                    nodeActiveEntry.[nodeIdx] <- -1
+                    let prevIdx = activeEntries.[entryIdx].Prev
                     let nextIdx = activeEntries.[entryIdx].Next
 
-                    match activeEntries.[entryIdx].Kind with
-                    | ActiveEntryKind.ActiveNode nodeIdx -> nodeActiveEntry.[nodeIdx] <- -1
-                    | _ -> ()
+                    match activeEntries.[prevIdx].Kind, activeEntries.[nextIdx].Kind with
+                    | ActiveEntryKind.Sentinel, ActiveEntryKind.Sentinel ->
+                        activeWidth <- WidthTriple.zero
+                        removeEntry entryIdx
+                    | ActiveEntryKind.Sentinel, ActiveEntryKind.Delta deltaAfter ->
+                        activeWidth <- WidthTriple.subtract activeWidth deltaAfter
+                        removeEntry nextIdx
+                        removeEntry entryIdx
+                    | ActiveEntryKind.Delta deltaBefore, ActiveEntryKind.Delta deltaAfter ->
+                        let combined = WidthTriple.add deltaBefore deltaAfter
+                        activeEntries.[prevIdx].Kind <- ActiveEntryKind.Delta combined
+                        removeEntry nextIdx
+                        removeEntry entryIdx
+                    | ActiveEntryKind.Delta _, ActiveEntryKind.Sentinel ->
+                        removeEntry prevIdx
+                        removeEntry entryIdx
+                    | ActiveEntryKind.Sentinel, ActiveEntryKind.ActiveNode _
+                    | ActiveEntryKind.Delta _, ActiveEntryKind.ActiveNode _ ->
+                        // No delta separating entries; simply remove this node.
+                        removeEntry entryIdx
+                    | ActiveEntryKind.ActiveNode _, _ ->
+                        failwith "Invariant violation: active nodes should be separated by delta nodes."
+                | _ -> ()
 
-                    activeEntries.[entryIdx].Prev <- -1
-                    activeEntries.[entryIdx].Next <- -1
-                    entryIdx <- nextIdx
+        let clearActiveList () =
+            let mutable entryIdx = activeEntries.[activeHead].Next
 
-                activeEntries.[activeHead].Next <- activeHead
-                activeEntries.[activeHead].Prev <- activeHead
-                activeWidth <- WidthTriple.zero
+            while entryIdx <> activeHead do
+                let nextIdx = activeEntries.[entryIdx].Next
 
-            // Seed the active list with the start node
-            appendActiveEntryForNode 0 0
+                match activeEntries.[entryIdx].Kind with
+                | ActiveEntryKind.ActiveNode nodeIdx -> nodeActiveEntry.[nodeIdx] <- -1
+                | _ -> ()
 
-            let inline computeRatioFromTriple (widthTriple : WidthTriple) (endIdx : int) =
-                // Start with the raw width from cumulative sums
-                let mutable adjustedWidth = widthTriple.Width
-                let mutable adjustedStretch = widthTriple.Stretch
-                let mutable adjustedShrink = widthTriple.Shrink
+                activeEntries.[entryIdx].Prev <- -1
+                activeEntries.[entryIdx].Next <- -1
+                entryIdx <- nextIdx
 
-                // Exclude trailing glue: if we're breaking right after a glue at endIdx-1,
-                // that glue should not contribute to this line's width (TeX behavior: glue
-                // is added to active_width AFTER try_break is called)
-                //
-                // Note: We do NOT exclude leading glue here. That only happens later when
-                // displaying/building actual lines (in post_line_break). During the algorithm,
-                // TeX uses the full cumulative width to decide which breaks are optimal.
-                if endIdx > 0 && endIdx <= items.Length then
-                    match items.[endIdx - 1] with
-                    | Glue g ->
-                        adjustedWidth <- adjustedWidth - g.Width
-                        adjustedStretch <- adjustedStretch - g.Stretch
-                        adjustedShrink <- adjustedShrink - g.Shrink
-                    | Penalty p ->
-                        // Penalty width IS included (e.g., hyphen width)
-                        adjustedWidth <- adjustedWidth + p.Width
-                    | _ -> ()
+            activeEntries.[activeHead].Next <- activeHead
+            activeEntries.[activeHead].Prev <- activeHead
+            activeWidth <- WidthTriple.zero
 
-                let diff = options.LineWidth - adjustedWidth
+        /// Check if an entry is the only ActiveNode in the active list (not counting delta entries).
+        /// This is used for TeX's artificial demerits guard (tex.web:16815-16831).
+        let isOnlyActiveNode (entryIdx : int) : bool =
+            let inline isDelta idx =
+                match activeEntries.[idx].Kind with
+                | Delta _ -> true
+                | _ -> false
 
-                let ratio =
-                    if abs diff < 1e-10f then
-                        ValueSome 0.0f
-                    elif diff > 0.0f then
-                        if adjustedStretch > 0.0f then
-                            ValueSome (diff / adjustedStretch)
-                        else
-                            ValueSome noStretchRatio
-                    elif adjustedShrink > 0.0f then
-                        ValueSome (diff / adjustedShrink)
+            // Walk backwards from entryIdx, skipping Delta entries
+            let mutable prev = activeEntries.[entryIdx].Prev
+
+            while prev <> activeHead && isDelta prev do
+                prev <- activeEntries.[prev].Prev
+
+            // Walk forwards from entryIdx, skipping Delta entries
+            let mutable next = activeEntries.[entryIdx].Next
+
+            while next <> activeHead && isDelta next do
+                next <- activeEntries.[next].Next
+
+            // It's the only active node if prev is sentinel and next is sentinel
+            prev = activeHead && next = activeHead
+
+        // Seed the active list with the start node
+        appendActiveEntryForNode 0 0
+
+        let inline computeRatioFromTriple (widthTriple : WidthTriple) (endIdx : int) =
+            // Start with the raw width from cumulative sums
+            let mutable adjustedWidth = widthTriple.Width
+            let mutable adjustedStretch = widthTriple.Stretch
+            let mutable adjustedShrink = widthTriple.Shrink
+
+            // Exclude trailing glue: if we're breaking right after a glue at endIdx-1,
+            // that glue should not contribute to this line's width (TeX behavior: glue
+            // is added to active_width AFTER try_break is called)
+            //
+            // Note: We do NOT exclude leading glue here. That only happens later when
+            // displaying/building actual lines (in post_line_break). During the algorithm,
+            // TeX uses the full cumulative width to decide which breaks are optimal.
+            if endIdx > 0 && endIdx <= items.Length then
+                match items.[endIdx - 1] with
+                | Glue g ->
+                    adjustedWidth <- adjustedWidth - g.Width
+                    adjustedStretch <- adjustedStretch - g.Stretch
+                    adjustedShrink <- adjustedShrink - g.Shrink
+                | Penalty p ->
+                    // Penalty width IS included (e.g., hyphen width)
+                    adjustedWidth <- adjustedWidth + p.Width
+                | _ -> ()
+
+            let diff = options.LineWidth - adjustedWidth
+
+            let ratio =
+                if abs diff < 1e-10f then
+                    ValueSome 0.0f
+                elif diff > 0.0f then
+                    if adjustedStretch > 0.0f then
+                        ValueSome (diff / adjustedStretch)
                     else
-                        ValueNone
+                        ValueSome noStretchRatio
+                elif adjustedShrink > 0.0f then
+                    ValueSome (diff / adjustedShrink)
+                else
+                    ValueNone
 
-                ratio, adjustedWidth, adjustedShrink
+            ratio, adjustedWidth, adjustedShrink
 
-            // For each position, find the best predecessor
-            let pendingNodes : PendingCandidate option array = Array.create 4 None
-            let nodesToDeactivate = System.Collections.Generic.HashSet<int> ()
-            let newlyCreatedNodes = ResizeArray<int> ()
-            // Nodes that can't ever fit (overfull even with all remaining shrink) when there's
-            // no explicit forced break ahead. We revisit them only at the final forced break.
-            let deferredForFinalBreak = System.Collections.Generic.HashSet<int> ()
+        // For each position, find the best predecessor
+        let pendingNodes : PendingCandidate option array = Array.create 4 None
+        let nodesToDeactivate = System.Collections.Generic.HashSet<int> ()
+        let newlyCreatedNodes = ResizeArray<int> ()
 
-            for i in 1..n do
-                newlyCreatedNodes.Clear ()
-                nodesToDeactivate.Clear ()
+        // On pass 2, track high-badness but non-overfull breaks as rescue candidates.
+        // If no feasible break is found, we use the best rescue candidate.
+        // This ensures non-overfull paths aren't completely lost due to tolerance filtering.
+        let mutable rescueCandidate : PendingCandidate voption = ValueNone
 
-                for j = 0 to pendingNodes.Length - 1 do
-                    pendingNodes.[j] <- None
+        for i in 1..n do
+            newlyCreatedNodes.Clear ()
+            nodesToDeactivate.Clear ()
+            rescueCandidate <- ValueNone
 
-                // Update the active width to include the contribution from the previous item
-                let itemTriple = WidthTriple.ofItem items.[i - 1]
-                activeWidth <- WidthTriple.add activeWidth itemTriple
+            for j = 0 to pendingNodes.Length - 1 do
+                pendingNodes.[j] <- None
 
-                if isValidBreakpoint items i then
-                    let penaltyCost, isFlagged = getPenaltyAt items i
-                    let isForced = penaltyCost = Single.NegativeInfinity
-                    // Check if this is an explicit forced break (penalty item) vs implicit paragraph end
-                    let isExplicitForcedBreak =
-                        isForced
-                        && i > 0
-                        && i <= items.Length
-                        && match items.[i - 1] with
-                           | Penalty p -> p.Cost = Single.NegativeInfinity
-                           | _ -> false
+            // Update the active width to include the contribution from the previous item
+            let itemTriple = WidthTriple.ofItem items.[i - 1]
+            activeWidth <- WidthTriple.add activeWidth itemTriple
 
-                    // TeX's final-pass rescue (tex.web:16815-16831): at the implicit paragraph end,
-                    // we MUST produce output even if no feasible solution exists. Overfull/underfull
-                    // boxes are acceptable as a last resort. This is equivalent to TeX's behavior
-                    // where it "dare not lose all active nodes" during the final pass.
-                    let isImplicitParagraphEnd = i = n
+            if isValidBreakpoint items i then
+                let penaltyCost, isFlagged = getPenaltyAt items i
+                let isForced = penaltyCost = Single.NegativeInfinity
 
-                    let mutable rescueCandidate : (int * bool * float32 * float32 * float32) option =
-                        None
+                let mutable entryIdx = activeEntries.[activeHead].Next
+                let mutable curActiveWidth = activeWidth
 
-                    let mutable anyNodeAdded = false
+                while entryIdx <> activeHead do
+                    match activeEntries.[entryIdx].Kind with
+                    | ActiveEntryKind.Delta delta ->
+                        curActiveWidth <- WidthTriple.subtract curActiveWidth delta
+                        entryIdx <- activeEntries.[entryIdx].Next
+                    | ActiveEntryKind.ActiveNode prevNodeIdx ->
+                        let currentEntryIdx = entryIdx
+                        entryIdx <- activeEntries.[entryIdx].Next
 
-                    let mutable entryIdx = activeEntries.[activeHead].Next
-                    let mutable curActiveWidth = activeWidth
+                        let prevNode = nodes.[prevNodeIdx]
+                        let prevPos = prevNode.Position
 
-                    while entryIdx <> activeHead do
-                        match activeEntries.[entryIdx].Kind with
-                        | ActiveEntryKind.Delta delta ->
-                            curActiveWidth <- WidthTriple.subtract curActiveWidth delta
-                            entryIdx <- activeEntries.[entryIdx].Next
-                        | ActiveEntryKind.ActiveNode prevNodeIdx ->
-                            let currentEntryIdx = entryIdx
-                            entryIdx <- activeEntries.[entryIdx].Next
+                        let ratioResult, actualWidth, _ = computeRatioFromTriple curActiveWidth i
 
-                            let prevNode = nodes.[prevNodeIdx]
-                            let prevPos = prevNode.Position
+                        let minPossibleWidth = suffixMinWidthMinusShrink.[i] - widthMinusShrink.[prevPos]
 
-                            let ratioResult, actualWidth, _ = computeRatioFromTriple curActiveWidth i
+                        let forcedBreakInTail = forcedBreakAhead.[prevPos]
+                        let noFutureFit = minPossibleWidth > options.LineWidth + 1e-9f
 
-                            let overfullAmount = max 0.0f (actualWidth - options.LineWidth)
-                            let minPossibleWidth = suffixMinWidthMinusShrink.[i] - widthMinusShrink.[prevPos]
+                        trace (fun () ->
+                            let ratioStr =
+                                match ratioResult with
+                                | ValueSome r -> $"%.4f{r}"
+                                | ValueNone -> "None"
 
-                            let forcedBreakInTail = forcedBreakAhead.[prevPos]
-                            let noFutureFit = minPossibleWidth > options.LineWidth + 1e-9f
+                            $"  Considering break %d{prevPos}->%d{i}: ratio=%s{ratioStr}, width=%.2f{actualWidth}, isForced=%b{isForced}, forcedBreakInTail=%b{forcedBreakInTail}"
+                        )
+
+                        match ratioResult with
+                        // Use small epsilon for ratio >= -1 check to handle floating-point precision issues.
+                        // Cumulative sums can accumulate small errors (e.g., shrink=0.9999998808 instead of 1.0),
+                        // causing ratio to be -1.0000001 instead of -1.0, which would incorrectly fail the check.
+                        //
+                        // Feasibility check: require ratio >= -1 AND badness <= tolerance.
+                        // This applies on BOTH passes to maintain O(N) complexity.
+                        // The artificial_demerits guard (elsewhere) handles rescue when needed.
+                        | ValueSome ratio when ratio >= -1.0f - 1e-6f && badness ratio <= options.Tolerance ->
+                            // Feasibility: accept if non-overfull AND within tolerance
+                            let fitness = fitnessClass ratio
+                            let isLast = i = n
+
+                            let demerits =
+                                prevNode.Demerits
+                                + computeDemerits
+                                    options
+                                    ratio
+                                    penaltyCost
+                                    prevNode.Fitness
+                                    fitness
+                                    prevNode.WasFlagged
+                                    isFlagged
+                                    isLast
+
+                            let fitnessIdx = int<FitnessClass> fitness
+
+                            let shouldUpdate =
+                                match pendingNodes.[fitnessIdx] with
+                                | None -> true
+                                | Some existing -> demerits < existing.Demerits
 
                             trace (fun () ->
-                                let ratioStr =
-                                    match ratioResult with
-                                    | ValueSome r -> $"%.4f{r}"
-                                    | ValueNone -> "None"
-
-                                $"  Considering break %d{prevPos}->%d{i}: ratio=%s{ratioStr}, width=%.2f{actualWidth}, isForced=%b{isForced}, forcedBreakInTail=%b{forcedBreakInTail}"
+                                $"    FEASIBLE: ratio=%.4f{ratio}, badness=%.2f{badness ratio}, demerits=%.2f{demerits}, fitness=%d{int fitness}, shouldUpdate=%b{shouldUpdate}"
                             )
 
-                            match ratioResult with
-                            // Use small epsilon for ratio >= -1 check to handle floating-point precision issues.
-                            // Cumulative sums can accumulate small errors (e.g., shrink=0.9999998808 instead of 1.0),
-                            // causing ratio to be -1.0000001 instead of -1.0, which would incorrectly fail the check.
-                            | ValueSome ratio when
-                                isForced || (ratio >= -1.0f - 1e-6f && badness ratio <= options.Tolerance)
-                                ->
-                                // TeX feasibility check: accept if forced (explicit or implicit) OR (not overfull AND badness within tolerance)
-                                // Both explicit forced breaks and implicit paragraph end bypass tolerance to avoid paragraph failures
+                            if shouldUpdate then
+                                pendingNodes.[fitnessIdx] <-
+                                    Some
+                                        {
+                                            PrevNodeIdx = prevNodeIdx
+                                            Ratio = ratio
+                                            Demerits = demerits
+                                        }
+                        | ValueNone ->
+                            // No shrink available (line is overfull and cannot shrink).
+                            // This is always infeasible - we don't bypass for forced breaks.
+                            // The artificial_demerits guard handles rescue when needed.
+                            trace (fun () -> "    INFEASIBLE (ValueNone): no shrink available")
+
+                            if noFutureFit && not forcedBreakInTail then
+                                // This node can never fit and there's no forced break ahead where it
+                                // might be rescued. Consider deactivating it.
+                                // TeX's artificial demerits guard (tex.web:16815-16831):
+                                // On the final pass, when about to deactivate the ONLY remaining active node,
+                                // suppress the deactivation and record a break with demerits = 0.
+                                // This ensures at least one path survives to the paragraph end.
+                                if isFinalPass && isOnlyActiveNode currentEntryIdx then
+                                    // Use ratio = -infinity for no-shrink case, fitness = Tight
+                                    let artificialRatio = Single.NegativeInfinity
+                                    let fitness = FitnessClass.Tight
+                                    let fitnessIdx = int<FitnessClass> fitness
+
+                                    // Artificial demerits: line demerits = 0, but carry forward parent's total
+                                    let artificialDemerits = prevNode.Demerits
+
+                                    trace (fun () ->
+                                        $"    ARTIFICIAL DEMERITS (ValueNone): suppressing deactivation, recording d=%.2f{artificialDemerits}"
+                                    )
+
+                                    let shouldUpdate =
+                                        match pendingNodes.[fitnessIdx] with
+                                        | None -> true
+                                        | Some existing -> artificialDemerits < existing.Demerits
+
+                                    if shouldUpdate then
+                                        pendingNodes.[fitnessIdx] <-
+                                            Some
+                                                {
+                                                    PrevNodeIdx = prevNodeIdx
+                                                    Ratio = artificialRatio
+                                                    Demerits = artificialDemerits
+                                                }
+                                // DON'T deactivate - keep the node active
+                                else
+                                    nodesToDeactivate.Add currentEntryIdx |> ignore
+                        // else: noFutureFit is false or forcedBreakInTail is true - keep the node active
+                        | ValueSome ratio ->
+                            // Ratio doesn't meet feasibility conditions (overfull or badness > tolerance)
+                            let isNonOverfull = ratio >= -1.0f - 1e-6f
+
+                            trace (fun () ->
+                                $"    INFEASIBLE: ratio=%.4f{ratio} (>= -1: %b{isNonOverfull}), badness=%.2f{badness ratio} (<= tol: %b{badness ratio <= options.Tolerance}), noFutureFit=%b{noFutureFit}, forcedBreakInTail=%b{forcedBreakInTail}"
+                            )
+
+                            // On pass 2, if this break is non-overfull but high-badness, track it as a rescue candidate.
+                            // We'll use it if no feasible break is found at this position.
+                            // Include noStretchRatio breaks - even severely underfull lines are better than
+                            // overfull lines according to the feasibility definition (minWidth <= lineWidth).
+                            if isFinalPass && isNonOverfull then
                                 let fitness = fitnessClass ratio
                                 let isLast = i = n
 
-                                let demerits =
+                                let candidateDemerits =
                                     prevNode.Demerits
                                     + computeDemerits
                                         options
@@ -700,300 +865,268 @@ module LineBreaker =
                                         isFlagged
                                         isLast
 
-                                let fitnessIdx = int<FitnessClass> fitness
+                                let isBetter =
+                                    match rescueCandidate with
+                                    | ValueNone -> true
+                                    | ValueSome existing -> candidateDemerits < existing.Demerits
 
-                                let shouldUpdate =
-                                    match pendingNodes.[fitnessIdx] with
-                                    | None -> true
-                                    | Some existing -> demerits < existing.Demerits
-
-                                trace (fun () ->
-                                    $"    FEASIBLE: ratio=%.4f{ratio}, badness=%.2f{badness ratio}, demerits=%.2f{demerits}, fitness=%d{int fitness}, shouldUpdate=%b{shouldUpdate}"
-                                )
-
-                                if shouldUpdate then
-                                    pendingNodes.[fitnessIdx] <-
-                                        Some
+                                if isBetter then
+                                    rescueCandidate <-
+                                        ValueSome
                                             {
                                                 PrevNodeIdx = prevNodeIdx
                                                 Ratio = ratio
-                                                Demerits = demerits
-                                            }
-                            | ValueNone ->
-                                // No shrink available (after adjusting for trailing glue).
-                                // TeX's final-pass rescue (tex.web:16815-16831): at EXPLICIT forced breaks
-                                // OR the implicit paragraph end, we create overfull boxes rather than fail.
-                                // This ensures paragraphs always produce output.
-                                trace (fun () -> "    INFEASIBLE (ValueNone): no shrink available")
-
-                                if (isExplicitForcedBreak || isImplicitParagraphEnd) && overfullAmount > 0.0f then
-                                    // Forced break with no shrink. TeX creates an overfull box with ratio = -infinity.
-                                    let overfullRatio = Single.NegativeInfinity
-
-                                    let shouldRescue =
-                                        match rescueCandidate with
-                                        | None -> true
-                                        | Some (_, _, existingOverfull, _, existingDemerits) ->
-                                            overfullAmount < existingOverfull - 1e-9f
-                                            || (abs (overfullAmount - existingOverfull) < 1e-9f
-                                                && prevNode.Demerits < existingDemerits)
-
-                                    if shouldRescue then
-                                        rescueCandidate <-
-                                            Some (
-                                                prevNodeIdx,
-                                                isFlagged,
-                                                overfullAmount,
-                                                overfullRatio,
-                                                prevNode.Demerits
-                                            )
-                                elif noFutureFit && not isForced && not forcedBreakInTail then
-                                    nodesToDeactivate.Add currentEntryIdx |> ignore
-                                    deferredForFinalBreak.Add prevNodeIdx |> ignore
-                            | ValueSome ratio ->
-                                // Ratio doesn't meet feasibility conditions, but might be rescuable
-                                trace (fun () ->
-                                    $"    INFEASIBLE: ratio=%.4f{ratio} (>= -1: %b{ratio >= -1.0f}), badness=%.2f{badness ratio} (<= tol: %b{badness ratio <= options.Tolerance}), noFutureFit=%b{noFutureFit}, forcedBreakInTail=%b{forcedBreakInTail}"
-                                )
-
-                                if noFutureFit && not isForced && not forcedBreakInTail then
-                                    nodesToDeactivate.Add currentEntryIdx |> ignore
-                                    deferredForFinalBreak.Add prevNodeIdx |> ignore
-                                // Create rescue candidate for overfull lines (ratio < 0) when there's a forced break
-                                // (explicit or implicit paragraph end). Having ValueSome (vs ValueNone) means
-                                // there's some shrink available but it's not enough.
-                                // For underfull lines (ratio >= 0), forced breaks are handled by the feasibility check above.
-                                else if
-                                    (isExplicitForcedBreak || isImplicitParagraphEnd || forcedBreakInTail)
-                                    && ratio < 0.0f
-                                then
-                                    let overfullRatio = ratio
-
-                                    let shouldRescue =
-                                        match rescueCandidate with
-                                        | None -> true
-                                        | Some (_, _, existingOverfull, _, existingDemerits) ->
-                                            overfullAmount < existingOverfull - 1e-9f
-                                            || (abs (overfullAmount - existingOverfull) < 1e-9f
-                                                && prevNode.Demerits < existingDemerits)
-
-                                    if shouldRescue then
-                                        trace (fun () ->
-                                            $"    RESCUE CANDIDATE: from %d{prevPos}, overfull=%.2f{overfullAmount}, ratio=%.4f{overfullRatio}, demerits=%.2f{prevNode.Demerits}"
-                                        )
-
-                                        rescueCandidate <-
-                                            Some (
-                                                prevNodeIdx,
-                                                isFlagged,
-                                                overfullAmount,
-                                                overfullRatio,
-                                                prevNode.Demerits
-                                            )
-                        | ActiveEntryKind.Sentinel -> entryIdx <- activeEntries.[entryIdx].Next
-
-                    if isImplicitParagraphEnd && deferredForFinalBreak.Count > 0 then
-                        for deferredNodeIdx in deferredForFinalBreak do
-                            let prevNode = nodes.[deferredNodeIdx]
-                            let prevPos = prevNode.Position
-
-                            let widthTriple =
-                                {
-                                    Width = sums.Width.[i] - sums.Width.[prevPos]
-                                    Stretch = sums.Stretch.[i] - sums.Stretch.[prevPos]
-                                    Shrink = sums.Shrink.[i] - sums.Shrink.[prevPos]
-                                }
-
-                            let ratioResult, actualWidth, _ = computeRatioFromTriple widthTriple i
-                            let overfullAmount = max 0.0f (actualWidth - options.LineWidth)
-
-                            match ratioResult with
-                            | ValueSome ratio ->
-                                let fitness = fitnessClass ratio
-                                let fitnessIdx = int<FitnessClass> fitness
-                                let isLast = true
-
-                                let demerits =
-                                    prevNode.Demerits
-                                    + computeDemerits
-                                        options
-                                        ratio
-                                        penaltyCost
-                                        prevNode.Fitness
-                                        fitness
-                                        prevNode.WasFlagged
-                                        isFlagged
-                                        isLast
-
-                                let shouldUpdate =
-                                    match pendingNodes.[fitnessIdx] with
-                                    | None -> true
-                                    | Some existing -> demerits < existing.Demerits
-
-                                if shouldUpdate then
-                                    pendingNodes.[fitnessIdx] <-
-                                        Some
-                                            {
-                                                PrevNodeIdx = deferredNodeIdx
-                                                Ratio = ratio
-                                                Demerits = demerits
+                                                Demerits = candidateDemerits
                                             }
 
-                                anyNodeAdded <- true
-                            | ValueNone ->
-                                // Forced break with no shrink: rescue with an overfull box.
-                                if overfullAmount > 0.0f then
-                                    let overfullRatio = Single.NegativeInfinity
+                            // Consider deactivating if the line can never fit and there's no forced break ahead
+                            if noFutureFit && not isForced && not forcedBreakInTail then
+                                // TeX's artificial demerits guard (tex.web:16815-16831):
+                                // On the final pass, when about to deactivate the ONLY remaining active node,
+                                // suppress the deactivation and record a break with demerits = 0.
+                                // This ensures at least one path survives even when all breaks are infeasible.
+                                if isFinalPass && isOnlyActiveNode currentEntryIdx then
+                                    let fitness = fitnessClass ratio
+                                    let fitnessIdx = int<FitnessClass> fitness
 
-                                    let shouldRescue =
-                                        match rescueCandidate with
+                                    // Artificial demerits: line demerits = 0, but carry forward parent's total
+                                    let artificialDemerits = prevNode.Demerits
+
+                                    trace (fun () ->
+                                        $"    ARTIFICIAL DEMERITS: recording d=%.2f{artificialDemerits} with ratio=%.4f{ratio}"
+                                    )
+
+                                    let shouldUpdate =
+                                        match pendingNodes.[fitnessIdx] with
                                         | None -> true
-                                        | Some (_, _, existingOverfull, _, existingDemerits) ->
-                                            overfullAmount < existingOverfull - 1e-9f
-                                            || (abs (overfullAmount - existingOverfull) < 1e-9f
-                                                && prevNode.Demerits < existingDemerits)
+                                        | Some existing -> artificialDemerits < existing.Demerits
 
-                                    if shouldRescue then
-                                        rescueCandidate <-
-                                            Some (
-                                                deferredNodeIdx,
-                                                isFlagged,
-                                                overfullAmount,
-                                                overfullRatio,
-                                                prevNode.Demerits
-                                            )
-
-                    for entry in nodesToDeactivate do
-                        removeActiveEntry entry
-
-                    for fitnessIdx in 0..3 do
-                        match pendingNodes.[fitnessIdx] with
-                        | Some pending ->
-                            let fitness = enum<FitnessClass> fitnessIdx
-                            let existingNodeIdx = getBestNode fitness i
-
-                            let shouldAdd =
-                                if existingNodeIdx = Int32.MinValue then
-                                    true
+                                    if shouldUpdate then
+                                        pendingNodes.[fitnessIdx] <-
+                                            Some
+                                                {
+                                                    PrevNodeIdx = prevNodeIdx
+                                                    Ratio = ratio
+                                                    Demerits = artificialDemerits
+                                                }
+                                // DON'T deactivate - keep the node active
                                 else
-                                    pending.Demerits < nodes.[existingNodeIdx].Demerits
+                                    nodesToDeactivate.Add currentEntryIdx |> ignore
+                    // else: node is kept active (could fit later, or there's a forced break ahead)
+                    | ActiveEntryKind.Sentinel -> entryIdx <- activeEntries.[entryIdx].Next
 
-                            if shouldAdd then
-                                if existingNodeIdx <> Int32.MinValue then
-                                    let entry = nodeActiveEntry.[existingNodeIdx]
+                // On pass 2, if no feasible break was found but we have a non-overfull rescue candidate,
+                // use it. This allows the algorithm to explore paths through high-badness breaks,
+                // which may ultimately lead to non-overfull solutions.
+                if isFinalPass then
+                    let anyFeasibleFound =
+                        pendingNodes
+                        |> Array.exists (
+                            function
+                            | Some _ -> true
+                            | None -> false
+                        )
 
-                                    if entry <> -1 then
-                                        removeActiveEntry entry
+                    if not anyFeasibleFound then
+                        match rescueCandidate with
+                        | ValueSome candidate ->
+                            trace (fun () ->
+                                $"    RESCUE CANDIDATE: using high-badness non-overfull break with ratio=%.4f{candidate.Ratio}, demerits=%.2f{candidate.Demerits}"
+                            )
 
-                                let newNode =
+                            let fitness = fitnessClass candidate.Ratio
+                            let fitnessIdx = int<FitnessClass> fitness
+                            pendingNodes.[fitnessIdx] <- Some candidate
+                        | ValueNone -> ()
+
+                // TeX-style rescue for forced breaks (tex.web:16815-16831):
+                // If we're at a forced break on the final pass and NO feasible path was found,
+                // we MUST create a rescue break. Otherwise the algorithm would fail.
+                // This must run BEFORE deactivations so we can find active nodes to rescue from.
+                if isFinalPass && isForced then
+                    let anyFeasibleFound =
+                        pendingNodes
+                        |> Array.exists (
+                            function
+                            | Some _ -> true
+                            | None -> false
+                        )
+
+                    if not anyFeasibleFound then
+                        trace (fun () -> "    FORCED BREAK RESCUE: no feasible path found, creating rescue break")
+
+                        // Find the active node with lowest accumulated demerits.
+                        // This node provides the "best" infeasible path to complete the paragraph.
+                        let mutable bestNodeIdx = -1
+                        let mutable bestDemerits = Single.PositiveInfinity
+                        let mutable rescueEntry = activeEntries.[activeHead].Next
+
+                        while rescueEntry <> activeHead do
+                            match activeEntries.[rescueEntry].Kind with
+                            | ActiveEntryKind.ActiveNode nodeIdx ->
+                                if nodes.[nodeIdx].Demerits < bestDemerits then
+                                    bestDemerits <- nodes.[nodeIdx].Demerits
+                                    bestNodeIdx <- nodeIdx
+
+                                rescueEntry <- activeEntries.[rescueEntry].Next
+                            | _ -> rescueEntry <- activeEntries.[rescueEntry].Next
+
+                        if bestNodeIdx <> -1 then
+                            let fitness = FitnessClass.Tight
+                            let fitnessIdx = int<FitnessClass> fitness
+
+                            trace (fun () ->
+                                $"    RESCUE: creating break from node %d{bestNodeIdx} with demerits %.2f{bestDemerits}"
+                            )
+
+                            pendingNodes.[fitnessIdx] <-
+                                Some
                                     {
-                                        Position = i
-                                        Demerits = pending.Demerits
-                                        Ratio = pending.Ratio
-                                        PreviousNode = pending.PrevNodeIdx
-                                        Fitness = fitness
-                                        WasFlagged = isFlagged
+                                        PrevNodeIdx = bestNodeIdx
+                                        Ratio = Single.NegativeInfinity
+                                        Demerits = bestDemerits
                                     }
 
-                                trace (fun () ->
-                                    $"  ADDING NODE at %d{i}: from %d{pending.PrevNodeIdx}, ratio=%.4f{pending.Ratio}, demerits=%.2f{pending.Demerits}, fitness=%d{int fitness}"
+                // Final pass guard: prevent deactivating ALL active nodes.
+                // The isOnlyActiveNode check during iteration can fail when multiple nodes
+                // are all infeasible at the same position - each thinks others are still active,
+                // but all get scheduled for deactivation. This guard catches that case.
+                if isFinalPass && nodesToDeactivate.Count > 0 then
+                    // Count actual active nodes (excluding delta entries)
+                    let mutable activeNodeCount = 0
+                    let mutable scanEntry = activeEntries.[activeHead].Next
+
+                    while scanEntry <> activeHead do
+                        match activeEntries.[scanEntry].Kind with
+                        | ActiveEntryKind.ActiveNode _ -> activeNodeCount <- activeNodeCount + 1
+                        | _ -> ()
+
+                        scanEntry <- activeEntries.[scanEntry].Next
+
+                    // If we're about to deactivate ALL active nodes, rescue one
+                    if nodesToDeactivate.Count >= activeNodeCount && activeNodeCount > 0 then
+                        // Find the entry with the lowest accumulated demerits
+                        let mutable bestEntry = -1
+                        let mutable bestDemerits = Single.PositiveInfinity
+
+                        for entry in nodesToDeactivate do
+                            match activeEntries.[entry].Kind with
+                            | ActiveEntryKind.ActiveNode nodeIdx ->
+                                let d = nodes.[nodeIdx].Demerits
+
+                                if d < bestDemerits then
+                                    bestDemerits <- d
+                                    bestEntry <- entry
+                            | _ -> ()
+
+                        if bestEntry <> -1 then
+                            trace (fun () ->
+                                $"  FINAL PASS GUARD: preventing deactivation of all %d{activeNodeCount} nodes, keeping entry with demerits=%.2f{bestDemerits}"
+                            )
+
+                            nodesToDeactivate.Remove bestEntry |> ignore
+
+                            // Apply artificial demerits rescue if no feasible path found
+                            let anyFeasibleFound =
+                                pendingNodes
+                                |> Array.exists (
+                                    function
+                                    | Some _ -> true
+                                    | None -> false
                                 )
 
-                                nodes.Add newNode
-                                let nodeIdx = nodes.Count - 1
-                                setBestNode fitness i nodeIdx
-                                ensureNodeEntry nodeIdx
-                                nodeActiveEntry.[nodeIdx] <- -1
+                            if not anyFeasibleFound then
+                                match activeEntries.[bestEntry].Kind with
+                                | ActiveEntryKind.ActiveNode nodeIdx ->
+                                    // Artificial demerits: line demerits = 0, but carry forward parent's total
+                                    let artificialDemerits = nodes.[nodeIdx].Demerits
 
-                                if isForced then
-                                    newlyCreatedNodes.Add nodeIdx
-                                else
-                                    appendActiveEntryForNode nodeIdx i
+                                    trace (fun () ->
+                                        $"  ARTIFICIAL DEMERITS (final pass guard): recording d=%.2f{artificialDemerits} from node %d{nodeIdx}"
+                                    )
 
-                                anyNodeAdded <- true
-                        | None -> ()
+                                    pendingNodes.[int<FitnessClass> FitnessClass.Tight] <-
+                                        Some
+                                            {
+                                                PrevNodeIdx = nodeIdx
+                                                Ratio = Single.NegativeInfinity
+                                                Demerits = artificialDemerits
+                                            }
+                                | _ -> ()
 
-                    // Rescue candidates are only used at ACTUAL forced breaks (explicit -infinity penalty
-                    // or implicit paragraph end). Using them at non-forced breakpoints just because
-                    // `forcedBreakInTail=true` would cause the algorithm to prefer overfull solutions
-                    // over feasible ones, since rescue nodes inherit low demerits from their predecessors.
-                    if not anyNodeAdded && (isExplicitForcedBreak || isImplicitParagraphEnd) then
-                        trace (fun () -> $"  NO FEASIBLE NODE at %d{i}, checking rescue...")
+                // Now perform deactivations (after forced break rescue has found active nodes)
+                for entry in nodesToDeactivate do
+                    removeActiveEntry entry
 
-                        match rescueCandidate with
-                        | Some (prevNodeIdx, flag, _, ratio, prevDemerits) ->
-                            trace (fun () ->
-                                $"  USING RESCUE at %d{i}: from node %d{prevNodeIdx} (pos %d{nodes.[prevNodeIdx].Position}), ratio=%.4f{ratio}, demerits=%.2f{prevDemerits}"
-                            )
+                for fitnessIdx in 0..3 do
+                    match pendingNodes.[fitnessIdx] with
+                    | Some pending ->
+                        let fitness = enum<FitnessClass> fitnessIdx
+                        let existingNodeIdx = getBestNode fitness i
+
+                        let shouldAdd =
+                            if existingNodeIdx = Int32.MinValue then
+                                true
+                            else
+                                pending.Demerits < nodes.[existingNodeIdx].Demerits
+
+                        if shouldAdd then
+                            if existingNodeIdx <> Int32.MinValue then
+                                let entry = nodeActiveEntry.[existingNodeIdx]
+
+                                if entry <> -1 then
+                                    removeActiveEntry entry
 
                             let newNode =
                                 {
                                     Position = i
-                                    Demerits = prevDemerits
-                                    Ratio = ratio
-                                    PreviousNode = prevNodeIdx
-                                    Fitness = FitnessClass.Tight
-                                    WasFlagged = flag
+                                    Demerits = pending.Demerits
+                                    Ratio = pending.Ratio
+                                    PreviousNode = pending.PrevNodeIdx
+                                    Fitness = fitness
+                                    WasFlagged = isFlagged
                                 }
 
-                            let fitness = FitnessClass.Tight
-                            let existingNodeIdx = getBestNode fitness i
+                            trace (fun () ->
+                                $"  ADDING NODE at %d{i}: from %d{pending.PrevNodeIdx}, ratio=%.4f{pending.Ratio}, demerits=%.2f{pending.Demerits}, fitness=%d{int fitness}"
+                            )
 
-                            let shouldAdd =
-                                if existingNodeIdx = Int32.MinValue then
-                                    true
-                                else
-                                    newNode.Demerits < nodes.[existingNodeIdx].Demerits
+                            nodes.Add newNode
+                            let nodeIdx = nodes.Count - 1
+                            setBestNode fitness i nodeIdx
+                            ensureNodeEntry nodeIdx
+                            nodeActiveEntry.[nodeIdx] <- -1
 
-                            if shouldAdd then
-                                if existingNodeIdx <> Int32.MinValue then
-                                    let entry = nodeActiveEntry.[existingNodeIdx]
+                            if isForced then
+                                newlyCreatedNodes.Add nodeIdx
+                            else
+                                appendActiveEntryForNode nodeIdx i
+                    | None -> ()
 
-                                    if entry <> -1 then
-                                        removeActiveEntry entry
+                if isForced then
+                    clearActiveList ()
 
-                                nodes.Add newNode
-                                let nodeIdx = nodes.Count - 1
-                                setBestNode fitness i nodeIdx
-                                ensureNodeEntry nodeIdx
-                                nodeActiveEntry.[nodeIdx] <- -1
+                    for nodeIdx in newlyCreatedNodes do
+                        appendActiveEntryForNode nodeIdx i
 
-                                if isForced then
-                                    newlyCreatedNodes.Add nodeIdx
-                                else
-                                    appendActiveEntryForNode nodeIdx i
+                    activeWidth <- WidthTriple.zero
 
-                                anyNodeAdded <- true
-                        | None -> trace (fun () -> $"  NO RESCUE CANDIDATE at %d{i}")
+        // Find best ending node
+        let mutable bestEndIdx = -1
+        let mutable minV = Single.PositiveInfinity
 
-                    if isForced then
-                        clearActiveList ()
+        for i = 0 to nodes.Count - 1 do
+            let node = nodes.[i]
 
-                        for nodeIdx in newlyCreatedNodes do
-                            appendActiveEntryForNode nodeIdx i
+            if node.Position = n then
+                if node.Demerits < minV then
+                    minV <- node.Demerits
+                    bestEndIdx <- i
 
-                        activeWidth <- WidthTriple.zero
-
-            // Find best ending node
-            let bestEndIdx =
-                if nodes.Count = 0 then
-                    failwithf
-                        $"No valid line breaking found for paragraph with %d{items.Length} items and line width %.2f{options.LineWidth}. Try: (1) increasing line width, (2) increasing tolerance, or (3) allowing hyphenation"
-                else
-
-                let mutable minV = Single.PositiveInfinity
-                let mutable best = Unchecked.defaultof<_>
-
-                for i = 0 to nodes.Count - 1 do
-                    let node = nodes.[i]
-
-                    if node.Position = n then
-                        if node.Demerits < minV then
-                            minV <- node.Demerits
-                            best <- i
-
-                best
-
+        // If no node reached the paragraph end, this pass failed
+        if bestEndIdx = -1 then
+            ValueNone
+        else
             // Backtrack to recover the solution
             let result = ResizeArray ()
 
@@ -1020,4 +1153,36 @@ module LineBreaker =
                     result.Add line
                     backtrack prevIdx
 
-            backtrack bestEndIdx
+            ValueSome (backtrack bestEndIdx)
+
+    /// Break a paragraph into lines using the Knuth-Plass algorithm.
+    /// Returns a list of lines with their start/end positions and adjustment ratios.
+    ///
+    /// This implements a two-pass algorithm following TeX's approach:
+    /// - Pass 1: Normal tolerance check, may fail if no feasible solution exists
+    /// - Pass 2 (final pass): Same tolerance, but with "artificial demerits" guard
+    ///   that prevents losing the last active node, ensuring output is always produced
+    ///
+    /// Note on hyphenation: TeX has a pre-tolerance pass that runs without hyphenation,
+    /// only enabling it if that fails. Since hyphenation is handled externally to this
+    /// algorithm (items already include hyphenation points), we effectively always have
+    /// hyphenation enabled. This means we may hyphenate in cases where TeX wouldn't.
+    ///
+    /// This function doesn't mutate `items`.
+    let breakLines (options : LineBreakOptions) (items : Item[]) : Line[] =
+        if items.Length = 0 then
+            [||]
+        else
+            let precomputed = computePrecomputedState items
+
+            // Pass 1: Normal tolerance, no artificial_demerits guard
+            match tryBreakLines options false items precomputed with
+            | ValueSome lines -> lines
+            | ValueNone ->
+                // Pass 2: Final pass with artificial_demerits guard
+                match tryBreakLines options true items precomputed with
+                | ValueSome lines -> lines
+                | ValueNone ->
+                    // This should be impossible - the final pass should always produce output
+                    // because the artificial_demerits guard prevents losing all active nodes
+                    failwith "Impossible: final pass should always produce output"

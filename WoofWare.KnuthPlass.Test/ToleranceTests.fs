@@ -5,6 +5,7 @@ open WoofWare.KnuthPlass
 open FsUnitTyped
 
 [<TestFixture>]
+[<Parallelizable(ParallelScope.All)>]
 module ToleranceTests =
     /// Compute badness = 100 * |ratio|^3
     let private badness (ratio : float32) : float32 = 100.0f * (abs ratio ** 3.0f)
@@ -212,3 +213,140 @@ module ToleranceTests =
 
         // Verify Line 1 has the expected ratio
         (abs lines.[0].AdjustmentRatio) < 0.01f |> shouldEqual true
+
+    /// On the final pass, the algorithm should explore high-badness but non-overfull breaks
+    /// to find solutions that avoid overfull lines.
+    [<Test>]
+    let ``Final pass explores high-badness non-overfull breaks`` () =
+        // Items where:
+        // - Not breaking early leads to overfull
+        // - Breaking early (high badness) leads to non-overfull solution
+        let items =
+            [|
+                Items.box 3.0f
+                Items.glue 1.0f 10.0f 0.3f // Lots of stretch at position 2
+                Items.box 18.0f // Position 3: Creates a "trap"
+            // If we DON'T break at position 2:
+            //   Continue to position 3: width = 3+1+18 = 22 > 20 (overfull!)
+            // If we DO break at position 2 (high badness because 3 << 20):
+            //   Line 1 = 3 (can stretch to 20 with ratio=1.7, badness=491 > tolerance)
+            //   Line 2 = 18 < 20 (non-overfull!)
+            |]
+
+        let options = LineBreakOptions.Default 20.0f
+        let lines = LineBreaker.breakLines options items
+
+        // Helper to compute minimum possible line width
+        let computeLineMinWidth (start : int) (endPos : int) =
+            let mutable width = 0.0f
+            let mutable shrink = 0.0f
+
+            for i = start to endPos - 1 do
+                match items.[i] with
+                | Box b -> width <- width + b.Width
+                | Glue g ->
+                    width <- width + g.Width
+                    shrink <- shrink + g.Shrink
+                | Penalty _ -> ()
+
+            if endPos > 0 && endPos <= items.Length then
+                match items.[endPos - 1] with
+                | Glue g ->
+                    width <- width - g.Width
+                    shrink <- shrink - g.Shrink
+                | _ -> ()
+
+            width - shrink
+
+        // Verify no line is overfull
+        lines.Length |> shouldEqual 2
+
+        for line in lines do
+            let minWidth = computeLineMinWidth line.Start line.End
+            minWidth |> shouldBeSmallerThan 20.1f
+
+        // we broke on position 1
+        lines.[0].End |> shouldEqual 2
+
+    /// Verifies that the algorithm finds a valid non-overfull solution when one exists.
+    /// The algorithm can break at index 6 (very loose line 1) or index 8 (perfect line 1).
+    /// Breaking at index 8 produces: Line 1 width=10 (perfect), Line 2 width=5 (underfull).
+    /// The second line is rescued by the forced break at the end.
+    [<Test>]
+    let ``Tolerance does not prune needed high-badness path when feasible sibling exists`` () =
+        let lw = 10.0f
+
+        let items =
+            [|
+                // First segment
+                Items.box 2.0f // [0]
+                Items.glue 0.0f 0.5f 0.0f // [1]
+                Items.box 2.0f // [2]
+                Items.glue 0.0f 0.5f 0.0f // [3]
+                Items.box 1.0f // [4]
+                Items.glue 0.0f 0.0f 0.0f // [5] potential breakpoint (high badness)
+                // Second segment
+                Items.box 5.0f // [6]
+                Items.glue 0.5f 0.0f 0.0f // [7] potential breakpoint
+                Items.box 5.0f // [8]
+                Items.forcedBreak () // [9]
+            |]
+
+        let options = LineBreakOptions.Default lw
+        let lines = LineBreaker.breakLines options items
+
+        // Helper to compute minimum possible line width
+        let computeLineMinWidth (start : int) (endPos : int) =
+            let mutable width = 0.0f
+            let mutable shrink = 0.0f
+
+            for i = start to endPos - 1 do
+                match items.[i] with
+                | Box b -> width <- width + b.Width
+                | Glue g ->
+                    width <- width + g.Width
+                    shrink <- shrink + g.Shrink
+                | Penalty _ -> ()
+
+            if endPos > 0 && endPos <= items.Length then
+                match items.[endPos - 1] with
+                | Glue g ->
+                    width <- width - g.Width
+                    shrink <- shrink - g.Shrink
+                | Penalty p -> width <- width + p.Width
+                | _ -> ()
+
+            width - shrink
+
+        // Expect: two lines, none overfull.
+        // The optimal solution breaks at index 8:
+        //   Line 1 (items 0-7): width = 2+0+2+0+1+0+5 = 10 (perfect fit, ratio ≈ 0)
+        //   Line 2 (items 8-9): width = 5 (underfull, rescued by forced break)
+        lines.Length |> shouldEqual 2
+        lines.[0].End |> shouldEqual 8
+
+        // Verify the first line has near-zero ratio (perfect fit)
+        abs lines.[0].AdjustmentRatio |> shouldBeSmallerThan 0.1f
+
+        for line in lines do
+            let minWidth = computeLineMinWidth line.Start line.End
+            minWidth |> shouldBeSmallerThan (lw + 0.1f)
+
+    [<Test>]
+    let ``Regression: can avoid an overfull line when nearly full`` () =
+        let lw = 10.0f
+
+        let items =
+            [|
+                Items.box 9.5f // Forces huge badness if kept active
+                Items.glue 0.0f 0.0f 0.0f
+                Items.box 9.5f // No shrink: any single-line attempt is overfull
+                Items.forcedBreak ()
+            |]
+
+        let options = LineBreakOptions.Default lw
+        let lines = LineBreaker.breakLines options items
+
+        lines.Length |> shouldEqual 2
+        // we broke on position 1
+        lines.[0].End |> shouldEqual 2
