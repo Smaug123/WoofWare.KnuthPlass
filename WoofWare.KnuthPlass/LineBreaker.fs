@@ -805,18 +805,22 @@ module LineBreaker =
                                 // suppress the deactivation and record a break with demerits = 0.
                                 // This ensures at least one path survives to the paragraph end.
                                 if isFinalPass && isOnlyActiveNode currentEntryIdx then
-                                    trace (fun () ->
-                                        "    ARTIFICIAL DEMERITS (ValueNone): suppressing deactivation, recording d=0"
-                                    )
                                     // Use ratio = -infinity for no-shrink case, fitness = Tight
                                     let artificialRatio = Single.NegativeInfinity
                                     let fitness = FitnessClass.Tight
                                     let fitnessIdx = int<FitnessClass> fitness
 
+                                    // Artificial demerits: line demerits = 0, but carry forward parent's total
+                                    let artificialDemerits = prevNode.Demerits
+
+                                    trace (fun () ->
+                                        $"    ARTIFICIAL DEMERITS (ValueNone): suppressing deactivation, recording d=%.2f{artificialDemerits}"
+                                    )
+
                                     let shouldUpdate =
                                         match pendingNodes.[fitnessIdx] with
                                         | None -> true
-                                        | Some existing -> 0.0f < existing.Demerits
+                                        | Some existing -> artificialDemerits < existing.Demerits
 
                                     if shouldUpdate then
                                         pendingNodes.[fitnessIdx] <-
@@ -824,7 +828,7 @@ module LineBreaker =
                                                 {
                                                     PrevNodeIdx = prevNodeIdx
                                                     Ratio = artificialRatio
-                                                    Demerits = 0.0f
+                                                    Demerits = artificialDemerits
                                                 }
                                 // DON'T deactivate - keep the node active
                                 else
@@ -879,15 +883,20 @@ module LineBreaker =
                                 // suppress the deactivation and record a break with demerits = 0.
                                 // This ensures at least one path survives even when all breaks are infeasible.
                                 if isFinalPass && isOnlyActiveNode currentEntryIdx then
-                                    trace (fun () -> $"    ARTIFICIAL DEMERITS: recording d=0 with ratio=%.4f{ratio}")
-
                                     let fitness = fitnessClass ratio
                                     let fitnessIdx = int<FitnessClass> fitness
+
+                                    // Artificial demerits: line demerits = 0, but carry forward parent's total
+                                    let artificialDemerits = prevNode.Demerits
+
+                                    trace (fun () ->
+                                        $"    ARTIFICIAL DEMERITS: recording d=%.2f{artificialDemerits} with ratio=%.4f{ratio}"
+                                    )
 
                                     let shouldUpdate =
                                         match pendingNodes.[fitnessIdx] with
                                         | None -> true
-                                        | Some existing -> 0.0f < existing.Demerits
+                                        | Some existing -> artificialDemerits < existing.Demerits
 
                                     if shouldUpdate then
                                         pendingNodes.[fitnessIdx] <-
@@ -895,7 +904,7 @@ module LineBreaker =
                                                 {
                                                     PrevNodeIdx = prevNodeIdx
                                                     Ratio = ratio
-                                                    Demerits = 0.0f
+                                                    Demerits = artificialDemerits
                                                 }
                                 // DON'T deactivate - keep the node active
                                 else
@@ -1026,8 +1035,11 @@ module LineBreaker =
                             if not anyFeasibleFound then
                                 match activeEntries.[bestEntry].Kind with
                                 | ActiveEntryKind.ActiveNode nodeIdx ->
+                                    // Artificial demerits: line demerits = 0, but carry forward parent's total
+                                    let artificialDemerits = nodes.[nodeIdx].Demerits
+
                                     trace (fun () ->
-                                        $"  ARTIFICIAL DEMERITS (final pass guard): recording d=0 from node %d{nodeIdx}"
+                                        $"  ARTIFICIAL DEMERITS (final pass guard): recording d=%.2f{artificialDemerits} from node %d{nodeIdx}"
                                     )
 
                                     pendingNodes.[int<FitnessClass> FitnessClass.Tight] <-
@@ -1035,7 +1047,7 @@ module LineBreaker =
                                             {
                                                 PrevNodeIdx = nodeIdx
                                                 Ratio = Single.NegativeInfinity
-                                                Demerits = 0.0f
+                                                Demerits = artificialDemerits
                                             }
                                 | _ -> ()
 

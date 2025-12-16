@@ -17,40 +17,27 @@ module Text =
     [<Literal>]
     let SPACE_WIDTH = 1.0f
 
-    /// Formats text into paragraphs with line breaks using the Knuth-Plass algorithm.
-    /// Returns the text with line breaks inserted at 'optimal' positions.
-    /// Newlines in the input are preserved as paragraph breaks (hard breaks).
-    ///
-    /// By specifying `wordWidth`, `spaceWidth`, and `hyphenPenalty` appropriately, you can get the string in a form
-    /// that would render in any font.
-    ///
-    /// Note that the resulting text may contain "overfull" lines: lines which don't fit into the line width.
-    /// It's up to you to deal with this appropriately.
-    /// (For example, if the line width is 4 according to `options`, and you try to typeset a string of `wordWidth` 5,
-    /// and `getHyphenationPoints` doesn't let that 5-length string hyphenate, you will get an overfull line.)
-    let format
+    /// Formats a single paragraph (no newlines) into lines using the Knuth-Plass algorithm.
+    /// Returns the paragraph text with line breaks inserted at 'optimal' positions.
+    let private formatParagraph
         (options : LineBreakOptions)
         (wordWidth : string -> float32)
         (spaceWidth : Glue)
         (hyphenPenalty : float32)
         (getHyphenationPoints : string -> int list)
-        (text : string)
+        (paragraph : string)
         : string
         =
-        // Normalize and split into paragraphs, then words, to match Items.fromString behavior
-        let normalizedText = text.Replace ("\r", "")
-        let paragraphs = normalizedText.Split '\n'
-
-        let words =
-            paragraphs
-            |> Array.collect (fun p -> p.Split ([| ' ' |], StringSplitOptions.RemoveEmptyEntries))
+        let words = paragraph.Split ([| ' ' |], StringSplitOptions.RemoveEmptyEntries)
 
         if words.Length = 0 then
             ""
         else
+            // Create items for just this paragraph (Items.fromString handles single paragraphs)
             let items =
-                Items.fromString wordWidth spaceWidth getHyphenationPoints hyphenPenalty text
+                Items.fromString wordWidth spaceWidth getHyphenationPoints hyphenPenalty paragraph
 
+            // Process this paragraph separately - ensures O(n) per paragraph
             let lines = LineBreaker.breakLines options items
 
             // Pre-compute word parts based on hyphenation points
@@ -149,10 +136,45 @@ module Text =
                 result.Append Environment.NewLine |> ignore<StringBuilder>
 
             // we now have a rogue final newline from the last loop!
-            result.Remove (result.Length - Environment.NewLine.Length, Environment.NewLine.Length)
-            |> ignore<StringBuilder>
+            if result.Length >= Environment.NewLine.Length then
+                result.Remove (result.Length - Environment.NewLine.Length, Environment.NewLine.Length)
+                |> ignore<StringBuilder>
 
             (result : StringBuilder).ToString ()
+
+    /// Formats text into paragraphs with line breaks using the Knuth-Plass algorithm.
+    /// Returns the text with line breaks inserted at 'optimal' positions.
+    /// Newlines in the input are preserved as paragraph breaks (hard breaks).
+    ///
+    /// By specifying `wordWidth`, `spaceWidth`, and `hyphenPenalty` appropriately, you can get the string in a form
+    /// that would render in any font.
+    ///
+    /// Note that the resulting text may contain "overfull" lines: lines which don't fit into the line width.
+    /// It's up to you to deal with this appropriately.
+    /// (For example, if the line width is 4 according to `options`, and you try to typeset a string of `wordWidth` 5,
+    /// and `getHyphenationPoints` doesn't let that 5-length string hyphenate, you will get an overfull line.)
+    let format
+        (options : LineBreakOptions)
+        (wordWidth : string -> float32)
+        (spaceWidth : Glue)
+        (hyphenPenalty : float32)
+        (getHyphenationPoints : string -> int list)
+        (text : string)
+        : string
+        =
+        // Normalize and split into paragraphs
+        let normalizedText = text.Replace ("\r", "")
+        let paragraphs = normalizedText.Split '\n'
+
+        // Process each paragraph separately for O(n) performance per paragraph
+        // (combined processing would be O(n²) due to ForcedBreakAhead behavior)
+        let formattedParagraphs =
+            paragraphs
+            |> Array.map (fun para ->
+                formatParagraph options wordWidth spaceWidth hyphenPenalty getHyphenationPoints para
+            )
+
+        String.concat Environment.NewLine formattedParagraphs
 
     /// Formats text into paragraphs with line breaks using the Knuth-Plass algorithm.
     /// Returns the text with line breaks inserted at 'optimal' positions.
