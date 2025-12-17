@@ -208,11 +208,8 @@ module PropertyTests =
                                 lineWidth
 
         let arb =
-            ArbMap.defaults
-            |> ArbMap.generate<string * float32>
-            |> Gen.zip EnglishGen.text
-            |> Gen.zip genLineWidth
-            |> Gen.map (fun (lineWidth, (text, _)) -> text, lineWidth)
+            Gen.zip genLineWidth EnglishGen.text
+            |> Gen.map (fun (lineWidth, text) -> text, lineWidth)
             |> Arb.fromGen
 
         let prop = Prop.forAll arb (fun (text, lineWidth) -> property text lineWidth)
@@ -326,11 +323,8 @@ module PropertyTests =
                     line.End |> shouldBeGreaterThan line.Start
 
         let arb =
-            ArbMap.defaults
-            |> ArbMap.generate<string * float32>
-            |> Gen.zip EnglishGen.text
-            |> Gen.zip genLineWidth
-            |> Gen.map (fun (lineWidth, (text, _)) -> text, lineWidth)
+            Gen.zip genLineWidth EnglishGen.text
+            |> Gen.map (fun (lineWidth, text) -> text, lineWidth)
             |> Arb.fromGen
 
         let prop = Prop.forAll arb (fun (text, lineWidth) -> property text lineWidth)
@@ -369,11 +363,8 @@ module PropertyTests =
                 lines.Length |> shouldBeGreaterThan 0
 
         let arb =
-            ArbMap.defaults
-            |> ArbMap.generate<string * float32>
-            |> Gen.zip EnglishGen.text
-            |> Gen.zip genLineWidth
-            |> Gen.map (fun (lineWidth, (text, _)) -> text, lineWidth)
+            Gen.zip genLineWidth EnglishGen.text
+            |> Gen.map (fun (lineWidth, text) -> text, lineWidth)
             |> Arb.fromGen
 
         let prop = Prop.forAll arb (fun (text, lineWidth) -> property text lineWidth)
@@ -883,7 +874,7 @@ module PropertyTests =
 
         totalDemerits
 
-    /// Check if a breaking is feasible (all lines have ratio >= -1, i.e., not overfull)
+    /// Check if a breaking is feasible (all lines have ratio in [-1, tolerance])
     let private isBreakingFeasible (items : Item[]) (options : LineBreakOptions) (breaks : int list) : bool =
         let sums = computeCumulativeSums items
         let pairs = breaks |> List.pairwise
@@ -903,8 +894,8 @@ module PropertyTests =
                 else
                     -noStretchRatio
 
-            // Feasible if not overfull (ratio >= -1)
-            ratio >= -1.0f - 1e-6f
+            // Feasible if ratio is in [-1, tolerance] (matches isLineFeasible)
+            ratio >= -1.0f - 1e-6f && ratio <= options.Tolerance + 1e-6f
         )
 
     /// Property: Algorithm produces minimum demerits among all legal breakings
@@ -975,14 +966,11 @@ module PropertyTests =
                     | _ -> 0.0f
                 )
 
-            // Theoretical minimum lines needed (ignoring forced breaks)
-            // This is a weak lower bound since we can't fit more content than lineWidth per line
+            // Verify at least 1 line for non-empty input with positive box content
+            // Note: A stronger lower bound (ceil(totalBoxWidth/lineWidth)) doesn't hold
+            // because glue can stretch to fill underfull lines, potentially fitting
+            // more box content per line than the ratio suggests.
             if lineWidth > 0.0f && totalBoxWidth > 0.0f then
-                let theoreticalMinLines =
-                    int (System.Math.Ceiling (float totalBoxWidth / float lineWidth))
-                // The algorithm might need more lines, but never fewer
-                // Note: This is a very weak bound since glue can stretch/shrink
-                // We just verify the algorithm produces at least 1 line for non-empty input
                 lines.Length |> shouldBeGreaterThan 0
 
         let arb =
