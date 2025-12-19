@@ -382,7 +382,11 @@ module LineBreaker =
         if fitnessDiff > 1 then
             demerits <- demerits + options.AdjacentLooseTightDemerits
 
-        // Penalty for ending with a flagged break
+        // Penalty for ending a paragraph with a hyphen.
+        // We check prevWasFlagged (not currIsFlagged) because: the last line ends at the
+        // paragraph end, which is never a flagged penalty. The hyphen we're penalizing is
+        // on the second-to-last line, detected by checking if the break that *starts* the
+        // last line was flagged.
         if isLastLine && prevWasFlagged then
             demerits <- demerits + options.FinalHyphenDemerits
 
