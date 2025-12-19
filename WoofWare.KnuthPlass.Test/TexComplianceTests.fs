@@ -116,16 +116,29 @@ module TexComplianceTests =
                 Items.box 10.0f
             |]
 
+        // Use zero RightSkip to preserve the exact ratio calculations this test was designed for
         let noPenalty =
             { LineBreakOptions.Default 60.0f with
                 Tolerance = 20000.0f
                 AdjacentLooseTightDemerits = 0.0f
+                RightSkip =
+                    {
+                        Width = 0.0f
+                        Stretch = 0.0f
+                        Shrink = 0.0f
+                    }
             }
 
         let withPenalty =
             { LineBreakOptions.Default 60.0f with
                 Tolerance = 20000.0f
                 AdjacentLooseTightDemerits = 10_000_000.0f
+                RightSkip =
+                    {
+                        Width = 0.0f
+                        Stretch = 0.0f
+                        Shrink = 0.0f
+                    }
             }
 
         let linesNoPenalty = LineBreaker.breakLines noPenalty items

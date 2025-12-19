@@ -756,12 +756,17 @@ module PropertyTests =
                 let width, stretch, shrink = computeLineMetrics items sums startPos endPos
 
                 let diff = options.LineWidth - width
+                // Include RightSkip.Stretch to match the algorithm's behavior
+                let totalStretch = stretch + options.RightSkip.Stretch
 
                 let ratio =
                     if abs diff < 1e-6f then
                         0.0f
                     elif diff > 0.0f then
-                        if stretch > 1e-9f then diff / stretch else noStretchRatio
+                        if totalStretch > 1e-9f then
+                            diff / totalStretch
+                        else
+                            noStretchRatio
                     elif shrink > 1e-9f then
                         diff / shrink
                     else
@@ -843,12 +848,17 @@ module PropertyTests =
             let width, stretch, shrink = computeLineMetrics items sums startPos endPos
 
             let diff = options.LineWidth - width
+            // Include RightSkip.Stretch to match the algorithm's behavior
+            let totalStretch = stretch + options.RightSkip.Stretch
 
             let ratio =
                 if abs diff < 1e-6f then
                     0.0f
                 elif diff > 0.0f then
-                    if stretch > 1e-9f then diff / stretch else noStretchRatio
+                    if totalStretch > 1e-9f then
+                        diff / totalStretch
+                    else
+                        noStretchRatio
                 elif shrink > 1e-9f then
                     diff / shrink
                 else
@@ -883,12 +893,17 @@ module PropertyTests =
         |> List.forall (fun (startPos, endPos) ->
             let width, stretch, shrink = computeLineMetrics items sums startPos endPos
             let diff = options.LineWidth - width
+            // Include RightSkip.Stretch to match the algorithm's behavior
+            let totalStretch = stretch + options.RightSkip.Stretch
 
             let ratio =
                 if abs diff < 1e-6f then
                     0.0f
                 elif diff > 0.0f then
-                    if stretch > 1e-9f then diff / stretch else noStretchRatio
+                    if totalStretch > 1e-9f then
+                        diff / totalStretch
+                    else
+                        noStretchRatio
                 elif shrink > 1e-9f then
                     diff / shrink
                 else

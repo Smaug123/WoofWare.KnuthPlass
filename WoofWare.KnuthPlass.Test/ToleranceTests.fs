@@ -204,7 +204,17 @@ module ToleranceTests =
                 Items.box 10.0f
             |]
 
-        let options = LineBreakOptions.Default 80.0f // Uses default tolerance = 200
+        // Use zero RightSkip to preserve the exact ratio calculations this test was designed for
+        let options =
+            { LineBreakOptions.Default 80.0f with
+                RightSkip =
+                    {
+                        Width = 0.0f
+                        Stretch = 0.0f
+                        Shrink = 0.0f
+                    }
+            }
+
         let lines = LineBreaker.breakLines options items
 
         // Should break at position 6 (position 3 was pruned by tolerance)

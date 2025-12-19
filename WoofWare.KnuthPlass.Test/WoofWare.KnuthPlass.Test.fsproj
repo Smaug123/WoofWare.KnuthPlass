@@ -19,6 +19,7 @@
     <Compile Include="PenaltyTests.fs"/>
     <Compile Include="HelperTests.fs"/>
     <Compile Include="RealWorldTests.fs"/>
+    <Compile Include="LiangHyphenationTests.fs"/>
     <Compile Include="TestMiscRegressions.fs" />
     <Compile Include="TestPerformance.fs" />
     <Compile Include="TestSurface.fs" />

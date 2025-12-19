@@ -173,6 +173,16 @@ type LineBreakOptions =
         /// <remarks>See the <see cref="FitnessClass"/> type for what a fitness class is.
         /// Note: TeX only applies adj_demerits when fitness diff > 1, not for adjacent classes (diff=1).</remarks>
         FitnessClassDifferencePenalty : float32
+        /// <summary>Zero-width glue providing baseline stretch for all lines (TeX's \rightskip).</summary>
+        /// <remarks>
+        /// This provides baseline stretchability so that single-word lines (which have no inter-word glue)
+        /// get finite adjustment ratios instead of infinity. Without this, the algorithm treats all underfull
+        /// single-word lines as equally bad, potentially preferring unnecessary hyphenation.
+        ///
+        /// The Width should typically be 0.0f (doesn't add to line length).
+        /// The Stretch should be positive to allow underfull lines to have meaningful badness values.
+        /// </remarks>
+        RightSkip : Glue
     }
 
     /// TeX's maximum badness value (inf_bad in tex.web:109). Per TeX's badness function
@@ -204,6 +214,13 @@ type LineBreakOptions =
             DoubleHyphenDemerits = LineBreakOptions.DefaultDoubleHyphenDemerits
             FinalHyphenDemerits = LineBreakOptions.DefaultFinalHyphenDemerits
             FitnessClassDifferencePenalty = LineBreakOptions.DefaultFitnessClassDifferencePenalty
+            // RightSkip with stretch = 4.0 provides baseline stretchability for single-word lines
+            RightSkip =
+                {
+                    Width = 0.0f
+                    Stretch = 4.0f
+                    Shrink = 0.0f
+                }
         }
 
     /// Creates default options with standard TeX-like values, tuned for monospace layouts like a console where
@@ -218,4 +235,13 @@ type LineBreakOptions =
             DoubleHyphenDemerits = LineBreakOptions.DefaultDoubleHyphenDemerits
             FinalHyphenDemerits = LineBreakOptions.DefaultFinalHyphenDemerits
             FitnessClassDifferencePenalty = LineBreakOptions.DefaultFitnessClassDifferencePenalty
+            // RightSkip with stretch = 4.0 provides baseline stretchability for single-word lines.
+            // This prevents all underfull single-word lines from being treated as equally bad
+            // (which would cause unnecessary hyphenation).
+            RightSkip =
+                {
+                    Width = 0.0f
+                    Stretch = 4.0f
+                    Shrink = 0.0f
+                }
         }

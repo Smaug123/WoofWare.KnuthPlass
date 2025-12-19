@@ -678,12 +678,16 @@ module LineBreaker =
 
             let diff = options.LineWidth - adjustedWidth
 
+            // Add RightSkip stretch to provide baseline stretchability for single-word lines.
+            // This prevents all underfull single-word lines from being treated as equally bad.
+            let totalStretch = adjustedStretch + options.RightSkip.Stretch
+
             let ratio =
                 if abs diff < 1e-10f then
                     ValueSome 0.0f
                 elif diff > 0.0f then
-                    if adjustedStretch > 0.0f then
-                        ValueSome (diff / adjustedStretch)
+                    if totalStretch > 0.0f then
+                        ValueSome (diff / totalStretch)
                     else
                         ValueSome noStretchRatio
                 elif adjustedShrink > 0.0f then
