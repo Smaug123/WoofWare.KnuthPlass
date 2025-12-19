@@ -20,9 +20,7 @@ WoofWare.KnuthPlass.Glue.Stretch [property]: [read-only] single
 WoofWare.KnuthPlass.Glue.Width [property]: [read-only] single
 WoofWare.KnuthPlass.Hyphenation inherit obj
 WoofWare.KnuthPlass.Hyphenation.DEFAULT_PENALTY [static field]: single = 50
-WoofWare.KnuthPlass.Hyphenation.everywhere [static method]: string -> int list
-WoofWare.KnuthPlass.Hyphenation.none [static method]: string -> int list
-WoofWare.KnuthPlass.Hyphenation.simpleEnglish [static method]: string -> int list
+WoofWare.KnuthPlass.Hyphenation.prioritiesToPoints [static method]: single -> System.Byte [] -> struct (int * single) []
 WoofWare.KnuthPlass.Item inherit obj, implements WoofWare.KnuthPlass.Item System.IEquatable, System.Collections.IStructuralEquatable, WoofWare.KnuthPlass.Item System.IComparable, System.IComparable, System.Collections.IStructuralComparable - union type with 3 cases
 WoofWare.KnuthPlass.Item+Box inherit WoofWare.KnuthPlass.Item
 WoofWare.KnuthPlass.Item+Box.get_Item [method]: unit -> WoofWare.KnuthPlass.Box
@@ -53,12 +51,11 @@ WoofWare.KnuthPlass.Items inherit obj
 WoofWare.KnuthPlass.Items.box [static method]: single -> WoofWare.KnuthPlass.Item
 WoofWare.KnuthPlass.Items.defaultGlue [static method]: single -> WoofWare.KnuthPlass.Glue
 WoofWare.KnuthPlass.Items.forcedBreak [static method]: unit -> WoofWare.KnuthPlass.Item
-WoofWare.KnuthPlass.Items.fromEnglishString [static method]: (string -> single) -> single -> string -> WoofWare.KnuthPlass.Item []
-WoofWare.KnuthPlass.Items.fromString [static method]: (string -> single) -> WoofWare.KnuthPlass.Glue -> (string -> int list) -> single -> string -> WoofWare.KnuthPlass.Item []
 WoofWare.KnuthPlass.Items.get_monospaceGlue [static method]: unit -> WoofWare.KnuthPlass.Glue
 WoofWare.KnuthPlass.Items.glue [static method]: single -> single -> single -> WoofWare.KnuthPlass.Item
 WoofWare.KnuthPlass.Items.monospaceGlue [static property]: [read-only] WoofWare.KnuthPlass.Glue
 WoofWare.KnuthPlass.Items.penalty [static method]: single -> single -> bool -> WoofWare.KnuthPlass.Item
+WoofWare.KnuthPlass.Items.wordFromFragments [static method]: single -> single System.ReadOnlySpan -> single System.ReadOnlySpan -> WoofWare.KnuthPlass.Item []
 WoofWare.KnuthPlass.Line inherit obj, implements WoofWare.KnuthPlass.Line System.IEquatable, System.Collections.IStructuralEquatable, WoofWare.KnuthPlass.Line System.IComparable, System.IComparable, System.Collections.IStructuralComparable
 WoofWare.KnuthPlass.Line..ctor [constructor]: (int, int, single)
 WoofWare.KnuthPlass.Line.AdjustmentRatio [property]: [read-only] single
@@ -113,6 +110,5 @@ WoofWare.KnuthPlass.Penalty.get_Width [method]: unit -> single
 WoofWare.KnuthPlass.Penalty.Width [property]: [read-only] single
 WoofWare.KnuthPlass.Text inherit obj
 WoofWare.KnuthPlass.Text.defaultWordWidth [static method]: string -> single
-WoofWare.KnuthPlass.Text.format [static method]: WoofWare.KnuthPlass.LineBreakOptions -> (string -> single) -> WoofWare.KnuthPlass.Glue -> single -> (string -> int list) -> string -> string
-WoofWare.KnuthPlass.Text.formatEnglishFixedWidth [static method]: single -> string -> string
+WoofWare.KnuthPlass.Text.format [static method]: WoofWare.KnuthPlass.LineBreakOptions -> (string -> single) -> WoofWare.KnuthPlass.Glue -> single -> (string -> System.Byte []) -> string -> string
 WoofWare.KnuthPlass.Text.SPACE_WIDTH [static field]: single = 1

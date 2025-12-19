@@ -39,7 +39,7 @@ module TestPerformance =
         let words = Array.init 500 (fun i -> $"word{i}")
         let text = String.concat " " words
 
-        let items = Items.fromEnglishString Text.defaultWordWidth Text.SPACE_WIDTH text
+        let items = TestHelpers.fromStringNoHyphenation text
         let options = LineBreakOptions.Default 100.0f
 
         let stopwatch = System.Diagnostics.Stopwatch.StartNew ()

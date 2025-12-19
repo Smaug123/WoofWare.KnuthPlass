@@ -212,7 +212,7 @@ module IsValidBreakpointProperties =
     [<Test>]
     let ``All breakpoints in English text line breaking are legal`` () =
         let property (text : string) (lineWidth : float32) =
-            let items = Items.fromEnglishString Text.defaultWordWidth Text.SPACE_WIDTH text
+            let items = TestHelpers.fromStringNoHyphenation text
 
             if items.Length = 0 then
                 // Empty text trivially passes

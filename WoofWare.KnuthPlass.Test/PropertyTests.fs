@@ -185,7 +185,7 @@ module PropertyTests =
     [<Test>]
     let ``No overfull line when a feasible alternative exists`` () =
         let property (text : string) (lineWidth : float32) =
-            let items = Items.fromEnglishString Text.defaultWordWidth Text.SPACE_WIDTH text
+            let items = TestHelpers.fromStringNoHyphenation text
 
             if items.Length = 0 then
                 // Empty text trivially passes
@@ -302,7 +302,7 @@ module PropertyTests =
     [<Test>]
     let ``Lines partition the input - English text`` () =
         let property (text : string) (lineWidth : float32) =
-            let items = Items.fromEnglishString Text.defaultWordWidth Text.SPACE_WIDTH text
+            let items = TestHelpers.fromStringNoHyphenation text
 
             if items.Length > 0 then
                 let options = LineBreakOptions.Default lineWidth
@@ -355,7 +355,7 @@ module PropertyTests =
     [<Test>]
     let ``Always produces output for non-empty input - English text`` () =
         let property (text : string) (lineWidth : float32) =
-            let items = Items.fromEnglishString Text.defaultWordWidth Text.SPACE_WIDTH text
+            let items = TestHelpers.fromStringNoHyphenation text
 
             if items.Length > 0 then
                 let options = LineBreakOptions.Default lineWidth

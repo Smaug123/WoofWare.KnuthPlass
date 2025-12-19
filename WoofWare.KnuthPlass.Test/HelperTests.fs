@@ -19,74 +19,6 @@ module HelperTests =
         GlobalBuilderConfig.updateAllSnapshots ()
 
     [<Test>]
-    let ``fromString creates correct items for simple text`` () =
-        let text = "hello world"
-        let wordWidth (s : string) = float32 s.Length * 10.0f
-        let spaceWidth = 5.0f
-        let items = Items.fromEnglishString wordWidth spaceWidth text
-
-        expect {
-            snapshotList
-                [
-                    "box[20.00]"
-                    "penF[10.00 cost 50.00]"
-                    "box[30.00]"
-                    "glue[5.00 / 2.50 / 1.67]"
-                    "box[20.00]"
-                    "penF[10.00 cost 50.00]"
-                    "box[30.00]"
-                    "glue[0.00 / Infinity / 0.00]"
-                    "pen_[0.00 cost -Infinity]"
-                ]
-
-            return items
-        }
-
-    [<Test>]
-    let ``fromString handles single word`` () =
-        let text = "hello"
-        let wordWidth (s : string) = float32 s.Length * 10.0f
-        let spaceWidth = 5.0f
-        let items = Items.fromEnglishString wordWidth spaceWidth text
-
-        expect {
-            snapshotList
-                [
-                    "box[20.00]"
-                    "penF[10.00 cost 50.00]"
-                    "box[30.00]"
-                    "glue[0.00 / Infinity / 0.00]"
-                    "pen_[0.00 cost -Infinity]"
-                ]
-
-            return items
-        }
-
-    [<Test>]
-    let ``fromString concatenates multiple spaces`` () =
-        let text = "hello    world"
-        let wordWidth (s : string) = float32 s.Length * 10.0f
-        let spaceWidth = 5.0f
-        let items = Items.fromEnglishString wordWidth spaceWidth text
-
-        expect {
-            snapshotList
-                [
-                    "box[20.00]"
-                    "penF[10.00 cost 50.00]"
-                    "box[30.00]"
-                    "glue[5.00 / 2.50 / 1.67]"
-                    "box[20.00]"
-                    "penF[10.00 cost 50.00]"
-                    "box[30.00]"
-                    "glue[0.00 / Infinity / 0.00]"
-                    "pen_[0.00 cost -Infinity]"
-                ]
-
-            return items
-        }
-
-    [<Test>]
     let ``box helper creates correct item`` () =
         let item = Items.box 42.0f
 
@@ -128,97 +60,109 @@ module HelperTests =
         | _ -> failwith "Should create a Penalty item"
 
     [<Test>]
-    let ``Text.format processes emoji text without crashing`` () =
-        // This is a basic smoke test for emoji/Unicode handling.
-        // The actual grapheme cluster counting is tested in ``fromString counts grapheme clusters not chars``.
-        let text = "👨‍👩‍👧‍👦 👍🏽"
+    let ``wordFromFragments with single fragment creates single box`` () =
+        let items =
+            Items.wordFromFragments 1.0f (ReadOnlySpan [| 5.0f |]) (ReadOnlySpan [||])
 
-        // Using default width function
-        let result = Text.formatEnglishFixedWidth 10.0f text
+        items.Length |> shouldEqual 1
 
-        // Should successfully format without crashing
-        result |> shouldNotEqual ""
+        match items.[0] with
+        | Box b -> b.Width |> shouldEqual 5.0f
+        | _ -> failwith "Should create a Box item"
 
     [<Test>]
-    let ``fromString counts grapheme clusters not chars`` () =
-        // 👍🏽 is 1 grapheme cluster but 4 UTF-16 chars
-        let text = "👍🏽"
+    let ``wordFromFragments with multiple fragments creates boxes and penalties`` () =
+        let fragmentWidths = [| 3.0f ; 2.0f ; 4.0f |]
+        let penalties = [| 50.0f ; 75.0f |]
+        let hyphenWidth = 1.0f
 
         let items =
-            Items.fromEnglishString
-                (fun s -> float32 (System.Globalization.StringInfo(s).LengthInTextElements))
-                5.0f
-                text
+            Items.wordFromFragments hyphenWidth (ReadOnlySpan fragmentWidths) (ReadOnlySpan penalties)
 
-        // The main content of the test is that we see 1.0 rather than 4.0 in the box width.
-        expect {
-            snapshotList [ "box[1.00]" ; "glue[0.00 / Infinity / 0.00]" ; "pen_[0.00 cost -Infinity]" ]
-            return items
-        }
-
-    [<Test>]
-    let ``Paragraph ends with finishing glue and forced break`` () =
-        // Per Knuth-Plass paper: paragraphs end with finishing glue and a forced break.
-        //
-        // Note: In TeX proper, the paragraph tail uses par_fill_skip preceded by an
-        // infinite positive penalty (so it's not a breakpoint), and the forced final
-        // break is injected by the line-breaker via try_break(eject_penalty) rather
-        // than appearing as a node in the item list (tex.web:16070, 17197).
-        //
-        // This library's Items.fromEnglishString uses a simpler representation:
-        // finishing glue (width=0, stretch=∞) followed by an explicit forced break
-        // penalty (cost=-∞). This achieves the same effect for our algorithm.
-        let text = "word"
-
-        let items =
-            Items.fromEnglishString (fun s -> float32 s.Length) LanguagePrimitives.GenericOne text
-
-        // Last two items should be the finishing glue and forced break
-        let finishingGlue = items.[items.Length - 2]
-        let forcedBreak = items.[items.Length - 1]
-
-        match finishingGlue with
-        | Glue g ->
-            g.Width |> shouldEqual LanguagePrimitives.GenericZero
-            System.Single.IsPositiveInfinity g.Stretch |> shouldEqual true
-            g.Shrink |> shouldEqual LanguagePrimitives.GenericZero
-        | _ -> failwith "Second-to-last item should be finishing glue"
-
-        match forcedBreak with
-        | Penalty p ->
-            p.Width |> shouldEqual LanguagePrimitives.GenericZero
-            System.Single.IsNegativeInfinity p.Cost |> shouldEqual true
-            p.Flagged |> shouldEqual false
-        | _ -> failwith "Last item should be forced break penalty"
-
-    [<Test>]
-    let ``fromString treats newlines as paragraph boundaries`` () =
-        // Note: This is a library design choice, NOT TeX behavior.
-        // In TeX, a single newline is converted to a space; only a blank line
-        // or explicit \par creates a paragraph break.
-        //
-        // This library's Items.fromEnglishString treats each newline as a
-        // paragraph boundary, producing separate paragraph items for each line.
-        // This is convenient for plain-text input where newlines are meaningful.
-        let text = "hello\nworld"
-        let wordWidth (s : string) = float32 s.Length * 10.0f
-        let spaceWidth = 5.0f
-        let items = Items.fromEnglishString wordWidth spaceWidth text
+        // Should be: Box, Penalty, Box, Penalty, Box = 5 items
+        items.Length |> shouldEqual 5
 
         expect {
             snapshotList
                 [
-                    "box[20.00]"
-                    "penF[10.00 cost 50.00]"
-                    "box[30.00]"
-                    "glue[0.00 / Infinity / 0.00]"
-                    "pen_[0.00 cost -Infinity]"
-                    "box[20.00]"
-                    "penF[10.00 cost 50.00]"
-                    "box[30.00]"
-                    "glue[0.00 / Infinity / 0.00]"
-                    "pen_[0.00 cost -Infinity]"
+                    "box[3.00]"
+                    "penF[1.00 cost 50.00]"
+                    "box[2.00]"
+                    "penF[1.00 cost 75.00]"
+                    "box[4.00]"
                 ]
 
             return items
         }
+
+    [<Test>]
+    let ``wordFromFragments validates penalty count`` () =
+        let fragmentWidths = [| 3.0f ; 2.0f ; 4.0f |]
+        let wrongPenalties = [| 50.0f |] // Should be 2, not 1
+
+        (fun () ->
+            Items.wordFromFragments 1.0f (ReadOnlySpan fragmentWidths) (ReadOnlySpan wrongPenalties)
+            |> ignore
+        )
+        |> shouldFail<ArgumentException>
+
+    [<Test>]
+    let ``prioritiesToPoints converts Liang priorities correctly`` () =
+        // Priorities: 0=no break, 1=break(good), 2=no break, 3=break(ok), 4=no break
+        let priorities = [| 0uy ; 1uy ; 2uy ; 3uy ; 4uy |]
+        let basePenalty = 10.0f
+
+        let points = Hyphenation.prioritiesToPoints basePenalty priorities
+
+        // Should have 2 points: position 2 (after 1uy) and position 4 (after 3uy)
+        points.Length |> shouldEqual 2
+
+        let struct (pos1, pen1) = points.[0]
+        let struct (pos2, pen2) = points.[1]
+
+        pos1 |> shouldEqual 2 // After index 1
+        pen1 |> shouldEqual 10.0f // 10 * 1
+
+        pos2 |> shouldEqual 4 // After index 3
+        pen2 |> shouldEqual 30.0f // 10 * 3
+
+    [<Test>]
+    let ``prioritiesToPoints with no odd values returns empty`` () =
+        let priorities = [| 0uy ; 2uy ; 4uy ; 6uy |]
+        let points = Hyphenation.prioritiesToPoints 10.0f priorities
+
+        points.Length |> shouldEqual 0
+
+    [<Test>]
+    let ``Text.format processes text with custom hyphenation`` () =
+        let text = "hello world"
+        let options = LineBreakOptions.Default 50.0f
+
+        let result =
+            Text.format
+                options
+                Text.defaultWordWidth
+                (Items.defaultGlue Text.SPACE_WIDTH)
+                50.0f
+                TestHelpers.noHyphenation
+                text
+
+        // Should produce formatted text
+        result |> shouldNotEqual ""
+
+    [<Test>]
+    let ``defaultGlue creates glue with expected stretch/shrink ratios`` () =
+        let width = 10.0f
+        let glue = Items.defaultGlue width
+
+        glue.Width |> shouldEqual 10.0f
+        glue.Stretch |> shouldEqual 5.0f // width * 0.5
+        glue.Shrink |> shouldEqual (10.0f / 3.0f) // width / 3
+
+    [<Test>]
+    let ``monospaceGlue has width 1 and can't shrink`` () =
+        let glue = Items.monospaceGlue
+
+        glue.Width |> shouldEqual 1.0f
+        glue.Stretch |> shouldEqual 0.5f
+        glue.Shrink |> shouldEqual 0.0f
