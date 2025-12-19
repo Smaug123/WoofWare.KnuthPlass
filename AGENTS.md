@@ -6,12 +6,14 @@ This file provides guidance to agents such as Claude or Codex when working with 
 
 This is an F# implementation of the Knuth-Plass line breaking algorithm, a sophisticated text layout algorithm used in TeX. The algorithm finds optimal line breaks in paragraphs by minimizing a global "badness" function using dynamic programming.
 
-### Core Types (WoofWare.KnuthPlass/Domain.fs)
+## Architecture
 
-- `Box`: Fixed-width items (words, characters)
-- `Glue`: Stretchable/shrinkable whitespace with width, stretch, and shrink properties
-- `Penalty`: Break points with associated cost and flagged status
-- `Line`: Output representing line breaks with start/end positions and adjustment ratios
+The codebase follows a layered design from primitives to high-level API:
+
+1. **Domain.fs** - Core types: `Box` (fixed-width items), `Glue` (stretchable/shrinkable whitespace), `Penalty` (break points with costs), `Line` (output), `FitnessClass`, `LineBreakOptions`
+2. **Items.fs** - Constructors for items (`Items.box`, `Items.glue`, `Items.penalty`, `Items.forcedBreak`), hyphenation support (`wordFromFragments`), and glue presets (`defaultGlue`, `monospaceGlue`)
+3. **LineBreaker.fs** - The algorithm itself. `LineBreaker.breakLines` implements a two-pass Knuth-Plass algorithm with TeX's "artificial demerits" rescue mechanism
+4. **Text.fs** - High-level string API. `Text.format` takes callbacks for word measurement and hyphenation, handles paragraph splitting
 
 ### Algorithm (LineBreaker module)
 
@@ -43,10 +45,18 @@ dotnet woofware.nunittestrunner WoofWare.KnuthPlass.Test/bin/Debug/net9.0/WoofWa
 dotnet fantomas .
 ```
 
-### Analyzers
+### Analyzers (requires Nix)
 ```bash
 ./analyzers/run.sh
 ```
+
+### Benchmarks
+```bash
+dotnet run -c Release --project WoofWare.KnuthPlass.Benchmarks
+```
+
+### Debug Tracing
+Set environment variable `WOOFWARE_KNUTH_PLASS_DEBUG=1` to enable detailed algorithm tracing to stderr (DEBUG builds only).
 
 Always run `dotnet fantomas .` and `./analyzers/run.sh` before committing.
 
