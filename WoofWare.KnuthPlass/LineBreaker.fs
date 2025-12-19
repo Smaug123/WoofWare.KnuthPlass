@@ -213,55 +213,6 @@ module LineBreaker =
             ForcedBreakAhead = forcedBreakAhead
         }
 
-    /// Compute adjustment ratio for a line from startIdx to endIdx.
-    /// This is used during the algorithm to decide which breaks are optimal.
-    /// Following TeX's approach, we exclude trailing glue but NOT leading glue here.
-    /// Leading glue is only pruned later when displaying/building actual lines.
-    let private computeAdjustmentRatio
-        (itemsArray : Item array)
-        (sums : CumulativeSums)
-        (lineWidth : float32)
-        (startIdx : int)
-        (endIdx : int)
-        : float32 voption
-        =
-        let mutable actualWidth = sums.Width.[endIdx] - sums.Width.[startIdx]
-        let mutable totalStretch = sums.Stretch.[endIdx] - sums.Stretch.[startIdx]
-        let mutable totalShrink = sums.Shrink.[endIdx] - sums.Shrink.[startIdx]
-
-        // Exclude trailing glue: if we're breaking right after a glue at endIdx-1,
-        // that glue should not contribute to this line's width (TeX behavior: glue
-        // is added to active_width AFTER try_break)
-        if endIdx > 0 && endIdx <= itemsArray.Length then
-            match itemsArray.[endIdx - 1] with
-            | Glue g ->
-                actualWidth <- actualWidth - g.Width
-                totalStretch <- totalStretch - g.Stretch
-                totalShrink <- totalShrink - g.Shrink
-            | Penalty p ->
-                // Penalty width IS included (e.g., hyphen width)
-                actualWidth <- actualWidth + p.Width
-            | _ -> ()
-
-        let diff = lineWidth - actualWidth
-
-        if abs diff < 1e-10f then
-            ValueSome 0.0f
-        elif diff > 0.0f then
-            // Line is too short, need to stretch
-            if totalStretch > 0.0f then
-                ValueSome (diff / totalStretch)
-            else
-                // No glue to stretch - return sentinel that makes badness = inf_bad
-                // (matches TeX's behavior when s <= 0 in tex.web:16110)
-                ValueSome noStretchRatio
-        // Line is too long, need to compress
-        else if totalShrink > 0.0f then
-            ValueSome (diff / totalShrink)
-        else
-            // No glue to shrink and line is overfull - cannot fit
-            ValueNone
-
     /// Once a layout has been chosen we display the per-line ratio as TeX would perceive it,
     /// which means discarding any trailing glue at the breakpoint and leading glue at the start.
     let private computeDisplayedAdjustmentRatio
@@ -301,7 +252,11 @@ module LineBreaker =
 
         let diff = lineWidth - actualWidth
 
-        if abs diff < 1e-10f then
+        // Use 1e-6f as epsilon for float32 "close enough to zero" comparisons.
+        // Float32 has ~7 significant digits (machine epsilon ~1.2e-7), so 1e-6f
+        // is appropriate for detecting "perfect fit" when differences may arise
+        // from accumulated floating-point errors.
+        if abs diff < 1e-6f then
             0.0f
         elif diff > 0.0f then
             if totalStretch > 0.0f then
@@ -687,7 +642,7 @@ module LineBreaker =
             let totalStretch = adjustedStretch + options.RightSkip.Stretch
 
             let ratio =
-                if abs diff < 1e-10f then
+                if abs diff < 1e-6f then
                     ValueSome 0.0f
                 elif diff > 0.0f then
                     if totalStretch > 0.0f then

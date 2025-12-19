@@ -54,7 +54,7 @@ module TestHelpers =
     /// Create items from text with simple hyphenation (for tests that need hyphenation).
     let fromStringWithHyphenation (hyphenate : string -> byte array) (text : string) : Item array =
         let spaceGlue = Items.defaultGlue 1.0f
-        let hyphenWidth = 1.0f
+        let hyphenWidth = defaultWordWidth "-"
         let basePenalty = Hyphenation.DEFAULT_PENALTY
         let normalized = text.Replace ("\r", "")
         let paragraphs = normalized.Split '\n'
