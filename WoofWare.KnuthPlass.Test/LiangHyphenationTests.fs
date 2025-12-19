@@ -1,6 +1,10 @@
 namespace WoofWare.KnuthPlass.Test
 
+open System
+open System.IO
+open System.Reflection
 open System.Threading
+open FsUnitTyped
 open NUnit.Framework
 open WoofWare.KnuthPlass
 open WoofWare.LiangHyphenation
@@ -69,66 +73,83 @@ dog."
                     text
         }
 
-    [<Test>]
-    let ``formatParagraph on Jekyll and Hyde with Liang hyphenation`` () =
+    let columnWidths =
+        [ 20 ; 40 ; 60 ; 80 ]
+
+    let texts =
+        typeof<Assembly.Dummy>.Assembly.GetManifestResourceNames()
+        |> Array.choose (fun n ->
+            let prefix = "WoofWare.KnuthPlass.Test.publicdomain."
+            if n.StartsWith (prefix, StringComparison.OrdinalIgnoreCase) then
+                let suffix = ".txt"
+                assert (n.EndsWith (suffix, StringComparison.OrdinalIgnoreCase))
+                n.Substring(prefix.Length, n.Length - prefix.Length - 4)
+                |> Some
+            else None
+        )
+
+    let snapshots =
+        Seq.allPairs columnWidths texts
+        |> Seq.map TestCaseData
+        |> List.ofSeq
+
+    [<TestCaseSource (nameof snapshots)>]
+    let ``formatParagraph on texts with Liang hyphenation`` (width : int, resourceName : string) =
+        let expected =
+            Assembly.readEmbeddedResource $"hyphenated.%s{resourceName}.monospace.%i{width}.txt"
         let text =
-            Assembly.readEmbeddedResource "publicdomain.jekyll_and_hyde.txt"
+            Assembly.readEmbeddedResource $"publicdomain.%s{resourceName}.txt"
             |> fun s -> s.Replace("\r", "").Replace ("\n", " ")
 
-        expect {
-            snapshot
-                @"Mr. Utterson the lawyer was a man of a rugged countenance that was never lighted
-by a smile; cold, scanty and embarrassed in discourse; backward in sentiment;
-lean, long, dusty, dreary and yet somehow lovable. At friendly meetings, and
-when the wine was to his taste, something eminently human beaconed from his eye;
-something indeed which never found its way into his talk, but which spoke not
-only in these silent symbols of the after-dinner face, but more often and loudly
-in the acts of his life. He was austere with himself; drank gin when he was
-alone, to mortify a taste for vintages; and though he enjoyed the theatre, had
-not crossed the doors of one for twenty years. But he had an approved tolerance
-for others; sometimes wondering, almost with envy, at the high pressure of
-spirits involved in their misdeeds; and in any extremity inclined to help rather
-than to reprove. “I incline to Cain’s heresy,” he used to say quaintly: “I let
-my brother go to the devil in his own way.” In this character, it was frequently
-his fortune to be the last reputable acquaintance and the last good influence in
-the lives of downgoing men. And to such as these, so long as they came about his
-chambers, he never marked a shade of change in his demeanour."
+        let width = float32 width
+        let actual =
+            Text.format
+                (LineBreakOptions.DefaultMonospace width)
+                Text.defaultWordWidth
+                Items.monospaceGlue
+                Hyphenation.DEFAULT_PENALTY
+                liangHyphenate
+                text
+        actual
+        |> shouldEqual expected
 
-            return
-                Text.format
-                    (LineBreakOptions.DefaultMonospace 80.0f)
-                    Text.defaultWordWidth
-                    Items.monospaceGlue
-                    Hyphenation.DEFAULT_PENALTY
-                    liangHyphenate
-                    text
-        }
+    let findFolderContaining (dirName : string) =
+        let rec go (current : DirectoryInfo) =
+            if isNull current then
+                failwith "failed to find test folder"
+            let target = Path.Combine (current.FullName, dirName)
+            if Directory.Exists target then
+                DirectoryInfo target
+            else
+                go current.Parent
 
-    [<Test>]
-    let ``formatParagraph on Puck speech with Liang hyphenation`` () =
+        go (FileInfo(Assembly.GetExecutingAssembly().Location).Directory)
+
+    [<TestCaseSource (nameof snapshots)>]
+    [<Explicit "Run this test explicitly to update the snapshots">]
+    let ``update snapshots`` (width : int, resourceName : string) =
         let text =
-            Assembly.readEmbeddedResource "publicdomain.puck_speech.txt"
+            Assembly.readEmbeddedResource $"publicdomain.%s{resourceName}.txt"
             |> fun s -> s.Replace("\r", "").Replace ("\n", " ")
 
-        expect {
-            snapshot
-                @"If we shadows have offended, Think but this, and all is mended, That you have
-but slumber’d here While these visions did appear. And this weak and idle theme,
-No more yielding but a dream, Gentles, do not reprehend. If you pardon, we will
-mend. And, as I am an honest Puck, If we have unearnèd luck Now to ’scape the
-serpent’s tongue, We will make amends ere long; Else the Puck a liar call. So,
-good night unto you all. Give me your hands, if we be friends, And Robin shall
-restore amends."
+        let file =
+            findFolderContaining "hyphenated"
+            |> fun d -> Path.Combine (d.FullName, resourceName, "monospace", $"%i{width}.txt")
+            |> FileInfo
 
-            return
-                Text.format
-                    (LineBreakOptions.DefaultMonospace 80.0f)
-                    Text.defaultWordWidth
-                    Items.monospaceGlue
-                    Hyphenation.DEFAULT_PENALTY
-                    liangHyphenate
-                    text
-        }
+        file.Directory.Create ()
+
+        let width = float32 width
+        let actual =
+            Text.format
+                (LineBreakOptions.DefaultMonospace width)
+                Text.defaultWordWidth
+                Items.monospaceGlue
+                Hyphenation.DEFAULT_PENALTY
+                liangHyphenate
+                text
+
+        File.WriteAllText (file.FullName, actual)
 
     [<Test>]
     let ``narrow column with Liang hyphenation`` () =
