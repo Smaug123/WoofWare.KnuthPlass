@@ -108,11 +108,12 @@ module HelperTests =
 
     [<Test>]
     let ``prioritiesToPoints converts Liang priorities correctly`` () =
-        // Priorities: 0=no break, 1=break(good), 2=no break, 3=break(ok), 4=no break
+        // Priorities: 0=no break, 1=break, 2=no break, 3=break, 4=no break
+        // In standard Liang, odd values indicate valid hyphenation points (all treated equally)
         let priorities = [| 0uy ; 1uy ; 2uy ; 3uy ; 4uy |]
-        let basePenalty = 10.0f
+        let penalty = 10.0f
 
-        let points = Hyphenation.prioritiesToPoints basePenalty priorities
+        let points = Hyphenation.prioritiesToPoints penalty priorities
 
         // Should have 2 points: position 2 (after 1uy) and position 4 (after 3uy)
         points.Length |> shouldEqual 2
@@ -121,10 +122,10 @@ module HelperTests =
         let struct (pos2, pen2) = points.[1]
 
         pos1 |> shouldEqual 2 // After index 1
-        pen1 |> shouldEqual 10.0f // 10 * 1
+        pen1 |> shouldEqual 10.0f // All odd values get the same penalty
 
         pos2 |> shouldEqual 4 // After index 3
-        pen2 |> shouldEqual 30.0f // 10 * 3
+        pen2 |> shouldEqual 10.0f // All odd values get the same penalty
 
     [<Test>]
     let ``prioritiesToPoints with no odd values returns empty`` () =

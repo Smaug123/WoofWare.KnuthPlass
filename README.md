@@ -84,10 +84,11 @@ I consider it a performance bug if it is not performant enough to do that.
 
 ### Hyphenation
 Hyphenation is not provided by this library.
-You must supply your own hyphenation callback to `Text.format`, which should return Liang-style priorities: a byte array with one element per inter-letter position, where odd values indicate valid hyphenation points (lower = better).
+You must supply your own hyphenation callback to `Text.format`, which should return Liang-style priorities: a byte array with one element per inter-letter position, where odd values indicate valid hyphenation points.
+(All odd values mean "hyphenation allowed" equally, and all even values mean "no hyphenation allowed" equally; their numerical magnitude is an artifact of the computation that extracted hyphenation data from the Liang packed-trie data structure, and is not important for performing the hyphenation.)
 
-For English text, consider using a Knuth-Liang implementation.
-If you don't need hyphenation, pass a function that returns an empty array: `fun _ -> [||]`.
+For English text, consider using a Knuth-Liang implementation such as [WoofWare.LiangHyphenation](https://github.com/Smaug123/WoofWare.LiangHyphenation).
+If you don't need hyphenation, pass a function that returns an empty array: `fun _ -> Array.empty`.
 
 ### Justification vs raggedness
 

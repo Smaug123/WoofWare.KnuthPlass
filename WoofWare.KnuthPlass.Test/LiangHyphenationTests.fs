@@ -182,8 +182,8 @@ tion"
         expect {
             snapshot
                 @"The internationalization of
-software requires careful
-consideration."
+software requires careful con-
+sideration."
 
             return
                 Text.format

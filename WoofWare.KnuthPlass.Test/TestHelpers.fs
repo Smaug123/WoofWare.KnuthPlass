@@ -9,7 +9,7 @@ open WoofWare.KnuthPlass
 [<RequireQualifiedAccess>]
 module TestHelpers =
     /// No hyphenation - returns empty priorities for all words.
-    let noHyphenation (_ : string) : byte array = [||]
+    let noHyphenation (_ : string) : byte array = Array.Empty ()
 
     /// Simple hyphenation that allows breaks at every valid position (for testing).
     /// Returns priorities array where positions 2..len-3 have priority 1.

@@ -14,12 +14,11 @@ module Hyphenation =
     /// </summary>
     /// <remarks>
     /// Liang hyphenation returns priorities at each inter-letter position where odd values
-    /// indicate valid hyphenation points. Lower odd numbers are better break points.
-    /// This function converts to (position, penalty) pairs where lower priorities get lower penalties.
+    /// indicate valid hyphenation points. All odd values are treated equally as valid break points.
     /// </remarks>
-    /// <param name="basePenalty">Base penalty multiplier. Final penalty = basePenalty * priority.</param>
+    /// <param name="penalty">Penalty to apply at each valid hyphenation point.</param>
     /// <param name="priorities">Priority array from Liang hyphenation (one per inter-letter position).</param>
-    let prioritiesToPoints (basePenalty : float32) (priorities : byte array) : struct (int * float32) array =
+    let prioritiesToPoints (penalty : float32) (priorities : byte array) : struct (int * float32) array =
         let result = ResizeArray ()
 
         for i = 0 to priorities.Length - 1 do
@@ -28,7 +27,7 @@ module Hyphenation =
             if p % 2uy = 1uy then
                 // Odd priority = valid hyphenation point
                 // Position is i+1 (index into word, after the i-th character)
-                result.Add (struct (i + 1, basePenalty * float32 p))
+                result.Add (struct (i + 1, penalty))
 
         result.ToArray ()
 
