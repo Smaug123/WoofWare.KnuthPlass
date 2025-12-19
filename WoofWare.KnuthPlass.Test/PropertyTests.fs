@@ -77,8 +77,16 @@ module PropertyTests =
 
         (width, stretch, shrink)
 
-    /// Compute the adjustment ratio for a line. Returns None if infeasible.
-    /// A line is feasible iff -1 <= r <= tolerance.
+    /// TeX's maximum badness value (inf_bad in tex.web:109).
+    let private infBad : float32 = 10000.0f
+
+    /// Compute badness from adjustment ratio, matching TeX's formula (tex.web:16108-16118).
+    /// badness = min(100 * |r|³, infBad)
+    let private badness (ratio : float32) : float32 =
+        let r = abs ratio
+        min (100.0f * (r ** 3.0f)) infBad
+
+    /// Compute the adjustment ratio for a line.
     let private computeAdjustmentRatio
         (lineWidth : float32)
         (contentWidth : float32)
@@ -106,7 +114,7 @@ module PropertyTests =
             ValueNone
 
     /// Check if a line is feasible according to TeX rules.
-    /// A line is feasible iff its adjustment ratio r satisfies: -1 <= r <= tolerance
+    /// A line is feasible iff its adjustment ratio r satisfies: r >= -1 AND badness(r) <= tolerance.
     let private isLineFeasible
         (items : Item[])
         (sums : CumulativeSums)
@@ -120,7 +128,7 @@ module PropertyTests =
 
         match computeAdjustmentRatio lineWidth width stretch shrink with
         | ValueNone -> false // Infinite ratio (no stretch/shrink when needed)
-        | ValueSome r -> r >= -1.0f && r <= tolerance
+        | ValueSome r -> r >= -1.0f && badness r <= tolerance
 
     /// Check if a line is overfull (adjustment ratio < -1).
     let private isOverfullFast
@@ -142,7 +150,7 @@ module PropertyTests =
         isOverfullFast items sums lineWidth startIdx endIdx
 
     /// Check if there exists a TeX-feasible solution using memoized search.
-    /// A solution is feasible iff ALL lines have adjustment ratio in [-1, tolerance].
+    /// A solution is feasible iff ALL lines have r >= -1 AND badness(r) <= tolerance.
     /// Uses the PRODUCTION isValidBreakpoint to match what the algorithm actually considers.
     /// Complexity: O(n²) with O(n) space for memoization and cumulative sums.
     let private existsFeasibleSolution
@@ -876,7 +884,7 @@ module PropertyTests =
 
         totalDemerits
 
-    /// Check if a breaking is feasible (all lines have ratio in [-1, tolerance])
+    /// Check if a breaking is feasible (all lines have r >= -1 AND badness(r) <= tolerance)
     let private isBreakingFeasible (items : Item[]) (options : LineBreakOptions) (breaks : int list) : bool =
         let sums = computeCumulativeSums items
         let pairs = breaks |> List.pairwise
@@ -896,8 +904,8 @@ module PropertyTests =
                 else
                     -noStretchRatio
 
-            // Feasible if ratio is in [-1, tolerance] (matches isLineFeasible)
-            ratio >= -1.0f - 1e-6f && ratio <= options.Tolerance + 1e-6f
+            // Feasible if ratio >= -1 AND badness(ratio) <= tolerance (matches isLineFeasible and implementation)
+            ratio >= -1.0f - 1e-6f && badnessOf ratio <= options.Tolerance + 1e-6f
         )
 
     /// Property: Algorithm produces minimum demerits among all legal breakings
