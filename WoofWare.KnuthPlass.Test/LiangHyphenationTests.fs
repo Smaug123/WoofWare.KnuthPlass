@@ -73,35 +73,35 @@ dog."
                     text
         }
 
-    let columnWidths =
-        [ 20 ; 40 ; 60 ; 80 ]
+    let columnWidths = [ 1..8 ] |> List.map ((*) 10)
 
     let texts =
-        typeof<Assembly.Dummy>.Assembly.GetManifestResourceNames()
+        typeof<Assembly.Dummy>.Assembly.GetManifestResourceNames ()
         |> Array.choose (fun n ->
             let prefix = "WoofWare.KnuthPlass.Test.publicdomain."
+
             if n.StartsWith (prefix, StringComparison.OrdinalIgnoreCase) then
                 let suffix = ".txt"
                 assert (n.EndsWith (suffix, StringComparison.OrdinalIgnoreCase))
-                n.Substring(prefix.Length, n.Length - prefix.Length - 4)
-                |> Some
-            else None
+                n.Substring (prefix.Length, n.Length - prefix.Length - 4) |> Some
+            else
+                None
         )
 
     let snapshots =
-        Seq.allPairs columnWidths texts
-        |> Seq.map TestCaseData
-        |> List.ofSeq
+        Seq.allPairs columnWidths texts |> Seq.map TestCaseData |> List.ofSeq
 
-    [<TestCaseSource (nameof snapshots)>]
+    [<TestCaseSource(nameof snapshots)>]
     let ``formatParagraph on texts with Liang hyphenation`` (width : int, resourceName : string) =
         let expected =
             Assembly.readEmbeddedResource $"hyphenated.%s{resourceName}.monospace.%i{width}.txt"
+
         let text =
             Assembly.readEmbeddedResource $"publicdomain.%s{resourceName}.txt"
             |> fun s -> s.Replace("\r", "").Replace ("\n", " ")
 
         let width = float32 width
+
         let actual =
             Text.format
                 (LineBreakOptions.DefaultMonospace width)
@@ -110,14 +110,16 @@ dog."
                 Hyphenation.DEFAULT_PENALTY
                 liangHyphenate
                 text
-        actual
-        |> shouldEqual expected
+
+        actual |> shouldEqual expected
 
     let findFolderContaining (dirName : string) =
         let rec go (current : DirectoryInfo) =
             if isNull current then
                 failwith "failed to find test folder"
+
             let target = Path.Combine (current.FullName, dirName)
+
             if Directory.Exists target then
                 DirectoryInfo target
             else
@@ -125,7 +127,7 @@ dog."
 
         go (FileInfo(Assembly.GetExecutingAssembly().Location).Directory)
 
-    [<TestCaseSource (nameof snapshots)>]
+    [<TestCaseSource(nameof snapshots)>]
     [<Explicit "Run this test explicitly to update the snapshots">]
     let ``update snapshots`` (width : int, resourceName : string) =
         let text =
@@ -140,6 +142,7 @@ dog."
         file.Directory.Create ()
 
         let width = float32 width
+
         let actual =
             Text.format
                 (LineBreakOptions.DefaultMonospace width)
