@@ -605,12 +605,15 @@ module PropertyTests =
             let (contentWidth, totalStretch, totalShrink) =
                 computeLineMetricsForDisplay items line.Start line.End
 
+            // Include RightSkip.Stretch to match the algorithm's behavior
+            let effectiveStretch = totalStretch + options.RightSkip.Stretch
+
             // Skip edge cases with infinite/NaN values
             // These occur with terminating glue (infinite stretch) or lines
             // consisting entirely of discardable items.
             if
                 System.Single.IsFinite contentWidth
-                && System.Single.IsFinite totalStretch
+                && System.Single.IsFinite effectiveStretch
                 && System.Single.IsFinite totalShrink
                 && System.Single.IsFinite line.AdjustmentRatio
             then
@@ -619,7 +622,7 @@ module PropertyTests =
                 // Check ratio direction consistency (relaxed check)
                 // The exact values may differ due to floating-point precision,
                 // but the direction should be consistent.
-                if diff > epsilon && totalStretch > epsilon then
+                if diff > epsilon && effectiveStretch > epsilon then
                     // Underfull: ratio should be positive
                     line.AdjustmentRatio >= -epsilon |> shouldEqual true
                 elif diff < -epsilon && totalShrink > epsilon then

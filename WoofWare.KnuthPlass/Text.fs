@@ -210,7 +210,7 @@ module Text =
     /// that would render in any font.
     ///
     /// The `hyphenate` function should return Liang-style priorities: a byte array with one element per inter-letter
-    /// position, where odd values indicate valid hyphenation points (lower = better).
+    /// position, where odd values indicate valid hyphenation points (all odd values are treated equally).
     ///
     /// Note that the resulting text may contain "overfull" lines: lines which don't fit into the line width.
     /// It's up to you to deal with this appropriately.

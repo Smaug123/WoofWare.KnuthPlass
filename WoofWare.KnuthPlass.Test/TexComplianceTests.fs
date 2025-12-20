@@ -185,9 +185,16 @@ module TexComplianceTests =
 
         // Line 1: 30 + 10 + 10 = 50, ratio = 1 (Loose)
         // Line 2 excluding leading glue: 10 + 10 + 10 = 30, stretch = 10, ratio = 3
+        // Use zero RightSkip to preserve the exact ratio calculations this test was designed for
         let options =
             { LineBreakOptions.Default 60.0f with
                 Tolerance = 3000.0f
+                RightSkip =
+                    {
+                        Width = 0.0f
+                        Stretch = 0.0f
+                        Shrink = 0.0f
+                    }
             }
 
         let lines = LineBreaker.breakLines options items

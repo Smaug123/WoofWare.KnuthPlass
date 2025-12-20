@@ -67,10 +67,39 @@ module GlueTests =
         // Glue at position 2 is discardable, so the second line only contains:
         //   Box(30) + Glue(10 stretch 5 shrink 3) + Box(20)
         // The resulting width is 60 with 5 units of stretch. With a 100-unit target width,
-        // the ratio must therefore be (100 - 60) / 5 = 8.0. Including the leading glue would
-        // yield roughly 1.333, which keeps the bug alive.
-        let expectedRatio = (options.LineWidth - 60.0f) / 5.0f
+        // the ratio is (100 - 60) / (5 + RightSkip.Stretch). Including the leading glue would
+        // yield roughly 1.333 (with RightSkip.Stretch=0), which would keep the bug alive.
+        let totalStretch = 5.0f + options.RightSkip.Stretch
+        let expectedRatio = (options.LineWidth - 60.0f) / totalStretch
         secondLineRatio |> shouldEqual expectedRatio
+
+    [<Test>]
+    let ``RightSkip.Stretch is reflected in returned AdjustmentRatio for single-word lines`` () =
+        // A single box has no inter-word glue. Without RightSkip.Stretch, the ratio
+        // would be infinite. With RightSkip.Stretch = 4.0f, we expect:
+        //   ratio = (lineWidth - boxWidth) / RightSkip.Stretch
+        let boxWidth = 20.0f
+        let lineWidth = 30.0f
+        let rightSkipStretch = 4.0f
+
+        let items = [| Items.box boxWidth |]
+
+        let options =
+            { LineBreakOptions.Default lineWidth with
+                RightSkip =
+                    {
+                        Width = 0.0f
+                        Stretch = rightSkipStretch
+                        Shrink = 0.0f
+                    }
+            }
+
+        let lines = LineBreaker.breakLines options items
+
+        lines.Length |> shouldEqual 1
+
+        let expectedRatio = (lineWidth - boxWidth) / rightSkipStretch
+        lines.[0].AdjustmentRatio |> shouldEqual expectedRatio
 
     [<Test>]
     let ``Glue break requires preceding box`` () =

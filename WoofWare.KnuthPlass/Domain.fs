@@ -179,7 +179,7 @@ type LineBreakOptions =
         /// get finite adjustment ratios instead of infinity. Without this, the algorithm treats all underfull
         /// single-word lines as equally bad, potentially preferring unnecessary hyphenation.
         ///
-        /// The Width should typically be 0.0f (doesn't add to line length).
+        /// Only the Stretch field is currently used; Width and Shrink have no effect.
         /// The Stretch should be positive to allow underfull lines to have meaningful badness values.
         /// </remarks>
         RightSkip : Glue
@@ -214,7 +214,8 @@ type LineBreakOptions =
             DoubleHyphenDemerits = LineBreakOptions.DefaultDoubleHyphenDemerits
             FinalHyphenDemerits = LineBreakOptions.DefaultFinalHyphenDemerits
             FitnessClassDifferencePenalty = LineBreakOptions.DefaultFitnessClassDifferencePenalty
-            // RightSkip with stretch = 4.0 provides baseline stretchability for single-word lines
+            // RightSkip.Stretch = 4.0 provides baseline stretchability for single-word lines.
+            // (Only Stretch is used; Width and Shrink have no effect.)
             RightSkip =
                 {
                     Width = 0.0f
@@ -235,9 +236,10 @@ type LineBreakOptions =
             DoubleHyphenDemerits = LineBreakOptions.DefaultDoubleHyphenDemerits
             FinalHyphenDemerits = LineBreakOptions.DefaultFinalHyphenDemerits
             FitnessClassDifferencePenalty = LineBreakOptions.DefaultFitnessClassDifferencePenalty
-            // RightSkip with stretch = 4.0 provides baseline stretchability for single-word lines.
+            // RightSkip.Stretch = 4.0 provides baseline stretchability for single-word lines.
             // This prevents all underfull single-word lines from being treated as equally bad
             // (which would cause unnecessary hyphenation).
+            // (Only Stretch is used; Width and Shrink have no effect.)
             RightSkip =
                 {
                     Width = 0.0f

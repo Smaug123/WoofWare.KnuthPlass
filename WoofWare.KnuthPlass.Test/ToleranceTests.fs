@@ -47,9 +47,16 @@ module ToleranceTests =
                 Items.box 30.0f
             |]
 
+        // Use zero RightSkip to preserve the exact ratio calculations this test was designed for
         let options =
             { LineBreakOptions.Default 80.0f with
                 Tolerance = 10.0f // Strict tolerance
+                RightSkip =
+                    {
+                        Width = 0.0f
+                        Stretch = 0.0f
+                        Shrink = 0.0f
+                    }
             }
 
         // Natural width: 30 + 5 + 30 = 65

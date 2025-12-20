@@ -218,7 +218,7 @@ module LineBreaker =
     let private computeDisplayedAdjustmentRatio
         (itemsArray : Item array)
         (sums : CumulativeSums)
-        (lineWidth : float32)
+        (options : LineBreakOptions)
         (startIdx : int)
         (endIdx : int)
         : float32
@@ -250,7 +250,11 @@ module LineBreaker =
             | Penalty _ -> idx <- idx + 1
             | _ -> idx <- endIdx
 
-        let diff = lineWidth - actualWidth
+        let diff = options.LineWidth - actualWidth
+
+        // Add RightSkip stretch to match the algorithm's break selection logic.
+        // This ensures the displayed ratio reflects what the algorithm actually computed.
+        let effectiveStretch = totalStretch + options.RightSkip.Stretch
 
         // Use 1e-6f as epsilon for float32 "close enough to zero" comparisons.
         // Float32 has ~7 significant digits (machine epsilon ~1.2e-7), so 1e-6f
@@ -259,8 +263,8 @@ module LineBreaker =
         if abs diff < 1e-6f then
             0.0f
         elif diff > 0.0f then
-            if totalStretch > 0.0f then
-                diff / totalStretch
+            if effectiveStretch > 0.0f then
+                diff / effectiveStretch
             else
                 noStretchRatio
         // Clamp overfull lines to ratio -1.0.
@@ -1104,7 +1108,7 @@ module LineBreaker =
                     let prevNode = nodes.[prevIdx]
 
                     let displayRatio =
-                        computeDisplayedAdjustmentRatio items sums options.LineWidth prevNode.Position node.Position
+                        computeDisplayedAdjustmentRatio items sums options prevNode.Position node.Position
 
                     let line =
                         {
