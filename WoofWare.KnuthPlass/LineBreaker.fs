@@ -162,8 +162,8 @@ module LineBreaker =
 
         // Track whether there is an EXPLICIT forced break at or after each position.
         // This lets us preserve active nodes when an upcoming -infinity penalty could
-        // rescue an overfull line. The TERMINAL paragraph-end sequence (added by
-        // fromEnglishString: glue(0,inf,0) + penalty(-inf)) is NOT counted here - it's
+        // rescue an overfull line. The TERMINAL paragraph-end sequence (glue(0,inf,0) +
+        // penalty(-inf), added by Text.format or test helpers) is NOT counted here - it's
         // handled by the rescue logic at forced breaks separately. This distinction is
         // crucial for O(n) performance: if we counted the terminal paragraph-end forced
         // break, forcedBreakInTail would be true for ALL positions, preventing node

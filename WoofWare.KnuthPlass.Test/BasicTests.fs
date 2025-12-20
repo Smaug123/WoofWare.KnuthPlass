@@ -80,7 +80,7 @@ module BasicTests =
     /// at line width 97.
     [<Test>]
     let ``No overfull line when feasible solution exists - regression`` () =
-        // Explicit items from: Items.fromEnglishString Text.defaultWordWidth Text.SPACE_WIDTH
+        // Explicit items equivalent to Text.format output for the string below
         // for text = "snwzmxz noume iuvwqqfwtl ppvrmgekwx aofpb xwtiycijr eiejo kmtwvjtgb ooantpfhnq bzlazhoxra rpjrglpvn fyyflb rxxeavtfcv toh nlzainy coygriefm"
         // Glue: width=1, stretch=0.5, shrink=1/3
         let items =

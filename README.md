@@ -55,7 +55,7 @@ alone, to mortify a taste for vintages; and though he enjoyed the theatre, had
 not crossed the doors of one for twenty years. But he had an approved tolerance
 for others; sometimes wondering, almost with envy, at the high pressure of
 spirits involved in their misdeeds; and in any extremity inclined to help rather
-than to reprove. “I incline to Cain's heresy,” he used to say quaintly: “I let
+than to reprove. “I incline to Cain’s heresy,” he used to say quaintly: “I let
 my brother go to the devil in his own way.” In this character, it was frequently
 his fortune to be the last reputable acquaintance and the last good influence in
 the lives of downgoing men. And to such as these, so long as they came about his

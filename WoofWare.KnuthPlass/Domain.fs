@@ -204,7 +204,7 @@ type LineBreakOptions =
     /// Default penalty for fitness class differences
     static member DefaultFitnessClassDifferencePenalty = 100.0f
 
-    /// Creates default options with standard TeX-like values
+    /// Creates default options with standard TeX values (RightSkip = 0).
     static member Default (lineWidth : float32) =
         {
             LineWidth = lineWidth
@@ -214,18 +214,36 @@ type LineBreakOptions =
             DoubleHyphenDemerits = LineBreakOptions.DefaultDoubleHyphenDemerits
             FinalHyphenDemerits = LineBreakOptions.DefaultFinalHyphenDemerits
             FitnessClassDifferencePenalty = LineBreakOptions.DefaultFitnessClassDifferencePenalty
-            // RightSkip.Stretch = 4.0 provides baseline stretchability for single-word lines.
-            // (Only Stretch is used; Width and Shrink have no effect.)
             RightSkip =
                 {
                     Width = 0.0f
-                    Stretch = 4.0f
+                    Stretch = 0.0f
                     Shrink = 0.0f
                 }
         }
 
-    /// Creates default options with standard TeX-like values, tuned for monospace layouts like a console where
-    /// spaces can't really stretch.
+    /// <summary>Creates default options with a custom RightSkip stretch value.</summary>
+    /// <remarks>
+    /// Setting <c>rightSkipStretch</c> to a positive value (e.g. 4.0) provides baseline stretchability
+    /// for single-word lines, preventing all underfull single-word lines from being treated as equally
+    /// bad. This can reduce unnecessary hyphenation of long words. TeX's default is 0.
+    /// </remarks>
+    static member DefaultWithRightSkip (lineWidth : float32) (rightSkipStretch : float32) =
+        { LineBreakOptions.Default lineWidth with
+            RightSkip =
+                {
+                    Width = 0.0f
+                    Stretch = rightSkipStretch
+                    Shrink = 0.0f
+                }
+        }
+
+    /// <summary>Creates default options tuned for monospace layouts like a console where spaces can't
+    /// really stretch.</summary>
+    /// <remarks>
+    /// This sets a high tolerance to accept underfull lines, and uses a RightSkip stretch of 4.0 to
+    /// provide baseline stretchability for single-word lines (preventing unnecessary hyphenation).
+    /// </remarks>
     static member DefaultMonospace (lineWidth : float32) =
         {
             LineWidth = lineWidth

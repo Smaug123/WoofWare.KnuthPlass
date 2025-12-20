@@ -64,7 +64,7 @@ module TestPerformance =
             itemsList.Add word
             itemsList.Add space
 
-        // Add terminal penalty (like fromEnglishString does)
+        // Add terminal penalty (like Text.format does)
         itemsList.Add (Items.glue 0.0f System.Single.PositiveInfinity 0.0f)
         itemsList.Add (Items.forcedBreak ())
 
