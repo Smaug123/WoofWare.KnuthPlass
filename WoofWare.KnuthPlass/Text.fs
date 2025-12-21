@@ -45,59 +45,70 @@ module Text =
                 result.Add (word.Substring lastIdx)
                 result.ToArray ()
 
-    /// Create items for a single word with hyphenation.
-    let private wordToItems
-        (wordWidth : string -> float32)
-        (hyphenWidth : float32)
+    /// Split a word into fragments based on hyphenation, returning both fragments and their penalty values.
+    let private computeWordParts
         (basePenalty : float32)
         (hyphenate : string -> byte array)
         (word : string)
-        : Item[]
+        : struct (string array * float32 array)
         =
         let priorities = hyphenate word
         let points = Hyphenation.prioritiesToPoints basePenalty priorities
         let fragments = splitAtPoints word points
 
-        if fragments.Length = 1 then
-            [| Items.box (wordWidth fragments.[0]) |]
-        else
-            let fragmentWidths = fragments |> Array.map wordWidth
-
-            let penalties =
+        let penalties =
+            if fragments.Length = 1 then
+                [||]
+            else
                 points
                 |> Array.filter (fun struct (pos, _) -> pos > 0 && pos < word.Length)
                 |> Array.sortBy (fun struct (pos, _) -> pos)
                 |> Array.distinctBy (fun struct (pos, _) -> pos)
                 |> Array.map (fun struct (_, pen) -> pen)
 
+        struct (fragments, penalties)
+
+    /// Create items for a single word given pre-computed fragments and penalties.
+    let private wordPartsToItems
+        (wordWidth : string -> float32)
+        (hyphenWidth : float32)
+        (fragments : string array)
+        (penalties : float32 array)
+        : Item[]
+        =
+        if fragments.Length = 1 then
+            [| Items.box (wordWidth fragments.[0]) |]
+        else
+            let fragmentWidths = fragments |> Array.map wordWidth
             Items.wordFromFragments hyphenWidth (ReadOnlySpan fragmentWidths) (ReadOnlySpan penalties)
 
-    /// Create items for a paragraph (no newlines).
-    let private paragraphToItems
+    /// Create items for a paragraph (no newlines), also returning the word parts for text reconstruction.
+    let private paragraphToItemsWithParts
         (wordWidth : string -> float32)
         (spaceWidth : Glue)
         (hyphenWidth : float32)
         (basePenalty : float32)
         (hyphenate : string -> byte array)
-        (paragraph : string)
-        : Item[]
+        (words : string array)
+        : struct (Item[] * string array array)
         =
-        let words = paragraph.Split ([| ' ' |], StringSplitOptions.RemoveEmptyEntries)
-
         if words.Length = 0 then
-            [| Items.glue 0.0f Single.PositiveInfinity 0.0f ; Items.forcedBreak () |]
+            struct ([| Items.glue 0.0f Single.PositiveInfinity 0.0f ; Items.forcedBreak () |], [||])
         else
             let result = ResizeArray ()
+            let wordParts = Array.zeroCreate words.Length
 
             for i, word in Array.indexed words do
-                result.AddRange (wordToItems wordWidth hyphenWidth basePenalty hyphenate word)
+                let struct (fragments, penalties) = computeWordParts basePenalty hyphenate word
+                wordParts.[i] <- fragments
+                result.AddRange (wordPartsToItems wordWidth hyphenWidth fragments penalties)
 
                 if i < words.Length - 1 then
                     result.Add (Glue spaceWidth)
 
             result.Add (Items.glue 0.0f Single.PositiveInfinity 0.0f)
             result.Add (Items.forcedBreak ())
-            result.ToArray ()
+            struct (result.ToArray (), wordParts)
 
     /// Formats a single paragraph (no newlines) into lines using the Knuth-Plass algorithm.
     /// Returns the paragraph text with line breaks inserted at 'optimal' positions.
@@ -115,19 +126,10 @@ module Text =
         if words.Length = 0 then
             ""
         else
-            let items =
-                paragraphToItems wordWidth spaceWidth (wordWidth "-") basePenalty hyphenate paragraph
+            let struct (items, wordParts) =
+                paragraphToItemsWithParts wordWidth spaceWidth (wordWidth "-") basePenalty hyphenate words
 
             let lines = LineBreaker.breakLines options items
-
-            // Pre-compute word parts based on hyphenation
-            let wordParts =
-                words
-                |> Array.map (fun word ->
-                    let priorities = hyphenate word
-                    let points = Hyphenation.prioritiesToPoints basePenalty priorities
-                    splitAtPoints word points
-                )
 
             // Create mapping from box index to word part text
             let boxToText = Dictionary<int, string> ()
