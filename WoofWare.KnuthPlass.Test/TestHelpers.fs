@@ -9,13 +9,14 @@ open WoofWare.KnuthPlass
 [<RequireQualifiedAccess>]
 module TestHelpers =
     /// No hyphenation - returns empty priorities for all words.
-    let noHyphenation (_ : string) : byte array = Array.Empty ()
+    let noHyphenation (_ : string) : FilteredPriorities =
+        FilteredPriorities.unfiltered (Array.Empty ())
 
-    /// Simple hyphenation that allows breaks at every valid position (for testing).
-    /// Returns priorities array where positions 2..len-3 have priority 1.
-    let everywhereHyphenation (word : string) : byte array =
+    /// Simple hyphenation that allows breaks at every position satisfying lefthyphenmin=2, righthyphenmin=3.
+    /// Uses FilteredPriorities.unfiltered since the min-length constraints are applied directly in the loop.
+    let everywhereHyphenation (word : string) : FilteredPriorities =
         if word.Length < 5 then
-            [||]
+            FilteredPriorities.unfiltered [||]
         else
             // Create priorities for inter-letter positions (length - 1 positions)
             let priorities = Array.zeroCreate (word.Length - 1)
@@ -24,7 +25,7 @@ module TestHelpers =
             for i in 1 .. word.Length - 4 do
                 priorities.[i] <- 1uy
 
-            priorities
+            FilteredPriorities.unfiltered priorities
 
     /// Compute the display width of a string, in a fixed-width font.
     let defaultWordWidth (s : string) : float32 =
@@ -52,7 +53,7 @@ module TestHelpers =
         result.ToArray ()
 
     /// Create items from text with simple hyphenation (for tests that need hyphenation).
-    let fromStringWithHyphenation (hyphenate : string -> byte array) (text : string) : Item array =
+    let fromStringWithHyphenation (hyphenate : string -> FilteredPriorities) (text : string) : Item array =
         let spaceGlue = Items.defaultGlue 1.0f
         let hyphenWidth = defaultWordWidth "-"
         let basePenalty = Hyphenation.DEFAULT_PENALTY

@@ -48,7 +48,7 @@ module Text =
     /// Split a word into fragments based on hyphenation, returning both fragments and their penalty values.
     let private computeWordParts
         (basePenalty : float32)
-        (hyphenate : string -> byte array)
+        (hyphenate : string -> FilteredPriorities)
         (word : string)
         : struct (string array * float32 array)
         =
@@ -88,7 +88,7 @@ module Text =
         (spaceWidth : Glue)
         (hyphenWidth : float32)
         (basePenalty : float32)
-        (hyphenate : string -> byte array)
+        (hyphenate : string -> FilteredPriorities)
         (words : string array)
         : struct (Item[] * string array array)
         =
@@ -117,7 +117,7 @@ module Text =
         (wordWidth : string -> float32)
         (spaceWidth : Glue)
         (basePenalty : float32)
-        (hyphenate : string -> byte array)
+        (hyphenate : string -> FilteredPriorities)
         (paragraph : string)
         : string
         =
@@ -211,8 +211,8 @@ module Text =
     /// By specifying `wordWidth`, `spaceWidth`, and `basePenalty` appropriately, you can get the string in a form
     /// that would render in any font.
     ///
-    /// The `hyphenate` function should return Liang-style priorities: a byte array with one element per inter-letter
-    /// position, where odd values indicate valid hyphenation points (all odd values are treated equally).
+    /// The `hyphenate` function should return FilteredPriorities (use FilteredPriorities.fromLiangEnglish for
+    /// English text, or FilteredPriorities.unfiltered to opt out of min-length filtering).
     ///
     /// Note that the resulting text may contain "overfull" lines: lines which don't fit into the line width.
     /// It's up to you to deal with this appropriately.
@@ -221,7 +221,7 @@ module Text =
         (wordWidth : string -> float32)
         (spaceWidth : Glue)
         (basePenalty : float32)
-        (hyphenate : string -> byte array)
+        (hyphenate : string -> FilteredPriorities)
         (text : string)
         : string
         =

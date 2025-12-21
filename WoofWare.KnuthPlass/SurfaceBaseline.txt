@@ -9,6 +9,13 @@ WoofWare.KnuthPlass.FitnessClass.Normal [static field]: WoofWare.KnuthPlass.Fitn
 WoofWare.KnuthPlass.FitnessClass.Tight [static field]: WoofWare.KnuthPlass.FitnessClass = Tight
 WoofWare.KnuthPlass.FitnessClass.value__ [field]: int
 WoofWare.KnuthPlass.FitnessClass.VeryLoose [static field]: WoofWare.KnuthPlass.FitnessClass = VeryLoose
+WoofWare.KnuthPlass.FilteredPriorities inherit System.ValueType, implements WoofWare.KnuthPlass.FilteredPriorities System.IEquatable, System.Collections.IStructuralEquatable, WoofWare.KnuthPlass.FilteredPriorities System.IComparable, System.IComparable, System.Collections.IStructuralComparable
+WoofWare.KnuthPlass.FilteredPriorities.Equals [method]: (WoofWare.KnuthPlass.FilteredPriorities, System.Collections.IEqualityComparer) -> bool
+WoofWare.KnuthPlass.FilteredPrioritiesModule inherit obj
+WoofWare.KnuthPlass.FilteredPrioritiesModule.fromLiang [static method]: int -> int -> int -> System.Byte [] -> WoofWare.KnuthPlass.FilteredPriorities
+WoofWare.KnuthPlass.FilteredPrioritiesModule.fromLiangEnglish [static method]: int -> System.Byte [] -> WoofWare.KnuthPlass.FilteredPriorities
+WoofWare.KnuthPlass.FilteredPrioritiesModule.unfiltered [static method]: System.Byte [] -> WoofWare.KnuthPlass.FilteredPriorities
+WoofWare.KnuthPlass.FilteredPrioritiesModule.value [static method]: WoofWare.KnuthPlass.FilteredPriorities -> System.Byte []
 WoofWare.KnuthPlass.Glue inherit obj, implements WoofWare.KnuthPlass.Glue System.IEquatable, System.Collections.IStructuralEquatable, WoofWare.KnuthPlass.Glue System.IComparable, System.IComparable, System.Collections.IStructuralComparable
 WoofWare.KnuthPlass.Glue..ctor [constructor]: (single, single, single)
 WoofWare.KnuthPlass.Glue.Equals [method]: (WoofWare.KnuthPlass.Glue, System.Collections.IEqualityComparer) -> bool
@@ -19,11 +26,8 @@ WoofWare.KnuthPlass.Glue.Shrink [property]: [read-only] single
 WoofWare.KnuthPlass.Glue.Stretch [property]: [read-only] single
 WoofWare.KnuthPlass.Glue.Width [property]: [read-only] single
 WoofWare.KnuthPlass.Hyphenation inherit obj
-WoofWare.KnuthPlass.Hyphenation.applyMinLengths [static method]: int -> int -> int -> System.Byte [] -> unit
-WoofWare.KnuthPlass.Hyphenation.DEFAULT_LEFT_MIN [static field]: int = 2
 WoofWare.KnuthPlass.Hyphenation.DEFAULT_PENALTY [static field]: single = 50
-WoofWare.KnuthPlass.Hyphenation.DEFAULT_RIGHT_MIN [static field]: int = 3
-WoofWare.KnuthPlass.Hyphenation.prioritiesToPoints [static method]: single -> System.Byte [] -> struct (int * single) []
+WoofWare.KnuthPlass.Hyphenation.prioritiesToPoints [static method]: single -> WoofWare.KnuthPlass.FilteredPriorities -> struct (int * single) []
 WoofWare.KnuthPlass.Item inherit obj, implements WoofWare.KnuthPlass.Item System.IEquatable, System.Collections.IStructuralEquatable, WoofWare.KnuthPlass.Item System.IComparable, System.IComparable, System.Collections.IStructuralComparable - union type with 3 cases
 WoofWare.KnuthPlass.Item+Box inherit WoofWare.KnuthPlass.Item
 WoofWare.KnuthPlass.Item+Box.get_Item [method]: unit -> WoofWare.KnuthPlass.Box
@@ -116,5 +120,5 @@ WoofWare.KnuthPlass.Penalty.get_Width [method]: unit -> single
 WoofWare.KnuthPlass.Penalty.Width [property]: [read-only] single
 WoofWare.KnuthPlass.Text inherit obj
 WoofWare.KnuthPlass.Text.defaultWordWidth [static method]: string -> single
-WoofWare.KnuthPlass.Text.format [static method]: WoofWare.KnuthPlass.LineBreakOptions -> (string -> single) -> WoofWare.KnuthPlass.Glue -> single -> (string -> System.Byte []) -> string -> string
+WoofWare.KnuthPlass.Text.format [static method]: WoofWare.KnuthPlass.LineBreakOptions -> (string -> single) -> WoofWare.KnuthPlass.Glue -> single -> (string -> WoofWare.KnuthPlass.FilteredPriorities) -> string -> string
 WoofWare.KnuthPlass.Text.SPACE_WIDTH [static field]: single = 1

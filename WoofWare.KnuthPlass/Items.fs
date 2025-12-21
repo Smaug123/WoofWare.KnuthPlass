@@ -2,39 +2,26 @@ namespace WoofWare.KnuthPlass
 
 open System
 
-/// Utilities for working with hyphenation data.
+/// Hyphenation priorities with min-length constraints applied.
+/// Use the FilteredPriorities module to construct values.
+[<Struct>]
+type FilteredPriorities =
+    private
+        {
+            Priorities : byte array
+        }
+
+/// Constructors for FilteredPriorities.
 [<RequireQualifiedAccess>]
-module Hyphenation =
-    /// Default cost penalty to apply to the addition of a single hyphen.
-    [<Literal>]
-    let DEFAULT_PENALTY = 50.0f
-
-    /// Default minimum characters before a hyphen (TeX's \lefthyphenmin for English).
-    [<Literal>]
-    let DEFAULT_LEFT_MIN = 2
-
-    /// Default minimum characters after a hyphen (TeX's \righthyphenmin for English).
-    [<Literal>]
-    let DEFAULT_RIGHT_MIN = 3
-
+module FilteredPriorities =
     /// <summary>
-    /// Apply minimum length constraints to a priorities array, zeroing out invalid positions.
+    /// Apply min-length constraints to raw Liang priorities.
     /// </summary>
-    /// <remarks>
-    /// This implements TeX's \lefthyphenmin and \righthyphenmin parameters.
-    /// For English, the defaults are 2 and 3 respectively, meaning a hyphen must leave
-    /// at least 2 characters before it and 3 characters after it.
-    ///
-    /// For example, "and" (length 3) with leftMin=2, rightMin=3 has no valid hyphenation
-    /// points: "a-nd" violates leftMin, "an-d" violates rightMin.
-    ///
-    /// The priorities array is modified in place for efficiency.
-    /// </remarks>
     /// <param name="leftMin">Minimum characters before the hyphen.</param>
     /// <param name="rightMin">Minimum characters after the hyphen.</param>
     /// <param name="wordLength">Length of the word being hyphenated.</param>
-    /// <param name="priorities">Priority array to filter (modified in place).</param>
-    let applyMinLengths (leftMin : int) (rightMin : int) (wordLength : int) (priorities : byte array) : unit =
+    /// <param name="priorities">Raw priority array from Liang hyphenation.</param>
+    let fromLiang (leftMin : int) (rightMin : int) (wordLength : int) (priorities : byte array) : FilteredPriorities =
         if priorities.Length > 0 then
             // Position i in priorities (0-indexed) = break after character (i+1)
             // Left fragment has (i+1) characters, right fragment has (wordLength - i - 1) characters
@@ -51,16 +38,52 @@ module Hyphenation =
             for i = max 0 (wordLength - rightMin) to priorities.Length - 1 do
                 priorities.[i] <- 0uy
 
+        {
+            Priorities = priorities
+        }
+
     /// <summary>
-    /// Convert a priorities array (from Liang-style hyphenation) to (position, penalty) array.
+    /// Apply English TeX defaults (lefthyphenmin=2, righthyphenmin=3) to raw Liang priorities.
+    /// </summary>
+    /// <param name="wordLength">Length of the word being hyphenated.</param>
+    /// <param name="priorities">Raw priority array from Liang hyphenation.</param>
+    let fromLiangEnglish (wordLength : int) (priorities : byte array) : FilteredPriorities =
+        fromLiang 2 3 wordLength priorities
+
+    /// <summary>
+    /// Use raw priorities without min-length filtering (explicit opt-out).
+    /// </summary>
+    /// <remarks>
+    /// Use this when you've already applied filtering, or when you explicitly want
+    /// to allow hyphenation at any position indicated by the Liang algorithm.
+    /// </remarks>
+    /// <param name="priorities">Priority array to use as-is.</param>
+    let unfiltered (priorities : byte array) : FilteredPriorities =
+        {
+            Priorities = priorities
+        }
+
+    /// Get the underlying priorities array.
+    let value (fp : FilteredPriorities) : byte array = fp.Priorities
+
+/// Utilities for working with hyphenation data.
+[<RequireQualifiedAccess>]
+module Hyphenation =
+    /// Default cost penalty to apply to the addition of a single hyphen.
+    [<Literal>]
+    let DEFAULT_PENALTY = 50.0f
+
+    /// <summary>
+    /// Convert filtered priorities to (position, penalty) array.
     /// </summary>
     /// <remarks>
     /// Liang hyphenation returns priorities at each inter-letter position where odd values
     /// indicate valid hyphenation points. All odd values are treated equally as valid break points.
     /// </remarks>
     /// <param name="penalty">Penalty to apply at each valid hyphenation point.</param>
-    /// <param name="priorities">Priority array from Liang hyphenation (one per inter-letter position).</param>
-    let prioritiesToPoints (penalty : float32) (priorities : byte array) : struct (int * float32) array =
+    /// <param name="priorities">Filtered priority array.</param>
+    let prioritiesToPoints (penalty : float32) (priorities : FilteredPriorities) : struct (int * float32) array =
+        let priorities = FilteredPriorities.value priorities
         let result = ResizeArray ()
 
         for i = 0 to priorities.Length - 1 do

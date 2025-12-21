@@ -18,8 +18,10 @@ module LiangHyphenationTests =
         System.Lazy<_> ((fun () -> LanguageData.load KnownLanguage.EnGb), LazyThreadSafetyMode.ExecutionAndPublication)
 
     /// Hyphenation function using Liang algorithm with en-GB data.
-    let liangHyphenate (word : string) : byte array =
-        Hyphenation.hyphenate enGbTrie.Value word
+    /// Applies English min-length filtering (lefthyphenmin=2, righthyphenmin=3).
+    let liangHyphenate (word : string) : FilteredPriorities =
+        let priorities = Hyphenation.hyphenate enGbTrie.Value word
+        FilteredPriorities.fromLiangEnglish word.Length priorities
 
     [<OneTimeSetUp>]
     let setUp () =
