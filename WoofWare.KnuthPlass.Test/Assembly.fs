@@ -5,7 +5,7 @@ open System.Reflection
 
 [<RequireQualifiedAccess>]
 module Assembly =
-    type private Dummy = class end
+    type Dummy = class end
 
     let readEmbeddedResource (name : string) : string =
         let asm = Assembly.GetAssembly typeof<Dummy>

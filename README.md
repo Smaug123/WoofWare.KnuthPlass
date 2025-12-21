@@ -17,10 +17,10 @@ This is almost entirely coded by Claude Sonnet 4.5, Claude Opus 4.5, and GPT-5.1
 
 ## How to use
 
-The main function is `Text.formatEnglishFixedWidth` (or the underlying `Text.format`, which is much more flexible).
-Simply pass it the desired width of the display portal, and the text you wish to be reflowed to fit in that portal.
+The main function is `Text.format`.
+Pass it the line break options, callbacks for measuring words and specifying hyphenation, and the text you wish to be reflowed.
 We respect any line breaks that exist in the original, but consider ourselves free to break lines at any `' '` characters too.
-We are also free to break lines at hyphenation points (see "Hyphenation" below), but will try not to do that (balancing with the desire not to have lines of too jagged a length),
+We are also free to break lines at hyphenation points (as specified by your hyphenation callback), but will try not to do that (balancing with the desire not to have lines of too jagged a length),
 and we will try very hard not to break the same word with more than one hyphen.
 
 While `Text.format` provides a string-oriented view of the world, you can use the underlying primitives of `Items` if you like,
@@ -33,24 +33,33 @@ let text =
     Assembly.readEmbeddedResource "publicdomain.jekyll_and_hyde.txt"
     |> fun s -> s.Replace("\r", "").Replace ("\n", " ")
 
-Text.formatEnglishFixedWidth 80.0 text
+// For monospace output (e.g. terminal), use DefaultMonospace options and monospaceGlue
+let noHyphenation (_: string) = [||]
+Text.format
+    (LineBreakOptions.DefaultMonospace 80.0f)
+    Text.defaultWordWidth
+    Items.monospaceGlue
+    Hyphenation.DEFAULT_PENALTY
+    noHyphenation
+    text
 
-@"Mr. Utterson the lawyer was a man of a rugged countenance that was never lighted by
-a smile; cold, scanty and embarrassed in discourse; backward in sentiment; lean,
-long, dusty, dreary and yet somehow lovable. At friendly meetings, and when the
-wine was to his taste, something eminently human beaconed from his eye; something
-indeed which never found its way into his talk, but which spoke not only in these
-silent symbols of the after-dinner face, but more often and loudly in the acts of
-his life. He was austere with himself; drank gin when he was alone, to mortify a
-taste for vintages; and though he enjoyed the theatre, had not crossed the doors
-of one for twenty years. But he had an approved tolerance for others; sometimes
-wondering, almost with envy, at the high pressure of spirits involved in their
-misdeeds; and in any extremity inclined to help rather than to reprove. “I incline
-to Cain’s heresy,” he used to say quaintly: “I let my brother go to the devil
-in his own way.” In this character, it was frequently his fortune to be the last
-reputable acquaintance and the last good influence in the lives of downgoing men.
-And to such as these, so long as they came about his chambers, he never marked a
-shade of change in his demeanour."
+// Result:
+@"Mr. Utterson the lawyer was a man of a rugged countenance that was never lighted
+by a smile; cold, scanty and embarrassed in discourse; backward in sentiment;
+lean, long, dusty, dreary and yet somehow lovable. At friendly meetings, and
+when the wine was to his taste, something eminently human beaconed from his eye;
+something indeed which never found its way into his talk, but which spoke not
+only in these silent symbols of the after-dinner face, but more often and loudly
+in the acts of his life. He was austere with himself; drank gin when he was
+alone, to mortify a taste for vintages; and though he enjoyed the theatre, had
+not crossed the doors of one for twenty years. But he had an approved tolerance
+for others; sometimes wondering, almost with envy, at the high pressure of
+spirits involved in their misdeeds; and in any extremity inclined to help rather
+than to reprove. “I incline to Cain’s heresy,” he used to say quaintly: “I let
+my brother go to the devil in his own way.” In this character, it was frequently
+his fortune to be the last reputable acquaintance and the last good influence in
+the lives of downgoing men. And to such as these, so long as they came about his
+chambers, he never marked a shade of change in his demeanour."
 ```
 
 ## Status
@@ -74,11 +83,12 @@ I consider it a performance bug if it is not performant enough to do that.
 ## Limitations
 
 ### Hyphenation
-Hyphenation is *barely* implemented, despite being kind of a critical part of a text layout algorithm.
-We currently use the most naive possible algorithm, of allowing hyphenation after vowel clusters.
-This is obviously terrible, and in the future we should use Knuth-Liang.
+Hyphenation is not provided by this library.
+You must supply your own hyphenation callback to `Text.format`, which should return Liang-style priorities: a byte array with one element per inter-letter position, where odd values indicate valid hyphenation points.
+(All odd values mean "hyphenation allowed" equally, and all even values mean "no hyphenation allowed" equally; their numerical magnitude is an artifact of the computation that extracted hyphenation data from the Liang packed-trie data structure, and is not important for performing the hyphenation.)
 
-You are free to plug in your own hyphenation system by calling e.g. `Text.format` rather than the usual `Text.formatEnglishFixedWidth` which wraps it.
+For English text, consider using a Knuth-Liang implementation such as [WoofWare.LiangHyphenation](https://github.com/Smaug123/WoofWare.LiangHyphenation).
+If you don't need hyphenation, pass a function that returns an empty array: `fun _ -> Array.empty`.
 
 ### Justification vs raggedness
 

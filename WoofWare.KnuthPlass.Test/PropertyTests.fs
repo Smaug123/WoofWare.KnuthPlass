@@ -87,22 +87,25 @@ module PropertyTests =
         min (100.0f * (r ** 3.0f)) infBad
 
     /// Compute the adjustment ratio for a line.
+    /// For underfull lines, includes RightSkip.Stretch to match production LineBreaker behavior.
     let private computeAdjustmentRatio
-        (lineWidth : float32)
+        (options : LineBreakOptions)
         (contentWidth : float32)
         (stretch : float32)
         (shrink : float32)
         : float32 voption
         =
-        let diff = lineWidth - contentWidth
+        let diff = options.LineWidth - contentWidth
 
         if abs diff < 1e-6f then
             // Perfect fit
             ValueSome 0.0f
         elif diff > 0.0f then
-            // Underfull: need to stretch
-            if stretch > 1e-9f then
-                ValueSome (diff / stretch)
+            // Underfull: need to stretch. Include RightSkip.Stretch to match production code.
+            let totalStretch = stretch + options.RightSkip.Stretch
+
+            if totalStretch > 1e-9f then
+                ValueSome (diff / totalStretch)
             else
                 // No stretch available -> infinite ratio (infeasible)
                 ValueNone
@@ -118,17 +121,16 @@ module PropertyTests =
     let private isLineFeasible
         (items : Item[])
         (sums : CumulativeSums)
-        (lineWidth : float32)
-        (tolerance : float32)
+        (options : LineBreakOptions)
         (startIdx : int)
         (endIdx : int)
         : bool
         =
         let width, stretch, shrink = computeLineMetrics items sums startIdx endIdx
 
-        match computeAdjustmentRatio lineWidth width stretch shrink with
+        match computeAdjustmentRatio options width stretch shrink with
         | ValueNone -> false // Infinite ratio (no stretch/shrink when needed)
-        | ValueSome r -> r >= -1.0f && badness r <= tolerance
+        | ValueSome r -> r >= -1.0f && badness r <= options.Tolerance
 
     /// Check if a line is overfull (adjustment ratio < -1).
     let private isOverfullFast
@@ -153,13 +155,7 @@ module PropertyTests =
     /// A solution is feasible iff ALL lines have r >= -1 AND badness(r) <= tolerance.
     /// Uses the PRODUCTION isValidBreakpoint to match what the algorithm actually considers.
     /// Complexity: O(n²) with O(n) space for memoization and cumulative sums.
-    let private existsFeasibleSolution
-        (items : Item[])
-        (lineWidth : float32)
-        (tolerance : float32)
-        (startPos : int)
-        : bool
-        =
+    let private existsFeasibleSolution (items : Item[]) (options : LineBreakOptions) (startPos : int) : bool =
         let sums = computeCumulativeSums items
         let memo = System.Collections.Generic.Dictionary<int, bool> ()
 
@@ -178,7 +174,7 @@ module PropertyTests =
                         // Use production breakpoint rules to match what the algorithm considers
                         if LineBreaker.isValidBreakpoint items nextPos then
                             // Check if this line would be feasible (ratio in [-1, tolerance])
-                            if isLineFeasible items sums lineWidth tolerance currentPos nextPos then
+                            if isLineFeasible items sums options currentPos nextPos then
                                 // Recursively check if the rest can be broken feasibly
                                 if search nextPos then
                                     found <- true
@@ -193,7 +189,7 @@ module PropertyTests =
     [<Test>]
     let ``No overfull line when a feasible alternative exists`` () =
         let property (text : string) (lineWidth : float32) =
-            let items = Items.fromEnglishString Text.defaultWordWidth Text.SPACE_WIDTH text
+            let items = TestHelpers.fromStringNoHyphenation text
 
             if items.Length = 0 then
                 // Empty text trivially passes
@@ -207,7 +203,7 @@ module PropertyTests =
                     if isOverfull items lineWidth line.Start line.End then
                         // This line is overfull - check if a TeX-feasible solution existed
                         // (all lines have adjustment ratio in [-1, tolerance])
-                        if existsFeasibleSolution items lineWidth options.Tolerance 0 then
+                        if existsFeasibleSolution items options 0 then
                             failwithf
                                 "Overfull line from %d to %d when feasible solution exists. Text: %s, LineWidth: %f"
                                 line.Start
@@ -244,7 +240,7 @@ module PropertyTests =
                     // (all lines have adjustment ratio in [-1, tolerance])
                     Interlocked.Increment &overfullCount |> ignore<int>
 
-                    if existsFeasibleSolution items lineWidth options.Tolerance 0 then
+                    if existsFeasibleSolution items options 0 then
                         failwithf
                             "Overfull line from %d to %d when feasible solution exists. PenaltyProb: %f, LineWidth: %f, Segments: %d, Items: %d"
                             line.Start
@@ -310,7 +306,7 @@ module PropertyTests =
     [<Test>]
     let ``Lines partition the input - English text`` () =
         let property (text : string) (lineWidth : float32) =
-            let items = Items.fromEnglishString Text.defaultWordWidth Text.SPACE_WIDTH text
+            let items = TestHelpers.fromStringNoHyphenation text
 
             if items.Length > 0 then
                 let options = LineBreakOptions.Default lineWidth
@@ -363,7 +359,7 @@ module PropertyTests =
     [<Test>]
     let ``Always produces output for non-empty input - English text`` () =
         let property (text : string) (lineWidth : float32) =
-            let items = Items.fromEnglishString Text.defaultWordWidth Text.SPACE_WIDTH text
+            let items = TestHelpers.fromStringNoHyphenation text
 
             if items.Length > 0 then
                 let options = LineBreakOptions.Default lineWidth
@@ -609,12 +605,15 @@ module PropertyTests =
             let (contentWidth, totalStretch, totalShrink) =
                 computeLineMetricsForDisplay items line.Start line.End
 
+            // Include RightSkip.Stretch to match the algorithm's behavior
+            let effectiveStretch = totalStretch + options.RightSkip.Stretch
+
             // Skip edge cases with infinite/NaN values
             // These occur with terminating glue (infinite stretch) or lines
             // consisting entirely of discardable items.
             if
                 System.Single.IsFinite contentWidth
-                && System.Single.IsFinite totalStretch
+                && System.Single.IsFinite effectiveStretch
                 && System.Single.IsFinite totalShrink
                 && System.Single.IsFinite line.AdjustmentRatio
             then
@@ -623,7 +622,7 @@ module PropertyTests =
                 // Check ratio direction consistency (relaxed check)
                 // The exact values may differ due to floating-point precision,
                 // but the direction should be consistent.
-                if diff > epsilon && totalStretch > epsilon then
+                if diff > epsilon && effectiveStretch > epsilon then
                     // Underfull: ratio should be positive
                     line.AdjustmentRatio >= -epsilon |> shouldEqual true
                 elif diff < -epsilon && totalShrink > epsilon then
@@ -766,12 +765,17 @@ module PropertyTests =
                 let width, stretch, shrink = computeLineMetrics items sums startPos endPos
 
                 let diff = options.LineWidth - width
+                // Include RightSkip.Stretch to match the algorithm's behavior
+                let totalStretch = stretch + options.RightSkip.Stretch
 
                 let ratio =
                     if abs diff < 1e-6f then
                         0.0f
                     elif diff > 0.0f then
-                        if stretch > 1e-9f then diff / stretch else noStretchRatio
+                        if totalStretch > 1e-9f then
+                            diff / totalStretch
+                        else
+                            noStretchRatio
                     elif shrink > 1e-9f then
                         diff / shrink
                     else
@@ -853,12 +857,17 @@ module PropertyTests =
             let width, stretch, shrink = computeLineMetrics items sums startPos endPos
 
             let diff = options.LineWidth - width
+            // Include RightSkip.Stretch to match the algorithm's behavior
+            let totalStretch = stretch + options.RightSkip.Stretch
 
             let ratio =
                 if abs diff < 1e-6f then
                     0.0f
                 elif diff > 0.0f then
-                    if stretch > 1e-9f then diff / stretch else noStretchRatio
+                    if totalStretch > 1e-9f then
+                        diff / totalStretch
+                    else
+                        noStretchRatio
                 elif shrink > 1e-9f then
                     diff / shrink
                 else
@@ -893,12 +902,17 @@ module PropertyTests =
         |> List.forall (fun (startPos, endPos) ->
             let width, stretch, shrink = computeLineMetrics items sums startPos endPos
             let diff = options.LineWidth - width
+            // Include RightSkip.Stretch to match the algorithm's behavior
+            let totalStretch = stretch + options.RightSkip.Stretch
 
             let ratio =
                 if abs diff < 1e-6f then
                     0.0f
                 elif diff > 0.0f then
-                    if stretch > 1e-9f then diff / stretch else noStretchRatio
+                    if totalStretch > 1e-9f then
+                        diff / totalStretch
+                    else
+                        noStretchRatio
                 elif shrink > 1e-9f then
                     diff / shrink
                 else
@@ -954,6 +968,51 @@ module PropertyTests =
             Prop.forAll arb (fun (spec, lineWidth) -> optimalityProperty spec lineWidth)
 
         Check.One (FsCheckConfig.config.WithMaxTest (1000), prop)
+
+    [<Test>]
+    let ``Optimality - regression test for discovered counterexample`` () =
+        // This case was discovered by the property-based test with seed
+        // (199775866933331410,5032112187973928453,43)
+        let spec : ParagraphSpec =
+            {
+                Head =
+                    {
+                        BoxWidth = 14.0f
+                        Penalties = []
+                        Glue =
+                            {
+                                Width = 8.0f
+                                Stretch = 0.0f
+                                Shrink = 1.0f
+                            }
+                    }
+                Tail =
+                    [
+                        {
+                            BoxWidth = 14.0f
+                            Penalties = []
+                            Glue =
+                                {
+                                    Width = 3.0f
+                                    Stretch = 1.0f
+                                    Shrink = 3.0f
+                                }
+                        }
+                        {
+                            BoxWidth = 12.0f
+                            Penalties = []
+                            Glue =
+                                {
+                                    Width = 2.0f
+                                    Stretch = 0.0f
+                                    Shrink = 1.0f
+                                }
+                        }
+                    ]
+            }
+
+        let lineWidth = 13.99999905f
+        optimalityProperty spec lineWidth
 
 
     // ============================================================================

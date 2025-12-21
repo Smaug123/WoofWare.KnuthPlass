@@ -13,7 +13,7 @@ module RealWorldTests =
         }
 
     let private assertLayoutWithinBounds (bounds : LayoutBounds) (text : string) =
-        let items = Items.fromEnglishString Text.defaultWordWidth Text.SPACE_WIDTH text
+        let items = TestHelpers.fromStringNoHyphenation text
         let options = LineBreakOptions.Default bounds.LineWidth
         let lines = LineBreaker.breakLines options items
 
@@ -72,9 +72,7 @@ module RealWorldTests =
         let text =
             "The Knuth-Plass algorithm is a sophisticated line breaking algorithm used in TeX."
 
-        let wordWidth (s : string) = float32 s.Length * 8.0f
-        let spaceWidth = 4.0f
-        let items = Items.fromEnglishString wordWidth spaceWidth text
+        let items = TestHelpers.fromStringNoHyphenation text
         let options = LineBreakOptions.Default 250.0f
         let lines = LineBreaker.breakLines options items
 
@@ -87,8 +85,7 @@ module RealWorldTests =
         // Use a real paragraph with monospace options (higher tolerance = 1000)
         // so that feasible breakpoints exist at varying line widths
         let text = "The quick brown fox jumps over the lazy dog and runs away."
-        let wordWidth (s : string) = float32 s.Length
-        let items = Items.fromEnglishString wordWidth 1.0f text
+        let items = TestHelpers.fromStringNoHyphenation text
 
         // Use monospace options which have tolerance=1000, allowing more flexible breaks
         let narrowLines =
@@ -118,7 +115,7 @@ dog."
                     wordWidth
                     Items.monospaceGlue
                     Hyphenation.DEFAULT_PENALTY
-                    Hyphenation.none
+                    TestHelpers.noHyphenation
                     text
         }
 
@@ -141,7 +138,7 @@ dog."
                     wordWidth
                     (Items.defaultGlue 4.0f)
                     Hyphenation.DEFAULT_PENALTY
-                    Hyphenation.none
+                    TestHelpers.noHyphenation
                     text
         }
 
@@ -171,44 +168,16 @@ dog."
 
         expect {
             snapshot
-                @"Mr. Utterson the lawyer was a man of a rugged countenance that was never lighted by
-a smile; cold, scanty and embarrassed in discourse; backward in sentiment; lean,
-long, dusty, dreary and yet somehow lovable. At friendly meetings, and when the
-wine was to his taste, something eminently human beaconed from his eye; something
-indeed which never found its way into his talk, but which spoke not only in these
-silent symbols of the after-dinner face, but more often and loudly in the acts of
-his life. He was austere with himself; drank gin when he was alone, to mortify a
-taste for vintages; and though he enjoyed the theatre, had not crossed the doors
-of one for twenty years. But he had an approved tolerance for others; sometimes
-wondering, almost with envy, at the high pressure of spirits involved in their
-misdeeds; and in any extremity inclined to help rather than to reprove. “I incline
-to Cain’s heresy,” he used to say quaintly: “I let my brother go to the devil
-in his own way.” In this character, it was frequently his fortune to be the last
-reputable acquaintance and the last good influence in the lives of downgoing men.
-And to such as these, so long as they came about his chambers, he never marked a
-shade of change in his demeanour."
-
-            return Text.formatEnglishFixedWidth 80.0f text
-        }
-
-    [<Test>]
-    let ``formatParagraph on Jekyll and Hyde with aggressive hyphenation`` () =
-        let text =
-            Assembly.readEmbeddedResource "publicdomain.jekyll_and_hyde.txt"
-            |> fun s -> s.Replace("\r", "").Replace ("\n", " ")
-
-        expect {
-            snapshot
-                @"Mr. Utterson the lawyer was a man of a rugged countenance that was never li-
-ghted by a smile; cold, scanty and embarrassed in discourse; backward in senti-
-ment; lean, long, dusty, dreary and yet somehow lovable. At friendly meetings,
-and when the wine was to his taste, something eminently human beaconed from his
-eye; something indeed which never found its way into his talk, but which spoke
-not only in these silent symbols of the after-dinner face, but more often and
-loudly in the acts of his life. He was austere with himself; drank gin when he
-was alone, to mortify a taste for vintages; and though he enjoyed the theatre,
-had not crossed the doors of one for twenty years. But he had an approved tole-
-rance for others; sometimes wondering, almost with envy, at the high pressure of
+                @"Mr. Utterson the lawyer was a man of a rugged countenance that was never lighted
+by a smile; cold, scanty and embarrassed in discourse; backward in sentiment;
+lean, long, dusty, dreary and yet somehow lovable. At friendly meetings, and
+when the wine was to his taste, something eminently human beaconed from his eye;
+something indeed which never found its way into his talk, but which spoke not
+only in these silent symbols of the after-dinner face, but more often and loudly
+in the acts of his life. He was austere with himself; drank gin when he was
+alone, to mortify a taste for vintages; and though he enjoyed the theatre, had
+not crossed the doors of one for twenty years. But he had an approved tolerance
+for others; sometimes wondering, almost with envy, at the high pressure of
 spirits involved in their misdeeds; and in any extremity inclined to help rather
 than to reprove. “I incline to Cain’s heresy,” he used to say quaintly: “I let
 my brother go to the devil in his own way.” In this character, it was frequently
@@ -221,7 +190,42 @@ chambers, he never marked a shade of change in his demeanour."
                     (LineBreakOptions.DefaultMonospace 80.0f)
                     Text.defaultWordWidth
                     Items.monospaceGlue
+                    Hyphenation.DEFAULT_PENALTY
+                    TestHelpers.noHyphenation
+                    text
+        }
+
+    [<Test>]
+    let ``formatParagraph on Jekyll and Hyde with aggressive hyphenation`` () =
+        let text =
+            Assembly.readEmbeddedResource "publicdomain.jekyll_and_hyde.txt"
+            |> fun s -> s.Replace("\r", "").Replace ("\n", " ")
+
+        expect {
+            snapshot
+                @"Mr. Utterson the lawyer was a man of a rugged countenance that was never lighted
+by a smile; cold, scanty and embarrassed in discourse; backward in sentiment;
+lean, long, dusty, dreary and yet somehow lovable. At friendly meetings, and
+when the wine was to his taste, something eminently human beaconed from his eye;
+something indeed which never found its way into his talk, but which spoke not
+only in these silent symbols of the after-dinner face, but more often and lou-
+dly in the acts of his life. He was austere with himself; drank gin when he was
+alone, to mortify a taste for vintages; and though he enjoyed the theatre, had
+not crossed the doors of one for twenty years. But he had an approved tolerance
+for others; sometimes wondering, almost with envy, at the high pressure of sp-
+irits involved in their misdeeds; and in any extremity inclined to help rather
+than to reprove. “I incline to Cain’s heresy,” he used to say quaintly: “I let
+my brother go to the devil in his own way.” In this character, it was frequently
+his fortune to be the last reputable acquaintance and the last good influence in
+the lives of downgoing men. And to such as these, so long as they came about his
+chambers, he never marked a shade of change in his demeanour."
+
+            return
+                Text.format
+                    (LineBreakOptions.DefaultMonospace 80.0f)
+                    Text.defaultWordWidth
+                    Items.monospaceGlue
                     5.0f
-                    Hyphenation.simpleEnglish
+                    TestHelpers.everywhereHyphenation
                     text
         }
