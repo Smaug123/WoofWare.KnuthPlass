@@ -2,6 +2,78 @@ namespace WoofWare.KnuthPlass
 
 open System
 
+/// Hyphenation priorities with min-length constraints applied.
+/// Use the FilteredPriorities module to construct values.
+[<Struct>]
+type FilteredPriorities =
+    private
+        {
+            Priorities : byte array
+        }
+
+/// Constructors for FilteredPriorities.
+[<RequireQualifiedAccess>]
+module FilteredPriorities =
+    /// <summary>
+    /// Apply min-length constraints to raw Liang priorities.
+    /// </summary>
+    /// <remarks>
+    /// WARNING: This function mutates the input array for efficiency.
+    /// If you need to preserve the original priorities, copy the array before calling.
+    /// </remarks>
+    /// <param name="leftMin">Minimum characters before the hyphen.</param>
+    /// <param name="rightMin">Minimum characters after the hyphen.</param>
+    /// <param name="wordLength">Length of the word being hyphenated.</param>
+    /// <param name="priorities">Raw priority array from Liang hyphenation (mutated in place).</param>
+    let fromLiang (leftMin : int) (rightMin : int) (wordLength : int) (priorities : byte array) : FilteredPriorities =
+        if priorities.Length > 0 then
+            // Position i in priorities (0-indexed) = break after character (i+1)
+            // Left fragment has (i+1) characters, right fragment has (wordLength - i - 1) characters
+            //
+            // Valid positions need:
+            //   i + 1 >= leftMin   =>  i >= leftMin - 1
+            //   wordLength - i - 1 >= rightMin  =>  i <= wordLength - 1 - rightMin
+
+            // Zero out positions that leave too few characters on the left
+            for i = 0 to min (leftMin - 2) (priorities.Length - 1) do
+                priorities.[i] <- 0uy
+
+            // Zero out positions that leave too few characters on the right
+            for i = max 0 (wordLength - rightMin) to priorities.Length - 1 do
+                priorities.[i] <- 0uy
+
+        {
+            Priorities = priorities
+        }
+
+    /// <summary>
+    /// Apply English TeX defaults (lefthyphenmin=2, righthyphenmin=3) to raw Liang priorities.
+    /// </summary>
+    /// <param name="wordLength">Length of the word being hyphenated.</param>
+    /// <param name="priorities">Raw priority array from Liang hyphenation.</param>
+    let fromLiangEnglish (wordLength : int) (priorities : byte array) : FilteredPriorities =
+        fromLiang 2 3 wordLength priorities
+
+    /// <summary>
+    /// Use raw priorities without min-length filtering (explicit opt-out).
+    /// </summary>
+    /// <remarks>
+    /// Use this when you've already applied filtering, or when you explicitly want
+    /// to allow hyphenation at any position indicated by the Liang algorithm.
+    /// </remarks>
+    /// <param name="priorities">Priority array to use as-is.</param>
+    let unfiltered (priorities : byte array) : FilteredPriorities =
+        {
+            Priorities = priorities
+        }
+
+    /// Get the underlying priorities array.
+    /// Returns an empty array if the struct was default-initialized.
+    let value (fp : FilteredPriorities) : byte array =
+        match fp.Priorities with
+        | null -> Array.empty
+        | arr -> arr
+
 /// Utilities for working with hyphenation data.
 [<RequireQualifiedAccess>]
 module Hyphenation =
@@ -10,15 +82,16 @@ module Hyphenation =
     let DEFAULT_PENALTY = 50.0f
 
     /// <summary>
-    /// Convert a priorities array (from Liang-style hyphenation) to (position, penalty) array.
+    /// Convert filtered priorities to (position, penalty) array.
     /// </summary>
     /// <remarks>
     /// Liang hyphenation returns priorities at each inter-letter position where odd values
     /// indicate valid hyphenation points. All odd values are treated equally as valid break points.
     /// </remarks>
     /// <param name="penalty">Penalty to apply at each valid hyphenation point.</param>
-    /// <param name="priorities">Priority array from Liang hyphenation (one per inter-letter position).</param>
-    let prioritiesToPoints (penalty : float32) (priorities : byte array) : struct (int * float32) array =
+    /// <param name="priorities">Filtered priority array.</param>
+    let prioritiesToPoints (penalty : float32) (priorities : FilteredPriorities) : struct (int * float32) array =
+        let priorities = FilteredPriorities.value priorities
         let result = ResizeArray ()
 
         for i = 0 to priorities.Length - 1 do

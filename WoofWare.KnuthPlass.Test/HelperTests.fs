@@ -110,7 +110,7 @@ module HelperTests =
     let ``prioritiesToPoints converts Liang priorities correctly`` () =
         // Priorities: 0=no break, 1=break, 2=no break, 3=break, 4=no break
         // In standard Liang, odd values indicate valid hyphenation points (all treated equally)
-        let priorities = [| 0uy ; 1uy ; 2uy ; 3uy ; 4uy |]
+        let priorities = FilteredPriorities.unfiltered [| 0uy ; 1uy ; 2uy ; 3uy ; 4uy |]
         let penalty = 10.0f
 
         let points = Hyphenation.prioritiesToPoints penalty priorities
@@ -129,7 +129,7 @@ module HelperTests =
 
     [<Test>]
     let ``prioritiesToPoints with no odd values returns empty`` () =
-        let priorities = [| 0uy ; 2uy ; 4uy ; 6uy |]
+        let priorities = FilteredPriorities.unfiltered [| 0uy ; 2uy ; 4uy ; 6uy |]
         let points = Hyphenation.prioritiesToPoints 10.0f priorities
 
         points.Length |> shouldEqual 0
@@ -167,3 +167,55 @@ module HelperTests =
         glue.Width |> shouldEqual 1.0f
         glue.Stretch |> shouldEqual 0.5f
         glue.Shrink |> shouldEqual 0.0f
+
+    [<Test>]
+    let ``fromLiang zeros out positions for short word`` () =
+        // Word "and" has length 3, priorities array has length 2
+        // Position 0 = break after 'a' (1 char left, 2 right)
+        // Position 1 = break after 'n' (2 chars left, 1 right)
+        // With leftMin=2, rightMin=3: no valid positions
+        let priorities = [| 1uy ; 1uy |]
+        let filtered = FilteredPriorities.fromLiang 2 3 3 priorities
+
+        FilteredPriorities.value filtered |> shouldEqual [| 0uy ; 0uy |]
+
+    [<Test>]
+    let ``fromLiang preserves valid positions for longer word`` () =
+        // Word "beautiful" has length 9, priorities array has length 8
+        // With leftMin=2, rightMin=3:
+        //   Position 0: 1 left, 8 right - INVALID (left < 2)
+        //   Position 1: 2 left, 7 right - valid
+        //   Position 2: 3 left, 6 right - valid
+        //   Position 3: 4 left, 5 right - valid
+        //   Position 4: 5 left, 4 right - valid
+        //   Position 5: 6 left, 3 right - valid
+        //   Position 6: 7 left, 2 right - INVALID (right < 3)
+        //   Position 7: 8 left, 1 right - INVALID (right < 3)
+        let priorities = [| 1uy ; 1uy ; 1uy ; 1uy ; 1uy ; 1uy ; 1uy ; 1uy |]
+        let filtered = FilteredPriorities.fromLiang 2 3 9 priorities
+
+        FilteredPriorities.value filtered
+        |> shouldEqual [| 0uy ; 1uy ; 1uy ; 1uy ; 1uy ; 1uy ; 0uy ; 0uy |]
+
+    [<Test>]
+    let ``fromLiang handles empty array`` () =
+        let priorities : byte array = [||]
+        let filtered = FilteredPriorities.fromLiang 2 3 1 priorities
+
+        FilteredPriorities.value filtered |> shouldEqual [||]
+
+    [<Test>]
+    let ``fromLiang with leftMin=1 rightMin=1 preserves all`` () =
+        // With minimal constraints, all positions should remain
+        let priorities = [| 1uy ; 3uy ; 5uy |]
+        let filtered = FilteredPriorities.fromLiang 1 1 4 priorities
+
+        FilteredPriorities.value filtered |> shouldEqual [| 1uy ; 3uy ; 5uy |]
+
+    [<Test>]
+    let ``fromLiangEnglish uses TeX English defaults`` () =
+        // Same as fromLiang 2 3 - should zero out positions that violate English rules
+        let priorities = [| 1uy ; 1uy |] // Word length 3
+        let filtered = FilteredPriorities.fromLiangEnglish 3 priorities
+
+        FilteredPriorities.value filtered |> shouldEqual [| 0uy ; 0uy |]
