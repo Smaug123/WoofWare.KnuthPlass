@@ -167,3 +167,51 @@ module HelperTests =
         glue.Width |> shouldEqual 1.0f
         glue.Stretch |> shouldEqual 0.5f
         glue.Shrink |> shouldEqual 0.0f
+
+    [<Test>]
+    let ``applyMinLengths zeros out positions for short word`` () =
+        // Word "and" has length 3, priorities array has length 2
+        // Position 0 = break after 'a' (1 char left, 2 right)
+        // Position 1 = break after 'n' (2 chars left, 1 right)
+        // With leftMin=2, rightMin=3: no valid positions
+        let priorities = [| 1uy ; 1uy |]
+        Hyphenation.applyMinLengths 2 3 3 priorities
+
+        priorities |> shouldEqual [| 0uy ; 0uy |]
+
+    [<Test>]
+    let ``applyMinLengths preserves valid positions for longer word`` () =
+        // Word "beautiful" has length 9, priorities array has length 8
+        // With leftMin=2, rightMin=3:
+        //   Position 0: 1 left, 8 right - INVALID (left < 2)
+        //   Position 1: 2 left, 7 right - valid
+        //   Position 2: 3 left, 6 right - valid
+        //   Position 3: 4 left, 5 right - valid
+        //   Position 4: 5 left, 4 right - valid
+        //   Position 5: 6 left, 3 right - valid
+        //   Position 6: 7 left, 2 right - INVALID (right < 3)
+        //   Position 7: 8 left, 1 right - INVALID (right < 3)
+        let priorities = [| 1uy ; 1uy ; 1uy ; 1uy ; 1uy ; 1uy ; 1uy ; 1uy |]
+        Hyphenation.applyMinLengths 2 3 9 priorities
+
+        priorities |> shouldEqual [| 0uy ; 1uy ; 1uy ; 1uy ; 1uy ; 1uy ; 0uy ; 0uy |]
+
+    [<Test>]
+    let ``applyMinLengths handles empty array`` () =
+        let priorities : byte array = [||]
+        Hyphenation.applyMinLengths 2 3 1 priorities
+
+        priorities |> shouldEqual [||]
+
+    [<Test>]
+    let ``applyMinLengths with leftMin=1 rightMin=1 preserves all`` () =
+        // With minimal constraints, all positions should remain
+        let priorities = [| 1uy ; 3uy ; 5uy |]
+        Hyphenation.applyMinLengths 1 1 4 priorities
+
+        priorities |> shouldEqual [| 1uy ; 3uy ; 5uy |]
+
+    [<Test>]
+    let ``applyMinLengths default constants match TeX English`` () =
+        Hyphenation.DEFAULT_LEFT_MIN |> shouldEqual 2
+        Hyphenation.DEFAULT_RIGHT_MIN |> shouldEqual 3

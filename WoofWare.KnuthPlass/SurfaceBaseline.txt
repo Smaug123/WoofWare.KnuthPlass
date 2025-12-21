@@ -19,7 +19,10 @@ WoofWare.KnuthPlass.Glue.Shrink [property]: [read-only] single
 WoofWare.KnuthPlass.Glue.Stretch [property]: [read-only] single
 WoofWare.KnuthPlass.Glue.Width [property]: [read-only] single
 WoofWare.KnuthPlass.Hyphenation inherit obj
+WoofWare.KnuthPlass.Hyphenation.applyMinLengths [static method]: int -> int -> int -> System.Byte [] -> unit
+WoofWare.KnuthPlass.Hyphenation.DEFAULT_LEFT_MIN [static field]: int = 2
 WoofWare.KnuthPlass.Hyphenation.DEFAULT_PENALTY [static field]: single = 50
+WoofWare.KnuthPlass.Hyphenation.DEFAULT_RIGHT_MIN [static field]: int = 3
 WoofWare.KnuthPlass.Hyphenation.prioritiesToPoints [static method]: single -> System.Byte [] -> struct (int * single) []
 WoofWare.KnuthPlass.Item inherit obj, implements WoofWare.KnuthPlass.Item System.IEquatable, System.Collections.IStructuralEquatable, WoofWare.KnuthPlass.Item System.IComparable, System.IComparable, System.Collections.IStructuralComparable - union type with 3 cases
 WoofWare.KnuthPlass.Item+Box inherit WoofWare.KnuthPlass.Item

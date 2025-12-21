@@ -9,6 +9,48 @@ module Hyphenation =
     [<Literal>]
     let DEFAULT_PENALTY = 50.0f
 
+    /// Default minimum characters before a hyphen (TeX's \lefthyphenmin for English).
+    [<Literal>]
+    let DEFAULT_LEFT_MIN = 2
+
+    /// Default minimum characters after a hyphen (TeX's \righthyphenmin for English).
+    [<Literal>]
+    let DEFAULT_RIGHT_MIN = 3
+
+    /// <summary>
+    /// Apply minimum length constraints to a priorities array, zeroing out invalid positions.
+    /// </summary>
+    /// <remarks>
+    /// This implements TeX's \lefthyphenmin and \righthyphenmin parameters.
+    /// For English, the defaults are 2 and 3 respectively, meaning a hyphen must leave
+    /// at least 2 characters before it and 3 characters after it.
+    ///
+    /// For example, "and" (length 3) with leftMin=2, rightMin=3 has no valid hyphenation
+    /// points: "a-nd" violates leftMin, "an-d" violates rightMin.
+    ///
+    /// The priorities array is modified in place for efficiency.
+    /// </remarks>
+    /// <param name="leftMin">Minimum characters before the hyphen.</param>
+    /// <param name="rightMin">Minimum characters after the hyphen.</param>
+    /// <param name="wordLength">Length of the word being hyphenated.</param>
+    /// <param name="priorities">Priority array to filter (modified in place).</param>
+    let applyMinLengths (leftMin : int) (rightMin : int) (wordLength : int) (priorities : byte array) : unit =
+        if priorities.Length > 0 then
+            // Position i in priorities (0-indexed) = break after character (i+1)
+            // Left fragment has (i+1) characters, right fragment has (wordLength - i - 1) characters
+            //
+            // Valid positions need:
+            //   i + 1 >= leftMin   =>  i >= leftMin - 1
+            //   wordLength - i - 1 >= rightMin  =>  i <= wordLength - 1 - rightMin
+
+            // Zero out positions that leave too few characters on the left
+            for i = 0 to min (leftMin - 2) (priorities.Length - 1) do
+                priorities.[i] <- 0uy
+
+            // Zero out positions that leave too few characters on the right
+            for i = max 0 (wordLength - rightMin) to priorities.Length - 1 do
+                priorities.[i] <- 0uy
+
     /// <summary>
     /// Convert a priorities array (from Liang-style hyphenation) to (position, penalty) array.
     /// </summary>
