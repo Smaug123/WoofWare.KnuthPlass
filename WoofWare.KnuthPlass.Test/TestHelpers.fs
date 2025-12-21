@@ -20,8 +20,8 @@ module TestHelpers =
         else
             // Create priorities for inter-letter positions (length - 1 positions)
             let priorities = Array.zeroCreate (word.Length - 1)
-            // Set odd priorities (valid hyphenation) for positions 2..len-3
-            // Position i in the priorities array corresponds to breaking after character i
+            // Set odd priorities (valid hyphenation) at indices satisfying lefthyphenmin=2, righthyphenmin=3
+            // Index i in the priorities array corresponds to breaking after character (i+1)
             for i in 1 .. word.Length - 4 do
                 priorities.[i] <- 1uy
 

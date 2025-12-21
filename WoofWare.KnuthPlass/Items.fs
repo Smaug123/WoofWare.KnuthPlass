@@ -17,10 +17,14 @@ module FilteredPriorities =
     /// <summary>
     /// Apply min-length constraints to raw Liang priorities.
     /// </summary>
+    /// <remarks>
+    /// WARNING: This function mutates the input array for efficiency.
+    /// If you need to preserve the original priorities, copy the array before calling.
+    /// </remarks>
     /// <param name="leftMin">Minimum characters before the hyphen.</param>
     /// <param name="rightMin">Minimum characters after the hyphen.</param>
     /// <param name="wordLength">Length of the word being hyphenated.</param>
-    /// <param name="priorities">Raw priority array from Liang hyphenation.</param>
+    /// <param name="priorities">Raw priority array from Liang hyphenation (mutated in place).</param>
     let fromLiang (leftMin : int) (rightMin : int) (wordLength : int) (priorities : byte array) : FilteredPriorities =
         if priorities.Length > 0 then
             // Position i in priorities (0-indexed) = break after character (i+1)
@@ -64,7 +68,11 @@ module FilteredPriorities =
         }
 
     /// Get the underlying priorities array.
-    let value (fp : FilteredPriorities) : byte array = fp.Priorities
+    /// Returns an empty array if the struct was default-initialized.
+    let value (fp : FilteredPriorities) : byte array =
+        match fp.Priorities with
+        | null -> Array.empty
+        | arr -> arr
 
 /// Utilities for working with hyphenation data.
 [<RequireQualifiedAccess>]
