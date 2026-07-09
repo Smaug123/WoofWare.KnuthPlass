@@ -169,10 +169,6 @@ type LineBreakOptions =
         DoubleHyphenDemerits : float32
         /// Penalty for ending a paragraph with a hyphen
         FinalHyphenDemerits : float32
-        /// <summary>Multiplier by which to penalise consecutive lines having different fitness classes.</summary>
-        /// <remarks>See the <see cref="FitnessClass"/> type for what a fitness class is.
-        /// Note: TeX only applies adj_demerits when fitness diff > 1, not for adjacent classes (diff=1).</remarks>
-        FitnessClassDifferencePenalty : float32
         /// <summary>Zero-width glue providing baseline stretch for all lines (TeX's \rightskip).</summary>
         /// <remarks>
         /// This provides baseline stretchability so that single-word lines (which have no inter-word glue)
@@ -201,8 +197,6 @@ type LineBreakOptions =
     static member DefaultDoubleHyphenDemerits = 10000.0f
     /// Default penalty for ending a paragraph with a hyphen
     static member DefaultFinalHyphenDemerits = 5000.0f
-    /// Default penalty for fitness class differences
-    static member DefaultFitnessClassDifferencePenalty = 100.0f
 
     /// Creates default options with standard TeX values (RightSkip = 0).
     static member Default (lineWidth : float32) =
@@ -213,7 +207,6 @@ type LineBreakOptions =
             AdjacentLooseTightDemerits = LineBreakOptions.DefaultAdjacentLooseTightDemerits
             DoubleHyphenDemerits = LineBreakOptions.DefaultDoubleHyphenDemerits
             FinalHyphenDemerits = LineBreakOptions.DefaultFinalHyphenDemerits
-            FitnessClassDifferencePenalty = LineBreakOptions.DefaultFitnessClassDifferencePenalty
             RightSkip =
                 {
                     Width = 0.0f
@@ -253,7 +246,6 @@ type LineBreakOptions =
             AdjacentLooseTightDemerits = LineBreakOptions.DefaultAdjacentLooseTightDemerits
             DoubleHyphenDemerits = LineBreakOptions.DefaultDoubleHyphenDemerits
             FinalHyphenDemerits = LineBreakOptions.DefaultFinalHyphenDemerits
-            FitnessClassDifferencePenalty = LineBreakOptions.DefaultFitnessClassDifferencePenalty
             // RightSkip.Stretch = 4.0 provides baseline stretchability for single-word lines.
             // This prevents all underfull single-word lines from being treated as equally bad
             // (which would cause unnecessary hyphenation).
