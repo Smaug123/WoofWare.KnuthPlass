@@ -107,6 +107,36 @@ module HelperTests =
         |> shouldFail<ArgumentException>
 
     [<Test>]
+    let ``wordFromFragments validates penalty count with one fragment`` () =
+        // One fragment requires exactly 0 penalties; a stray penalty must not be silently dropped
+        let fragmentWidths = [| 3.0f |]
+        let wrongPenalties = [| 50.0f |]
+
+        (fun () ->
+            Items.wordFromFragments 1.0f (ReadOnlySpan fragmentWidths) (ReadOnlySpan wrongPenalties)
+            |> ignore
+        )
+        |> shouldFail<ArgumentException>
+
+    [<Test>]
+    let ``wordFromFragments validates penalty count with zero fragments`` () =
+        let fragmentWidths : float32[] = [||]
+        let wrongPenalties = [| 50.0f |]
+
+        (fun () ->
+            Items.wordFromFragments 1.0f (ReadOnlySpan fragmentWidths) (ReadOnlySpan wrongPenalties)
+            |> ignore
+        )
+        |> shouldFail<ArgumentException>
+
+    [<Test>]
+    let ``wordFromFragments with zero fragments and zero penalties creates no items`` () =
+        let items =
+            Items.wordFromFragments 1.0f (ReadOnlySpan Array.empty) (ReadOnlySpan Array.empty)
+
+        items |> shouldEqual [||]
+
+    [<Test>]
     let ``prioritiesToPoints converts Liang priorities correctly`` () =
         // Priorities: 0=no break, 1=break, 2=no break, 3=break, 4=no break
         // In standard Liang, odd values indicate valid hyphenation points (all treated equally)
