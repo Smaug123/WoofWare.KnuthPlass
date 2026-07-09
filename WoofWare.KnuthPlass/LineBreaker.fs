@@ -89,6 +89,11 @@ type private PrecomputedState =
         WidthMinusShrink : float32[]
         SuffixMinWidthMinusShrink : float32[]
         ForcedBreakAhead : bool[]
+        /// EffectiveStart.[p] is the index of the first Box at or after position p (or the
+        /// paragraph end if there is none). A line starting at p only renders items from
+        /// EffectiveStart.[p] onwards: leading glue and penalties are discardable (TeX's
+        /// post_line_break discards them, and break_width excludes them, tex.web:838-845).
+        EffectiveStart : int[]
     }
 
 /// The module holding the heart of the Knuth-Plass algorithm.
@@ -206,11 +211,22 @@ module LineBreaker =
 
             arr
 
+        let effectiveStart = Array.zeroCreate (n + 1)
+        effectiveStart.[n] <- n
+
+        for i = n - 1 downto 0 do
+            effectiveStart.[i] <-
+                match items.[i] with
+                | Box _ -> i
+                | Glue _
+                | Penalty _ -> effectiveStart.[i + 1]
+
         {
             Sums = sums
             WidthMinusShrink = widthMinusShrink
             SuffixMinWidthMinusShrink = suffixMinWidthMinusShrink
             ForcedBreakAhead = forcedBreakAhead
+            EffectiveStart = effectiveStart
         }
 
     /// Once a layout has been chosen we display the per-line ratio as TeX would perceive it,
@@ -223,32 +239,32 @@ module LineBreaker =
         (endIdx : int)
         : float32
         =
-        let mutable actualWidth = sums.Width.[endIdx] - sums.Width.[startIdx]
-        let mutable totalStretch = sums.Stretch.[endIdx] - sums.Stretch.[startIdx]
-        let mutable totalShrink = sums.Shrink.[endIdx] - sums.Shrink.[startIdx]
+        // Exclude leading discardable items (glue and penalties before the first box)
+        let mutable discardEnd = startIdx
 
-        // Exclude trailing glue
+        while discardEnd < endIdx
+              && (
+                  match itemsArray.[discardEnd] with
+                  | Box _ -> false
+                  | Glue _
+                  | Penalty _ -> true
+              ) do
+            discardEnd <- discardEnd + 1
+
+        let mutable actualWidth = sums.Width.[endIdx] - sums.Width.[discardEnd]
+        let mutable totalStretch = sums.Stretch.[endIdx] - sums.Stretch.[discardEnd]
+        let mutable totalShrink = sums.Shrink.[endIdx] - sums.Shrink.[discardEnd]
+
+        // Exclude trailing glue (unless it was already excluded as a leading discardable)
         if endIdx > 0 && endIdx <= itemsArray.Length then
             match itemsArray.[endIdx - 1] with
-            | Glue g ->
+            | Glue g when endIdx - 1 >= discardEnd ->
                 actualWidth <- actualWidth - g.Width
                 totalStretch <- totalStretch - g.Stretch
                 totalShrink <- totalShrink - g.Shrink
+            | Glue _ -> ()
             | Penalty p -> actualWidth <- actualWidth + p.Width
             | _ -> ()
-
-        // Exclude leading discardable items
-        let mutable idx = startIdx
-
-        while idx < endIdx && idx < itemsArray.Length do
-            match itemsArray.[idx] with
-            | Glue g ->
-                actualWidth <- actualWidth - g.Width
-                totalStretch <- totalStretch - g.Stretch
-                totalShrink <- totalShrink - g.Shrink
-                idx <- idx + 1
-            | Penalty _ -> idx <- idx + 1
-            | _ -> idx <- endIdx
 
         let diff = options.LineWidth - actualWidth
 
@@ -436,6 +452,7 @@ module LineBreaker =
         let widthMinusShrink = precomputed.WidthMinusShrink
         let suffixMinWidthMinusShrink = precomputed.SuffixMinWidthMinusShrink
         let forcedBreakAhead = precomputed.ForcedBreakAhead
+        let effectiveStart = precomputed.EffectiveStart
 
         // Track the best node at each position for each fitness class.
         // A value of IntMin means "not set".
@@ -615,25 +632,34 @@ module LineBreaker =
         // Seed the active list with the start node
         appendActiveEntryForNode 0 0
 
-        let inline computeRatioFromTriple (widthTriple : WidthTriple) (endIdx : int) =
-            // Start with the raw width from cumulative sums
-            let mutable adjustedWidth = widthTriple.Width
-            let mutable adjustedStretch = widthTriple.Stretch
-            let mutable adjustedShrink = widthTriple.Shrink
+        let inline computeRatioFromTriple (widthTriple : WidthTriple) (startIdx : int) (endIdx : int) =
+            // Exclude leading discardable items (glue and penalties before the first box):
+            // they are discarded from the output (post_line_break), and TeX's break_width
+            // (tex.web:838-845) excludes them when measuring subsequent lines, so break
+            // selection must not count them either. Clamp to endIdx so that a line consisting
+            // entirely of discardables is measured as empty rather than reaching past its end.
+            let discardEnd = min effectiveStart.[startIdx] endIdx
+
+            let mutable adjustedWidth =
+                widthTriple.Width - (sums.Width.[discardEnd] - sums.Width.[startIdx])
+
+            let mutable adjustedStretch =
+                widthTriple.Stretch - (sums.Stretch.[discardEnd] - sums.Stretch.[startIdx])
+
+            let mutable adjustedShrink =
+                widthTriple.Shrink - (sums.Shrink.[discardEnd] - sums.Shrink.[startIdx])
 
             // Exclude trailing glue: if we're breaking right after a glue at endIdx-1,
             // that glue should not contribute to this line's width (TeX behavior: glue
-            // is added to active_width AFTER try_break is called)
-            //
-            // Note: We do NOT exclude leading glue here. That only happens later when
-            // displaying/building actual lines (in post_line_break). During the algorithm,
-            // TeX uses the full cumulative width to decide which breaks are optimal.
+            // is added to active_width AFTER try_break is called). Skip this if the glue
+            // was already excluded as a leading discardable.
             if endIdx > 0 && endIdx <= items.Length then
                 match items.[endIdx - 1] with
-                | Glue g ->
+                | Glue g when endIdx - 1 >= discardEnd ->
                     adjustedWidth <- adjustedWidth - g.Width
                     adjustedStretch <- adjustedStretch - g.Stretch
                     adjustedShrink <- adjustedShrink - g.Shrink
+                | Glue _ -> ()
                 | Penalty p ->
                     // Penalty width IS included (e.g., hyphen width)
                     adjustedWidth <- adjustedWidth + p.Width
@@ -701,9 +727,17 @@ module LineBreaker =
                         let prevNode = nodes.[prevNodeIdx]
                         let prevPos = prevNode.Position
 
-                        let ratioResult, actualWidth, _ = computeRatioFromTriple curActiveWidth i
+                        let ratioResult, actualWidth, _ = computeRatioFromTriple curActiveWidth prevPos i
 
-                        let minPossibleWidth = suffixMinWidthMinusShrink.[i] - widthMinusShrink.[prevPos]
+                        // Bound how small a future line from prevPos can be, accounting for the
+                        // leading discardables at prevPos being excluded. If the first box lies
+                        // beyond i, a future line could end inside the discardable run and be
+                        // measured as empty; the suffix-min starting at effStart makes the bound
+                        // nonpositive there, which conservatively keeps the node active.
+                        let effStart = effectiveStart.[prevPos]
+
+                        let minPossibleWidth =
+                            suffixMinWidthMinusShrink.[max i effStart] - widthMinusShrink.[effStart]
 
                         let forcedBreakInTail = forcedBreakAhead.[prevPos]
                         let noFutureFit = minPossibleWidth > options.LineWidth + 1e-9f

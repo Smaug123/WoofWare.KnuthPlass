@@ -1,5 +1,6 @@
 namespace WoofWare.KnuthPlass.Test
 
+open System
 open NUnit.Framework
 open WoofWare.KnuthPlass
 open FsUnitTyped
@@ -194,8 +195,8 @@ module ToleranceTests =
         // - Break at position 6 (after penalty):
         //   Line 1: box(30) + glue(10,10,5) + penalty + box(30) + glue(10,60,10) + penalty
         //   Width = 80, stretch = 70, ratio = (80-80)/70 = 0.0, badness = 0 < 200 → ACCEPTED
-        //   Line 2: glue(20,40,5) + box(10)
-        //   Width = 30, stretch = 40, ratio = (80-30)/40 = 1.25, badness ≈ 195 < 200 → ACCEPTED
+        //   Line 2: glue(20,40,5) is discarded (leading discardable), leaving box(10) plus
+        //   the terminating glue: infinite stretch, ratio 0, badness 0 < 200 → ACCEPTED
         //
         // The algorithm must choose position 6, proving position 3 was pruned by tolerance.
 
@@ -206,9 +207,12 @@ module ToleranceTests =
                 Items.penalty 0.0f 0.0f false // Position 3: Line 1 badness 6400 > tolerance
                 Items.box 30.0f
                 Items.glue 10.0f 60.0f 10.0f
-                Items.penalty 0.0f 0.0f false // Position 6: Line 1 badness 0, Line 2 badness ~195
-                Items.glue 20.0f 40.0f 5.0f // Line 2 stretch/shrink
+                Items.penalty 0.0f 0.0f false // Position 6: Line 1 badness 0, Line 2 badness 0
+                Items.glue 20.0f 40.0f 5.0f // Discarded at the start of Line 2
                 Items.box 10.0f
+                // Standard paragraph termination so the final line can stretch
+                Items.glue 0.0f Single.PositiveInfinity 0.0f
+                Items.forcedBreak ()
             |]
 
         // Use zero RightSkip to preserve the exact ratio calculations this test was designed for

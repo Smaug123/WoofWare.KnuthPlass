@@ -141,6 +141,9 @@ module ForcedBreakTests =
         // - Break at position 3 (flagged): line 1 = box(45) + glue(10) + penalty (flagged)
         // - Break at position 5 (unflagged): line 1 = box(45) + glue(10) + penalty + box(10) + penalty (unflagged)
         //
+        // In both cases the second line starts with a box, so leading-discardable pruning
+        // does not interfere with the comparison.
+        //
         // With low FinalHyphenDemerits, the tighter line (flagged break) wins.
         // With high FinalHyphenDemerits, the looser line (unflagged break) wins.
         let items =
@@ -150,6 +153,7 @@ module ForcedBreakTests =
                 Items.penalty 0.0f 0.0f true // Position 3: flagged
                 Items.box 10.0f
                 Items.penalty 0.0f 0.0f false // Position 5: not flagged
+                Items.box 10.0f
                 Items.glue 10.0f 20.0f 5.0f
                 Items.box 20.0f
             |]
@@ -262,3 +266,26 @@ module ForcedBreakTests =
         // Overfull line = infinite badness, which exceeds any tolerance.
         // Getting output at all proves the rescue mechanism was exercised.
         last.AdjustmentRatio |> shouldEqual -1.0f
+
+    [<Test>]
+    let ``Leading discardable glue after a forced break is not counted during break selection`` () =
+        // After the forced break, the Glue 100 starts the next line and so is discarded
+        // in the output (leading discardables never render). Break selection must not
+        // count it either: the remaining content (30 + 10 + 30 = 70) fits the line
+        // exactly, so the optimal layout is two lines, not three.
+        let items =
+            [|
+                Items.box 10.0f
+                Items.forcedBreak ()
+                Items.glue 100.0f 0.0f 0.0f
+                Items.box 30.0f
+                Items.glue 10.0f 5.0f 3.0f
+                Items.box 30.0f
+            |]
+
+        let options = LineBreakOptions.Default 70.0f
+        let lines = LineBreaker.breakLines options items
+
+        lines |> Array.map (fun l -> l.Start, l.End) |> shouldEqual [| 0, 2 ; 2, 6 |]
+        // With the leading glue discarded, the second line fits perfectly.
+        lines.[1].AdjustmentRatio |> shouldEqual 0.0f

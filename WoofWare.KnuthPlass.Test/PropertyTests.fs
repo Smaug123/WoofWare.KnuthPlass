@@ -53,7 +53,7 @@ module PropertyTests =
         }
 
     /// Compute line metrics (width, stretch, shrink) for a line from startIdx to endIdx.
-    /// Handles trailing glue exclusion and penalty width inclusion.
+    /// Handles leading discardable exclusion, trailing glue exclusion, and penalty width inclusion.
     let private computeLineMetrics
         (items : Item[])
         (sums : CumulativeSums)
@@ -61,17 +61,32 @@ module PropertyTests =
         (endIdx : int)
         : float32 * float32 * float32
         =
-        let mutable width = sums.Width.[endIdx] - sums.Width.[startIdx]
-        let mutable stretch = sums.Stretch.[endIdx] - sums.Stretch.[startIdx]
-        let mutable shrink = sums.Shrink.[endIdx] - sums.Shrink.[startIdx]
+        // Exclude leading discardable items (glue and penalties before the first box):
+        // they are discarded from the output, so they must not count towards the line.
+        let mutable discardEnd = startIdx
 
-        // Adjust for trailing item: exclude trailing glue, include penalty width
+        while discardEnd < endIdx
+              && (
+                  match items.[discardEnd] with
+                  | Box _ -> false
+                  | Glue _
+                  | Penalty _ -> true
+              ) do
+            discardEnd <- discardEnd + 1
+
+        let mutable width = sums.Width.[endIdx] - sums.Width.[discardEnd]
+        let mutable stretch = sums.Stretch.[endIdx] - sums.Stretch.[discardEnd]
+        let mutable shrink = sums.Shrink.[endIdx] - sums.Shrink.[discardEnd]
+
+        // Adjust for trailing item: exclude trailing glue (unless already excluded as a
+        // leading discardable), include penalty width
         if endIdx > 0 && endIdx <= items.Length then
             match items.[endIdx - 1] with
-            | Glue g ->
+            | Glue g when endIdx - 1 >= discardEnd ->
                 width <- width - g.Width
                 stretch <- stretch - g.Stretch
                 shrink <- shrink - g.Shrink
+            | Glue _ -> ()
             | Penalty p -> width <- width + p.Width
             | _ -> ()
 
@@ -547,9 +562,8 @@ module PropertyTests =
 
     /// Compute actual line metrics (width, stretch, shrink) for verifying adjustment ratio.
     /// This mirrors the algorithm's computeDisplayedAdjustmentRatio logic exactly:
-    /// 1. Use cumulative sums for raw totals
-    /// 2. Exclude trailing glue or add penalty width
-    /// 3. Exclude leading discardable items (glue, penalties)
+    /// 1. Exclude leading discardable items (glue, penalties)
+    /// 2. Exclude trailing glue (unless already excluded as leading) or add penalty width
     let private computeLineMetricsForDisplay
         (items : Item[])
         (startIdx : int)
@@ -557,35 +571,7 @@ module PropertyTests =
         : float32 * float32 * float32
         =
         let sums = computeCumulativeSums items
-
-        let mutable actualWidth = sums.Width.[endIdx] - sums.Width.[startIdx]
-        let mutable totalStretch = sums.Stretch.[endIdx] - sums.Stretch.[startIdx]
-        let mutable totalShrink = sums.Shrink.[endIdx] - sums.Shrink.[startIdx]
-
-        // Exclude trailing glue
-        if endIdx > 0 && endIdx <= items.Length then
-            match items.[endIdx - 1] with
-            | Glue g ->
-                actualWidth <- actualWidth - g.Width
-                totalStretch <- totalStretch - g.Stretch
-                totalShrink <- totalShrink - g.Shrink
-            | Penalty p -> actualWidth <- actualWidth + p.Width
-            | _ -> ()
-
-        // Exclude leading discardable items
-        let mutable idx = startIdx
-
-        while idx < endIdx && idx < items.Length do
-            match items.[idx] with
-            | Glue g ->
-                actualWidth <- actualWidth - g.Width
-                totalStretch <- totalStretch - g.Stretch
-                totalShrink <- totalShrink - g.Shrink
-                idx <- idx + 1
-            | Penalty _ -> idx <- idx + 1
-            | _ -> idx <- endIdx
-
-        (actualWidth, totalStretch, totalShrink)
+        computeLineMetrics items sums startIdx endIdx
 
     /// Property: Adjustment ratio is consistent with line geometry
     /// NOTE: This property has edge cases with infinite/NaN values when lines
@@ -662,7 +648,8 @@ module PropertyTests =
     // NOTE: "No breaks between consecutive glues" was removed - it asserted a false
     // property. TeX only looks backward when deciding glue breaks (glue after box is
     // valid); what follows the break point doesn't affect validity. Leading discardable
-    // items on the new line are pruned during display, not during break selection.
+    // items on the new line are pruned from the output, and break selection excludes
+    // them when measuring lines (TeX's break_width).
 
     /// Sentinel ratio indicating no stretch available (matches LineBreaker's noStretchRatio)
     let private noStretchRatio = System.Single.PositiveInfinity
