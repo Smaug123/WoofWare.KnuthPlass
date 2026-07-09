@@ -152,6 +152,22 @@ module HelperTests =
         result |> shouldNotEqual ""
 
     [<Test>]
+    let ``Text.format emits hyphen at taken hyphenation break even when hyphen measures zero width`` () =
+        // Hyphenation allowed only between "ab" and "cd" (position 2, i.e. index 1 odd)
+        let hyphenate (_ : string) =
+            FilteredPriorities.unfiltered [| 0uy ; 1uy ; 0uy |]
+
+        // A zero-width hyphen is a legitimate measurement (e.g. some proportional contexts);
+        // whether the hyphen character appears must depend on the break being taken, not its width.
+        let wordWidth (s : string) =
+            if s = "-" then 0.0f else float32 s.Length
+
+        let result =
+            Text.format (LineBreakOptions.DefaultMonospace 2.0f) wordWidth Items.monospaceGlue 50.0f hyphenate "abcd"
+
+        result |> shouldEqual ("ab-" + Environment.NewLine + "cd")
+
+    [<Test>]
     let ``defaultGlue creates glue with expected stretch/shrink ratios`` () =
         let width = 10.0f
         let glue = Items.defaultGlue width
