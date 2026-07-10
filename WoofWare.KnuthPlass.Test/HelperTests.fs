@@ -107,6 +107,36 @@ module HelperTests =
         |> shouldFail<ArgumentException>
 
     [<Test>]
+    let ``wordFromFragments validates penalty count with one fragment`` () =
+        // One fragment requires exactly 0 penalties; a stray penalty must not be silently dropped
+        let fragmentWidths = [| 3.0f |]
+        let wrongPenalties = [| 50.0f |]
+
+        (fun () ->
+            Items.wordFromFragments 1.0f (ReadOnlySpan fragmentWidths) (ReadOnlySpan wrongPenalties)
+            |> ignore
+        )
+        |> shouldFail<ArgumentException>
+
+    [<Test>]
+    let ``wordFromFragments validates penalty count with zero fragments`` () =
+        let fragmentWidths : float32[] = [||]
+        let wrongPenalties = [| 50.0f |]
+
+        (fun () ->
+            Items.wordFromFragments 1.0f (ReadOnlySpan fragmentWidths) (ReadOnlySpan wrongPenalties)
+            |> ignore
+        )
+        |> shouldFail<ArgumentException>
+
+    [<Test>]
+    let ``wordFromFragments with zero fragments and zero penalties creates no items`` () =
+        let items =
+            Items.wordFromFragments 1.0f (ReadOnlySpan Array.empty) (ReadOnlySpan Array.empty)
+
+        items |> shouldEqual [||]
+
+    [<Test>]
     let ``prioritiesToPoints converts Liang priorities correctly`` () =
         // Priorities: 0=no break, 1=break, 2=no break, 3=break, 4=no break
         // In standard Liang, odd values indicate valid hyphenation points (all treated equally)
@@ -150,6 +180,22 @@ module HelperTests =
 
         // Should produce formatted text
         result |> shouldNotEqual ""
+
+    [<Test>]
+    let ``Text.format emits hyphen at taken hyphenation break even when hyphen measures zero width`` () =
+        // Hyphenation allowed only between "ab" and "cd" (position 2, i.e. index 1 odd)
+        let hyphenate (_ : string) =
+            FilteredPriorities.unfiltered [| 0uy ; 1uy ; 0uy |]
+
+        // A zero-width hyphen is a legitimate measurement (e.g. some proportional contexts);
+        // whether the hyphen character appears must depend on the break being taken, not its width.
+        let wordWidth (s : string) =
+            if s = "-" then 0.0f else float32 s.Length
+
+        let result =
+            Text.format (LineBreakOptions.DefaultMonospace 2.0f) wordWidth Items.monospaceGlue 50.0f hyphenate "abcd"
+
+        result |> shouldEqual ("ab-" + Environment.NewLine + "cd")
 
     [<Test>]
     let ``defaultGlue creates glue with expected stretch/shrink ratios`` () =
