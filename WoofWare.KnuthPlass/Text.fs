@@ -191,8 +191,9 @@ module Text =
                         | true, hasBox when hasBox -> result.Append ' ' |> ignore<StringBuilder>
                         | _ -> ()
 
-                    | Penalty pen when i = line.End - 1 && pen.Width > 0.0f ->
-                        result.Append '-' |> ignore<StringBuilder>
+                    // A flagged penalty is a hyphenation point; taking the break means a hyphen
+                    // is displayed, regardless of how wide the hyphen was measured to be.
+                    | Penalty pen when i = line.End - 1 && pen.Flagged -> result.Append '-' |> ignore<StringBuilder>
 
                     | _ -> ()
 
