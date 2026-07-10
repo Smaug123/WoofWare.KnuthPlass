@@ -158,17 +158,17 @@ module Items =
         (penaltiesBetween : ReadOnlySpan<float32>)
         : Item[]
         =
+        // Validate: we need exactly (fragments - 1) penalties (zero for zero or one fragment)
+        if penaltiesBetween.Length <> max 0 (fragmentWidths.Length - 1) then
+            invalidArg
+                "penaltiesBetween"
+                $"Expected %d{max 0 (fragmentWidths.Length - 1)} penalties for %d{fragmentWidths.Length} fragments, got %d{penaltiesBetween.Length}"
+
         if fragmentWidths.Length = 0 then
             [||]
         elif fragmentWidths.Length = 1 then
             [| box fragmentWidths.[0] |]
         else
-            // Validate: we need exactly (fragments - 1) penalties
-            if penaltiesBetween.Length <> fragmentWidths.Length - 1 then
-                invalidArg
-                    "penaltiesBetween"
-                    $"Expected %d{fragmentWidths.Length - 1} penalties for %d{fragmentWidths.Length} fragments, got %d{penaltiesBetween.Length}"
-
             let result = Array.zeroCreate (fragmentWidths.Length + penaltiesBetween.Length)
             let mutable idx = 0
 

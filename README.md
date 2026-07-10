@@ -34,7 +34,7 @@ let text =
     |> fun s -> s.Replace("\r", "").Replace ("\n", " ")
 
 // For monospace output (e.g. terminal), use DefaultMonospace options and monospaceGlue
-let noHyphenation (_: string) = [||]
+let noHyphenation (_: string) = FilteredPriorities.unfiltered [||]
 Text.format
     (LineBreakOptions.DefaultMonospace 80.0f)
     Text.defaultWordWidth
@@ -88,7 +88,7 @@ You must supply your own hyphenation callback to `Text.format`, which should ret
 (All odd values mean "hyphenation allowed" equally, and all even values mean "no hyphenation allowed" equally; their numerical magnitude is an artifact of the computation that extracted hyphenation data from the Liang packed-trie data structure, and is not important for performing the hyphenation.)
 
 For English text, consider using a Knuth-Liang implementation such as [WoofWare.LiangHyphenation](https://github.com/Smaug123/WoofWare.LiangHyphenation).
-If you don't need hyphenation, pass a function that returns an empty array: `fun _ -> Array.empty`.
+If you don't need hyphenation, pass a function that returns no priorities: `fun _ -> FilteredPriorities.unfiltered Array.empty`.
 
 ### Justification vs raggedness
 
